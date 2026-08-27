@@ -262,7 +262,7 @@ const HorizDock = () => {
  hoverers.push(hover.kick)
  const evt = EventBox({ child: area })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
- evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh("$HOME/.config/hypr/themes/cyberpunk/scripts/screenrecord"); else toggleModal(k); openRefresh() } return false })
+ evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh(`${CYBER_DIR}/scripts/screenrecord`); else toggleModal(k); openRefresh() } return false })
  evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
  evt.connect("leave-notify-event", () => { hoverBus.key = null; kickHover(); return false })
  openRefresh = () => { for (const s of HLAYOUT) open[s.k] = isModalOpen(s.k); area.queue_draw() }

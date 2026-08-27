@@ -5,7 +5,7 @@ import Gdk from "gi://Gdk?version=3.0"
 
 
 export const HOME = GLib.get_home_dir()
-export const CYBER_DIR = `${HOME}/.config/hypr/themes/cyberpunk`
+export const CYBER_DIR = SRC
 export const COMPONENTS_DIR = `${CYBER_DIR}/components`
 const display = Gdk.Display.get_default()!
 const monitor = display.get_primary_monitor() ?? display.get_monitor(0)!
