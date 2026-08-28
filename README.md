@@ -1,7 +1,7 @@
-Markdown
+
 <div align="center">
 
-<img src="preview/title.gif">
+<img width="768" height="432" alt="title" src="https://github.com/user-attachments/assets/e2e359db-0e47-44a8-b339-710c5c50e190" />
 
 <p align="center">
   <img src="https://img.shields.io/badge/AGS 3.0-ff2d3d?style=for-the-badge&logo=gtk&logoColor=white" />
@@ -189,12 +189,13 @@ Open the full cheat-sheet with all keybinds anytime with **`SUPER+SHIFT+H`**.
 | `SUPER + SHIFT + Y` | Battery modal |
 | `SUPER + SHIFT + C` | CPU / RAM / system modal |
 | `SUPER + SHIFT + H` | Keybind help |
-| `SUPER + SHIFT + ESC` | Theme Settings |
+| `SUPER + SHIFT + BACKSPACE` | Theme Settings |
 
 ### System & capture
 
 | Keybind | Action |
 | --- | --- |
+| `SUPER + SHIFT + T` | Default terminal (Rio) |
 | `SUPER + SHIFT + T` | Netrunner terminal (cool-retro-term) |
 | `SUPER + SHIFT + S` | Screenshot (region) |
 | `SUPER + SHIFT + R` | Start / stop screen recording |
