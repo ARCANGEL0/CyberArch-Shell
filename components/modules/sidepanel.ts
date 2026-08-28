@@ -8,7 +8,7 @@ import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
-import { NEON } from "./colors.ts"
+import { NEON, USER, onColorChange } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RED, RACC, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
@@ -16,7 +16,7 @@ import { openTimeModal } from "./timeset.ts"
 const Cairo = (imports).cairo
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
-const NETCOL: [number, number, number] = [255, 222, 105]
+const NETCOL: [number, number, number] = NEON.netinfo
 const PGREEN: [number, number, number] = [176, 255, 157]
 const W = 320, H = 530
 const MAP_DX = 100
@@ -89,6 +89,8 @@ const refreshNetSpeed = () => {
 const WMO = { 0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle", 56: "Freezing drizzle", 57: "Freezing drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains", 80: "Rain", 81: "Rain", 82: "Heavy rain", 85: "Snow", 86: "Heavy snow", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" }
 const forecast: { day: string; hi: string; lo: string; code: number; pop: number; hiN: number; loN: number; wind: number; uv: number; sunrise: string; sunset: string; date: string }[] = []
 let areas: any[] = []
+let paletteGen = 0
+onColorChange(() => { paletteGen++; areas.forEach(a => a?.queue_draw()) })
 
 
 const ro = () => (Math.random() - 0.5) * 0.055
@@ -306,7 +308,7 @@ export const SidePanel = () => {
  area.connect("draw", (_w, ctx) => {
  const now = new Date()
 
- const key = `${mapVer}|${pad2(now.getHours())}${pad2(now.getMinutes())}|${wxName}|${wxTemp}|${wxDesc}|${wxFeels}|${geoCoords}|${geoCity}|${wxHum}|${wxWind}|${netName}|${forecast.map(f => f.hi + f.lo).join("")}`
+ const key = `${paletteGen}|${mapVer}|${pad2(now.getHours())}${pad2(now.getMinutes())}|${wxName}|${wxTemp}|${wxDesc}|${wxFeels}|${geoCoords}|${geoCity}|${wxHum}|${wxWind}|${netName}|${forecast.map(f => f.hi + f.lo).join("")}`
  if (!cache || cacheKey !== key) {
  cacheKey = key
  cache = new Cairo.ImageSurface(Cairo.Format.ARGB32, plane.width, plane.height)
@@ -401,9 +403,9 @@ let fcModal: any = null, fcSel = 0, fcTick = 0, fcOpenAt = 0, fcCityTap = 0
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
 const fcReveal = () => ease((Date.now() - fcOpenAt) / 620)
 
-const YEL: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
+const YEL: [number, number, number] = USER.amber
 const ARA: [number, number, number] = RACC
-const HOT: [number, number, number] = [255 / 255, 42 / 255, 58 / 255]
+const HOT: [number, number, number] = USER.red
 
 const chamfer = (ctx, x, y, w, h, c = 11) => {
  ctx.newPath()

@@ -6,7 +6,7 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
-import { NEON } from "./colors.ts"
+import { NEON, onColorChange } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -16,12 +16,12 @@ import { TITLE, MONO, ICONF, NAVINE, NEUE, ROBOTO, ROBOTO_BOLD, ROBOTO_LIGHT, PL
 import { dockNotifDecr } from "./dock.ts"
 import { startTray, onTrayChange, getTrayItems, trayActivate, trayMenu, trayMenuClick, TrayItem, MenuNode } from "./tray.ts"
 const XICON = "\uf00d", ENVELOPE = "\uf0e0"
-const YELLOW: [number, number, number] = [255, 178, 36]
-const RED: [number, number, number] = [255, 74, 68]
-const WHITE: [number, number, number] = [225, 232, 242]
-const GREY: [number, number, number] = [120, 130, 140]
+const YELLOW: [number, number, number] = NEON.amber
+const RED: [number, number, number] = NEON.red
+const WHITE: [number, number, number] = NEON.white
+const GREY: [number, number, number] = NEON.dim
+const dimRed = (): [number, number, number] => [NEON.red[0] * 0.3, NEON.red[1] * 0.3, NEON.red[2] * 0.3]
 const GREY_DARK: [number, number, number] = [30, 32, 36]
-const DIM_RED: [number, number, number] = [80, 15, 15]
 const DIM_BG: [number, number, number] = [10, 12, 20]
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const ICON_3D = `${CYBER_DIR}/assets/icons/file.png`
@@ -483,7 +483,7 @@ const draw = (ctx: any) => {
             const sbX = ICONW + W - 6, sbTop = HEADER + 4, sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / gContentH))
             const thumbTop = sbTop + (scrollOffset / (gContentH - visibleH)) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
             fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
         }
         if (tItems.length === 0) tiltText(ctx, plane, ICONW + 22, HEADER + 26, "NO TRAY APPS", MONO, 11, GREY, 0.5 * pa)
@@ -553,7 +553,7 @@ const draw = (ctx: any) => {
             const sbX = ICONW + W - 6; const sbTop = HEADER + 4; const sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / totalContentH))
             const maxOff2 = totalContentH - visibleH; const thumbTop = sbTop + (scrollOffset / maxOff2) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
             ctx.setOperator(12)
             fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
             strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.5 * pa, 3)
@@ -599,7 +599,7 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
             const sbX = ICONW + W - 6; const sbTop = HEADER + 4; const sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / gContentH))
             const gMaxOff2 = gContentH - visibleH; const thumbTop = sbTop + (scrollOffset / gMaxOff2) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
             ctx.setOperator(12)
             fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
             strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.5 * pa, 3)
@@ -680,7 +680,7 @@ const drawTrayMenu = (ctx: any) => {
 
     if (mmax > 0) {
         const barH = mh * (mh / fullH), barY = uy + (mh - barH) * (msc / mmax)
-        fillQuad(ctx, plane, ux + mw - 4, uy + 2, ux + mw - 2, uy + mh - 2, DIM_RED, 0.4)
+        fillQuad(ctx, plane, ux + mw - 4, uy + 2, ux + mw - 2, uy + mh - 2, dimRed(), 0.4)
         fillQuad(ctx, plane, ux + mw - 4, barY, ux + mw - 2, barY + barH, NEON.cyan, 0.9)
     }
 }
@@ -849,6 +849,7 @@ export const toggleNotifHud = () => {
 export const NotifHudWindow = () => {
     area = DrawingArea({})
     area.set_size_request(plane.width, plane.height)
+    onColorChange(() => area.queue_draw())
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
     try { area.add_events(Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
     area.connect("scroll-event", onScroll)

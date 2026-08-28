@@ -3,7 +3,7 @@ import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import { SCREEN_WIDTH , SCREEN_HEIGHT } from "../../env.ts"
-import { NEON, f } from "./colors.ts"
+import { USER, NEON, onColorChange } from "./colors.ts"
 import { MONO } from "./fonts.ts"
 import { CYBER_DIR } from "../../env.ts"
 import { setRecording, isRecording } from "./anim.ts"
@@ -14,10 +14,7 @@ const Cairo: any = (imports as any).cairo
 const rnd = (a, b) => a + Math.random() * (b - a)
 const clamp = (v) => Math.max(0, Math.min(1, v))
 const easeOut = (t) => 1 - (1 - t) * (1 - t)
-const [RR, RG, RB] = f(NEON.red)
-const [RRR, RRG, RRB] = f(NEON.red)
-const [CR, CG, CB] = f(NEON.cyan)
-const F25: [number, number, number] = [242, 91, 86]
+const F25: [number, number, number] = NEON.red
 let W = SCREEN_WIDTH, H = SCREEN_HEIGHT
 let monX = 0, monY = 0
 
@@ -109,8 +106,8 @@ const gstroke = (ctx, col, a, w) => {
  ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); ctx.setLineWidth(w + 3); ctx.strokePreserve(); ctx.setOperator(2)
  ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.setLineWidth(w); ctx.stroke()
 }
-const CYC: [number, number, number] = [CR, CG, CB]
-const REDC: [number, number, number] = [RRR, RRG, RRB]
+const CYC: [number, number, number] = [USER.cyan[0], USER.cyan[1], USER.cyan[2]]
+const REDC: [number, number, number] = [USER.red[0], USER.red[1], USER.red[2]]
 
 
 
@@ -146,7 +143,7 @@ const drawTrace = (ctx) => {
 
 
 const cornerTicks = (ctx) => {
- ctx.setSourceRGBA(RRR, RRG, RRB, 0.55); ctx.setLineWidth(2)
+ ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.55); ctx.setLineWidth(2)
  const L = 26, m = 18
  for (const [px, py, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]] as const) {
      ctx.moveTo(px, py); ctx.lineTo(px + L * dx, py); ctx.stroke()
@@ -154,7 +151,7 @@ const cornerTicks = (ctx) => {
  }
 }
 
-const glitchType = (ctx, x, y, full, prog, size, alpha, bold = 1, col = [RR, RG, RB], font = MONO) => {
+const glitchType = (ctx, x, y, full, prog, size, alpha, bold = 1, col = [USER.red[0], USER.red[1], USER.red[2]], font = MONO) => {
  if (prog <= 0) return
  ctx.selectFontFace(font, 0, bold); ctx.setFontSize(size)
  const adv = ctx.textExtents("M").width
@@ -182,7 +179,7 @@ const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
  ctx.save()
  ctx.setOperator(12)
  for (let g = 3; g >= 1; g--) {
-     ctx.setSourceRGBA(CR, CG, CB, 0.04 * a * (0.7 + 0.3 * pulse) / g)
+     ctx.setSourceRGBA(USER.cyan[0], USER.cyan[1], USER.cyan[2], 0.04 * a * (0.7 + 0.3 * pulse) / g)
      ctx.rectangle(dx - g * 3, dy - g * 3, dw + g * 6, dh + g * 6); ctx.fill()
  }
  ctx.setOperator(2)
@@ -205,21 +202,21 @@ const drawCard = (ctx, cp) => {
 
  ctx.save()
  trace(bevel()); ctx.setSourceRGBA(0.16, 0.015, 0.025, 0.55 * load); ctx.fill()
- ctx.setOperator(12); trace(bevel()); ctx.setSourceRGBA(RR, RG, RB, 0.12 * load); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
- trace(bevel()); ctx.setSourceRGBA(RR, RG, RB, 0.85 * load); ctx.setLineWidth(1.4); ctx.stroke()
+ ctx.setOperator(12); trace(bevel()); ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.12 * load); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+ trace(bevel()); ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.85 * load); ctx.setLineWidth(1.4); ctx.stroke()
 
  const blink = 0.6 + 0.4 * Math.abs(Math.sin(cp * 30))
- ctx.setOperator(12); trace(accent()); ctx.setSourceRGBA(RR, RG, RB, 0.4 * load * blink); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
- trace(accent()); ctx.setSourceRGBA(RR, RG, RB, 0.95 * load * blink); ctx.fill()
- trace(accent()); ctx.setSourceRGBA(RR * 0.5, RG * 0.5, RB * 0.5, 0.9 * load); ctx.setLineWidth(1.2); ctx.stroke()
+ ctx.setOperator(12); trace(accent()); ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.4 * load * blink); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+ trace(accent()); ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.95 * load * blink); ctx.fill()
+ trace(accent()); ctx.setSourceRGBA(USER.red[0] * 0.5, USER.red[1] * 0.5, USER.red[2] * 0.5, 0.9 * load); ctx.setLineWidth(1.2); ctx.stroke()
 
  if (contentFrac > 0) {
      const cA = contentFrac * load
      drawAlertIcon(ctx, CX, CY + (FRH - ICO) / 2, ICO, cA)
-     glitchType(ctx, FRX + 17, FRY + 21, recordMode ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", cA, 10, 0.97, 1, [CR, CG, CB])
+     glitchType(ctx, FRX + 17, FRY + 21, recordMode ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", cA, 10, 0.97, 1, [USER.cyan[0], USER.cyan[1], USER.cyan[2]])
      if (cA > 0.55) {
          const ma = (cA - 0.55) / 0.45, my = FRY + FRH + 8
-         ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(7); ctx.setSourceRGBA(RR, RG, RB, 0.55 * ma)
+         ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(7); ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.55 * ma)
          ctx.moveTo(FRX + 2, my); ctx.showText(recordMode ? "NETWATCH   // FEED INTERCEPT" : "NETWATCH   // SIGNAL INTERCEPT")
          ctx.moveTo(FRX + 2, my + 9); ctx.showText(recordMode ? "OUTPUT     // ~/VIDEOS/RECORDINGS" : "OUTPUT     // ~/PICTURES/SCREENSHOTS")
          ctx.moveTo(FRX + 2, my + 18); ctx.showText("STATUS     // AWAITING INPUT")
@@ -230,7 +227,7 @@ const drawCard = (ctx, cp) => {
 }
 
 const drawSelChrome = (ctx, X, Y, W2, H2) => {
- ctx.setSourceRGBA(RRR, RRG, RRB, 0.95); ctx.setLineWidth(1.5)
+ ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.95); ctx.setLineWidth(1.5)
  ctx.rectangle(X, Y, W2, H2); ctx.stroke()
  const L = 22; ctx.setLineWidth(2.5)
  for (const [px, py, dx, dy] of [[X, Y, 1, 1], [X + W2, Y, -1, 1], [X, Y + H2, 1, -1], [X + W2, Y + H2, -1, -1]]) {
@@ -242,8 +239,8 @@ const drawSelChrome = (ctx, X, Y, W2, H2) => {
  const dimW = ctx.textExtents(dim).width
  const dX = X + W2 / 2 - dimW / 2 - 6, dY = Y + H2 + 8
  ctx.setSourceRGBA(0, 0, 0, 0.65); ctx.rectangle(dX, dY, dimW + 12, 20); ctx.fill()
- ctx.setSourceRGBA(RRR, RRG, RRB, 0.5); ctx.setLineWidth(0.8); ctx.rectangle(dX, dY, dimW + 12, 20); ctx.stroke()
- ctx.setSourceRGBA(RRR, RRG, RRB, 1); ctx.moveTo(dX + 6, dY + 15); ctx.showText(dim)
+ ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.5); ctx.setLineWidth(0.8); ctx.rectangle(dX, dY, dimW + 12, 20); ctx.stroke()
+ ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 1); ctx.moveTo(dX + 6, dY + 15); ctx.showText(dim)
 }
 
 const drawAlertIcon = (ctx, x, y, sz, a) => {
@@ -308,7 +305,7 @@ const draw = (ctx) => {
  drawHud(ctx, 1)
  if (hasSel) {
      ctx.setOperator(0); ctx.rectangle(selX, selY, selW, selH); ctx.fill(); ctx.setOperator(2)
-     ctx.setSourceRGBA(RRR, RRG, RRB, 0.28); ctx.setLineWidth(1)
+     ctx.setSourceRGBA(USER.red[0], USER.red[1], USER.red[2], 0.28); ctx.setLineWidth(1)
      ctx.rectangle(selX + 0.5, selY + 0.5, selW - 1, selH - 1); ctx.stroke()
  }
 
@@ -403,6 +400,7 @@ export const triggerRegion = (payload = "", record = false) => {
 export const RegionWindow = () => {
  rArea = DrawingArea({})
  rArea.set_size_request(W, H)
+ onColorChange(() => rArea.queue_draw())
  rArea.connect("draw", (_w, ctx) => (draw(ctx), false))
 
  const evt = EventBox({ child: rArea })

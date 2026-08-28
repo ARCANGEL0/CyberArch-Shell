@@ -4,7 +4,7 @@ import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
-import { NEON } from "./colors.ts"
+import { NEON, USER, onColorChange } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RED, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
 import { TITLE, MONO, ENIXE, FROSTBITE_WIDE, GUNSHIP_ITAL } from "./fonts.ts"
@@ -15,8 +15,8 @@ const UP: [number, number, number] = [80 / 255, 240 / 255, 150 / 255]
 const DOWN: [number, number, number] = [255 / 255, 70 / 255, 84 / 255]
 const UP_RGB: [number, number, number] = [80, 240, 150]
 const DOWN_RGB: [number, number, number] = [255, 70, 84]
-const YEL: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
-const DIMC: [number, number, number] = [0.55, 0.62, 0.66]
+const YEL: [number, number, number] = USER.amber
+const DIMC: [number, number, number] = USER.dim
 
 const STORE = `${CYBER_DIR}/markets.json`
 const MAXPIN = 5
@@ -78,6 +78,7 @@ let tab = "crypto"
 let quotes: any = {}
 let areas: any[] = []
 let mkModal: any = null
+onColorChange(() => areas.forEach(a => a?.queue_draw()))
 let mQuery = ""
 let mResults: any[] = []
 let mHint = "TYPE TO SEARCH"
@@ -1002,7 +1003,7 @@ export const MarketsPanel = () => {
         const list = viewTab === "news"
             ? (newsMini.length >= 5 ? newsMini : newsRows).slice(0, 5)
             : (pins[viewTab] || [])
-        tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.red, 0.95, { bold: true, glow: 0.3 })
+        tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.netinfo, 0.95, { bold: true, glow: 0.3 })
         const tabs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
         let tx = RX1 - 162
         for (const [label, id] of tabs) {

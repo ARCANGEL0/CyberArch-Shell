@@ -2,7 +2,7 @@ import { Window, Box, DrawingArea, App } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval } from "astal"
 import AstalMpris from "gi://AstalMpris"
-import { NEON, f } from "./colors.ts"
+import { NEON, f, onColorChange } from "./colors.ts"
 import { makePlane, tiltText, strokePath, fillQuad } from "./proj.ts"
 
 import { TITLE } from "./fonts.ts"
@@ -133,6 +133,7 @@ export const NowPlayingWindow = () => {
  const list = mons.length ? mons : [null]
  list.forEach((mon: any) => {
      const area = DrawingArea({})
+     onColorChange(() => area.queue_draw())
      area.set_size_request(BW, BH)
      area.connect("draw", (_w, ctx) => (drawBanner(ctx), false))
      areas.push(area)

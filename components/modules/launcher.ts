@@ -5,11 +5,10 @@ import GdkPixbuf from "gi://GdkPixbuf"
 import { interval } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
-import { NEON, f } from "./colors.ts"
+import { NEON, f, onColorChange } from "./colors.ts"
 import { openAppsMenu } from "./appsmenu.ts"
 
 import { TITLE } from "./fonts.ts"
-const APPSRED: [number, number, number] = [251, 109, 97]
 const W = 180, H = 180
 const plane = makePlane({ w: W, h: H, yaw: -16, pitch: 1, roll: 4, focal: 1180, dist: 1180, pad: 1 })
 const prompt = makePlane({ w: W, h: 14, yaw: -14, pitch: -1.5, roll: 2.5, focal: 1180, dist: 1180, pad: 5 })
@@ -19,6 +18,7 @@ try { ICON = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/launcher.
 
 export const LauncherWindow = (mon?) => {
  const area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+ onColorChange(() => area.queue_draw())
  let hover = false
  let flick = 1
 
@@ -26,15 +26,15 @@ export const LauncherWindow = (mon?) => {
      const [rr, rg, rb] = f(NEON.red)
 
      const tx = 8, ty = 28
-     const col = hover ? NEON.cyan : APPSRED, fl = hover ? flick : 1
+     const col = hover ? NEON.cyan : NEON.netinfo, fl = hover ? flick : 1
      tiltText(ctx, prompt, tx, ty, "Apps Launcher", TITLE, 15, col, (hover ? 1 : 0.95) * fl, { bold: true, glow: (hover ? 0.32 : 0.2) * fl, bloom: (hover ? 0.6 : 0.45) * fl, shadow: 1 })
 
      const chW = 46, chH = 20, chX = 130, chY = 13
      const boxPts: [number, number][] = [[chX, chY], [chX + chW, chY], [chX + chW, chY + chH], [chX, chY + chH]]
-     fillQuad(ctx, prompt, chX, chY, chX + chW, chY + chH, NEON.cyan, hover ? 0.18 : 0.10)
-     ctx.setOperator(12); strokePath(ctx, prompt, boxPts, NEON.cyan, hover ? 0.34 : 0.2, 5, true); ctx.setOperator(2)
-     strokePath(ctx, prompt, boxPts, NEON.cyan, hover ? 1 : 0.85, 1.5, true)
-     tiltText(ctx, prompt, chX + chW / 2, chY + chH / 2 + 4, "SUPER TAB", TITLE, 8, NEON.cyan, hover ? 1 : 0.9, { bold: true, align: "c", glow: 0.3 })
+     fillQuad(ctx, prompt, chX, chY, chX + chW, chY + chH, NEON.dock, hover ? 0.18 : 0.10)
+     ctx.setOperator(12); strokePath(ctx, prompt, boxPts, NEON.dock, hover ? 0.34 : 0.2, 5, true); ctx.setOperator(2)
+     strokePath(ctx, prompt, boxPts, NEON.dock, hover ? 1 : 0.85, 1.5, true)
+     tiltText(ctx, prompt, chX + chW / 2, chY + chH / 2 + 4, "SUPER TAB", TITLE, 8, NEON.dock, hover ? 1 : 0.9, { bold: true, align: "c", glow: 0.3 })
 
      if (ICON) {
          const iconW = 160, iconH = 100, ix = W - iconW , iy = 76

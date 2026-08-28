@@ -5,12 +5,12 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { NEON, f } from "./colors.ts"
+import { USER, onColorChange } from "./colors.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
 const Cairo: any = (imports as any).cairo
-const cR = f(NEON.red), cC = f(NEON.cyan)
+const cR = USER.red, cC = USER.dock
 
 const PW = 560, PH = 648, CSZ = 186
 let pWin: any = null, pArea: any = null
@@ -172,10 +172,10 @@ const renderPanel = (ctx) => {
 
  const tby = Y + 22, tbh = 50, tx0 = X + 14
  accentBar(ctx, X + 5, tby + 1, 9, tbh - 2, 1)
- bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(0.22, 0.02, 0.03, 0.4); ctx.fill()
+ bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(cR[0] * 0.28, cR[1] * 0.28, cR[2] * 0.28, 0.4); ctx.fill()
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setOperator(12); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.12); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.82); ctx.setLineWidth(1.3); ctx.stroke()
- ptext(ctx, X + 28, tby + 34, "RADIOPORT", TITLE, true, 26, cC, 0.98, 0.5)
+ ptext(ctx, X + 28, tby + 34, "RADIOPORT", TITLE, true, 26, cR, 0.98, 0.5)
 
  const csz = CSZ, cx = X + 16, cy = Y + 102, bev = 14
  accentBar(ctx, X + 7, cy + 1, 9, csz - 2, 0.62)
@@ -351,6 +351,7 @@ export const playPauseActive = () => execAsync(["sh", "-c", pctl(activeName, "pl
 
 export const PlayerWindow = () => {
  pArea = DrawingArea({})
+ onColorChange(() => pArea.queue_draw())
  pArea.connect("draw", (_w, ctx) => { const a = pArea.get_allocated_width?.() || 0, h = pArea.get_allocated_height?.() || 0; draw(ctx, a, h); return false })
  const evt = EventBox({ child: pArea })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}

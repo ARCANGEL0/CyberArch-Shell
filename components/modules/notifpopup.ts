@@ -8,20 +8,21 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
 import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
+import { NEON, f, onColorChange, glassAlpha } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
 const LIFETIME = 15000
 const MAXFR = 8
 
-const RED: [number, number, number] = [255, 74, 68]
-const YEL: [number, number, number] = [255, 214, 46]
-const CYN: [number, number, number] = [108, 230, 246]
-const GOLDF: [number, number, number] = [112, 94, 26]
-const GOLDD: [number, number, number] = [74, 61, 15]
-const GREY: [number, number, number] = [178, 184, 192]
-const GLYPH_COL: [number, number, number] = [175, 48, 42]
-const WHT: [number, number, number] = [255, 255, 255]
+const RED: [number, number, number] = NEON.red
+const YEL: [number, number, number] = NEON.amber
+const CYN: [number, number, number] = NEON.dock
+const GOLDF = (): [number, number, number] => [NEON.amber[0] * 0.44, NEON.amber[1] * 0.44, NEON.amber[2] * 0.44]
+const GOLDD = (): [number, number, number] => [NEON.amber[0] * 0.29, NEON.amber[1] * 0.29, NEON.amber[2] * 0.29]
+const GREY: [number, number, number] = NEON.dim
+const GLYPH_COL = (): [number, number, number] => [NEON.red[0] * 0.55, NEON.red[1] * 0.55, NEON.red[2] * 0.55]
+const WHT: [number, number, number] = NEON.white
 
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const play = () => execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${SND}" 2>/dev/null || play -q "${SND}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${SND}" 2>/dev/null`]).catch(() => { })
@@ -49,7 +50,7 @@ let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
 let area: any = null, loop: any = null, win: any = null
 
 const projPath = (ctx: any, pts: [number, number][]) => { ctx.newPath(); pts.forEach(([u, v], i) => { const [x, y] = plane.project(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }); ctx.closePath() }
-const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0) => {
+const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0, tint: [number, number, number] | null = null) => {
     if (!surf || a <= 0.01) return
     const tt = Date.now()
     const jx = glitch > 0.02 ? (Math.sin(tt / 21) * 3 + (Math.sin(tt / 6.5) > 0.82 ? 6 : 0)) * glitch : 0
@@ -57,8 +58,24 @@ const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a:
     const pw = surf.getWidth(), ph = surf.getHeight(), dh = targetW * ph / pw
     const [sx, sy] = plane.project(u + jx, v + jy + dh / 2), s = plane.scaleAt(u, v + dh / 2), ang = plane.angleAt(u, v + dh / 2)
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s); ctx.translate(0, -dh / 2); ctx.scale(targetW / pw, dh / ph)
-    if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
-    ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
+    if (tint) {
+        try {
+            ctx.setSourceSurface(surf, 0, 0)
+            const pat = ctx.getSource()
+            ctx.setOperator(12)
+            ctx.setSourceRGBA(tint[0] / 255, tint[1] / 255, tint[2] / 255, 0.4 * a)
+            ctx.mask(pat)
+            ctx.setOperator(2)
+            ctx.setSourceRGBA(tint[0] / 255, tint[1] / 255, tint[2] / 255, 0.55 * a)
+            ctx.mask(pat)
+        } catch {
+            if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
+            ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
+        }
+    } else {
+        if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
+        ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
+    }
     if (glitch > 0.1 && Math.sin(tt / 5) > 0.7) {
         const by = ph * (0.15 + 0.6 * (Math.sin(tt / 13) * 0.5 + 0.5)), bh = ph * 0.13
         ctx.save(); ctx.rectangle(0, by, pw, bh); ctx.clip(); ctx.setSourceSurface(surf, pw * 0.07 * glitch, 0); ctx.paintWithAlpha(a); ctx.restore()
@@ -88,15 +105,16 @@ const glyphBlock = (ctx: any, u: number, v: number, a: number) => {
                 ctx.showText(GLY[(row * cols + col * 3 + row * 7) % GLY.length])
             }
     }
+    const [nr, ng, nb] = f(NEON.red)
     ctx.setOperator(12)
     for (const [dx, dy, da] of [[-3, 2, 0.04], [2, -3, 0.04], [0, 4, 0.05], [4, 0, 0.04]])
-        { ctx.setSourceRGBA(0.5, 0.12, 0.1, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(nr * 0.5, ng * 0.5, nb * 0.5, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
     for (const [dx, dy, da] of [[-1.5, 1.5, 0.08], [-2, 0, 0.1], [2, 0, 0.1], [0, -2, 0.1], [0, 2, 0.1]])
-        { ctx.setSourceRGBA(0.75, 0.2, 0.15, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(nr * 0.75, ng * 0.75, nb * 0.75, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
     for (const [dx, dy, da] of [[-1, 0, 0.12], [1, 0, 0.12], [0, -1, 0.12]])
-        { ctx.setSourceRGBA(0.9, 0.28, 0.22, da * a); ctx.translate(dx, dy); chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(nr * 0.9, ng * 0.9, nb * 0.9, da * a); ctx.translate(dx, dy); chars(); ctx.translate(-dx, -dy) }
     ctx.setOperator(2)
-    ctx.setSourceRGBA(0.5, 0.12, 0.1, 0.8 * a)
+    ctx.setSourceRGBA(nr * 0.5, ng * 0.5, nb * 0.5, 0.8 * a)
     for (let t = 0; t < 2; t++) { ctx.translate(0.3, 0.3); chars(); ctx.translate(-0.3, -0.3) }
     chars()
     ctx.restore()
@@ -116,9 +134,9 @@ const drawFrame = (ctx: any, vTop: number, prog: number, body: string, app: stri
     const u0 = CX + 5, v0 = vTop, v1 = vTop + FH, ch = 2, cw = 5, bc = 3
     const u1 = u0 + Math.max(122, FW * fe)
     const flk = prog > 0.02 && prog < 0.92 ? (Math.sin(Date.now() / 1000 * 52) > -0.35 ? 1 : 0.45) : 1
-    const fill = top ? GOLDF : GOLDD, bA = (top ? 0.95 : 0.8) * flk
+    const fill = top ? GOLDF() : GOLDD(), bA = (top ? 0.95 : 0.8) * flk
     const fpts: [number, number][] = [[u0, v0 - ch], [u0 + cw, v0], [u1, v0], [u1, v1], [u0 + bc, v1], [u0, v1 - bc]]
-    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, 0.85 * Af * flk); ctx.fill()
+    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, 0.85 * Af * flk * glassAlpha.value); ctx.fill()
     ctx.setOperator(12); projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, 0.18 * Af); ctx.setLineWidth(2); ctx.stroke(); ctx.setOperator(2)
     projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, bA * Af); ctx.setLineWidth(1); ctx.stroke()
     if (prog > 0.03 && prog < 0.97) { strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], WHT, 0.7, 1.5); strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], YEL, 0.5, 0.7) }
@@ -138,7 +156,7 @@ const draw = (ctx: any) => {
 
     const pA = seg(intro, 0, 0.30), aA = beep(pA)
     glyphBlock(ctx, -15, 2, aA * 0.9)
-    glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL, aA, pA, { bold: true, glow: 0.4 })
+    glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL(), aA, pA, { bold: true, glow: 0.4 })
     drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA)
 
     const pB = seg(intro, 0.22, 0.48)
@@ -275,6 +293,7 @@ const add = (n: any) => {
 
 export const NotifPopupWindow = () => {
     area = DrawingArea({}); area.set_size_request(MARGIN_L + plane.width + 20, MARGIN_T + plane.height + 20)
+    onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => (draw(ctx), false))
     win = Window({
         name: "notifpopups", className: "aug notifpopups",

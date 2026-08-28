@@ -4,7 +4,7 @@ import { interval, timeout } from "astal"
 import GLib from "gi://GLib"
 import AstalWp from "gi://AstalWp"
 import { makePlane, tiltBar, tiltText, strokePath } from "./proj.ts"
-import { NEON } from "./colors.ts"
+import { NEON, onColorChange } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
 const ICONF = "FiraCode Nerd Font"
 const read = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d).trim() : "" } catch { return "" } }
@@ -22,6 +22,7 @@ export const OsdWindow = () => {
  let frac = 0, muted = false
  let hideTimer = null, brtCtl: any = null
  const area = DrawingArea({})
+ onColorChange(() => area.queue_draw())
  area.set_size_request(plane.width, plane.height)
  area.connect("draw", (_w, ctx) => {
  const col = kind === "vol" ? NEON.cyan : NEON.amber

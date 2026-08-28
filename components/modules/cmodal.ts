@@ -8,25 +8,28 @@ import GLib from "gi://GLib"
 import { CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 import { Anchor } from "./widget.ts"
 import {
-    Cairo, TITLE, MONO, ICONF, ch, RR, RG, RB, CR, CG, CB, CYAN, ACC, HEADER,
+    Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
     makeModalPlane, drawGlass, txt, pango, pip, projQuad, segParam, warpReveal, setTxtFX,
 } from "./glass.ts"
 import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
+import { ThemesCtrl } from "./themesettings.ts"
+import { USER, onColorChange } from "./colors.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
 const YEL = [1, 0.84, 0.12]
 const GRN = [0.42, 1, 0.6]
-const HUDRED: [number, number, number] = [0.95, 0.36, 0.34]
+const HUDRED: [number, number, number] = USER.red
+const hudLite = (): [number, number, number] => [USER.red[0] + (1 - USER.red[0]) * 0.3, USER.red[1] + (1 - USER.red[1]) * 0.3, USER.red[2] + (1 - USER.red[2]) * 0.3]
 let HUDC: any = null
 
 
-const rcBase = (): [number, number, number] => HUDC || [RR, RG, RB]
-const rcLabel = (): [number, number, number] => HUDC ? [1, 0.64, 0.6] : CYAN
-const rcAcc = (): [number, number, number] => HUDC ? [1, 0.58, 0.55] : ACC
+const rcBase = (): [number, number, number] => HUDC || [USER.dock[0], USER.dock[1], USER.dock[2]]
+const rcLabel = (): [number, number, number] => HUDC ? hudLite() : CYAN
+const rcAcc = (): [number, number, number] => HUDC ? hudLite() : ACC
 let NCORES = 4
 sh("nproc").then((o) => { NCORES = parseInt(o.trim()) || 4 })
 const fmtTime = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`
@@ -48,9 +51,9 @@ const drawGraph = (ctx, x, y, w, h, data, maxV, col) => {
 }
 
 
-const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
+export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
     value = Math.max(0, Math.min(1, value))
-    const [sr, sg, sb] = HUDC || [RR, RG, RB], hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
+    const [sr, sg, sb] = HUDC || [USER.dock[0], USER.dock[1], USER.dock[2]], hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
     ctx.setSourceRGBA(sr, sg, sb, 0.14); ctx.rectangle(x, ty - 2, trackW, 4); ctx.fill()
     ctx.setOperator(12); ctx.setSourceRGBA(sr, sg, sb, 0.32); ctx.rectangle(x, ty - 3, trackW * value, 6); ctx.fill(); ctx.setOperator(2)
     ctx.setSourceRGBA(sr, sg, sb, 0.95); ctx.rectangle(x, ty - 2, trackW * value, 4); ctx.fill()
@@ -60,8 +63,8 @@ const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
     ctx.setSourceRGBA(sr, sg, sb, 0.85); ctx.rectangle(hx - 1, ty - 5, 1.5, 10); ctx.fill()
     push({ kind: "sld", bx0: x - 8, by0: ty - 13, bx1: x + trackW + 8, by1: ty + 13, u0: x, v0: ty, u1: x + trackW, v1: ty, on: onChange })
 }
-const btnPath = (ctx, bx, by, bw, bh) => { const c = 6; ctx.newPath(); ctx.moveTo(bx + c, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh - c); ctx.lineTo(bx + bw - c, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + c); ctx.closePath() }
-const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "") => {
+export const btnPath = (ctx, bx, by, bw, bh) => { const c = 6; ctx.newPath(); ctx.moveTo(bx + c, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh - c); ctx.lineTo(bx + bw - c, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + c); ctx.closePath() }
+export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "") => {
     const key = `${bx}|${by}`
     const hovered = push.hoverKey === key
     const fillA = active ? (hovered ? 0.62 : 0.55) : (hovered ? 0.5 : 0.34)
@@ -74,12 +77,16 @@ const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any 
     }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(col[0], col[1], col[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
     ctx.setSourceRGBA(col[0], col[1], col[2], hovered ? 1 : 0.95)
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
+    let fs = 11
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs)
+    const maxW = bw - 10
+    let tw = ctx.textExtents(label).width
+    while (tw > maxW && fs > 7) { fs -= 0.5; ctx.setFontSize(fs); tw = ctx.textExtents(label).width }
     let iw = 0
     if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); iw = ctx.textExtents(icon).width + 6 }
     const sx = bx + bw / 2 - (tw + iw) / 2
     if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, by + bh / 2 + 4); ctx.showText(icon) }
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
@@ -95,15 +102,15 @@ const drawHudFrame = (ctx, x, y, w, h, title) => {
         ctx.lineTo(x + aw, y + topH); ctx.lineTo(x + aw - cut, y + topH + dia); ctx.lineTo(x + aw - cut, y + h - topH - dia)
         ctx.lineTo(x + aw, y + h - topH); ctx.lineTo(x + aw, y + h); ctx.lineTo(x + ec, y + h); ctx.lineTo(x, y + h - ec); ctx.closePath()
     }
-    ctx.setOperator(12); strip(); ctx.setSourceRGBA(0.906, 0.341, 0.294, 0.22); ctx.setLineWidth(8); ctx.stroke(); ctx.setOperator(2)
-    strip(); ctx.setSourceRGBA(0.906, 0.341, 0.294, 0.92); ctx.fill()
+    ctx.setOperator(12); strip(); ctx.setSourceRGBA(hr, hg, hb, 0.22); ctx.setLineWidth(8); ctx.stroke(); ctx.setOperator(2)
+    strip(); ctx.setSourceRGBA(hr, hg, hb, 0.92); ctx.fill()
 
     const panel = () => { ctx.newPath(); ctx.moveTo(px, y); ctx.lineTo(px + pw, y); ctx.lineTo(px + pw, y + h - bev); ctx.lineTo(px + pw - bev, y + h); ctx.lineTo(px, y + h); ctx.closePath() }
     ctx.setOperator(12)
     for (const [lw, a] of [[12, 0.05], [7, 0.08], [3, 0.14]] as const) { panel(); ctx.setSourceRGBA(hr, hg, hb, a); ctx.setLineWidth(lw); ctx.stroke() }
     ctx.setOperator(2)
     panel(); const g = new Cairo.LinearGradient(px, y, px, y + h)
-    g.addColorStopRGBA(0, 0.16, 0.012, 0.03, 0.58); g.addColorStopRGBA(1, 0.08, 0.005, 0.018, 0.62)
+    g.addColorStopRGBA(0, hr * 0.16, hg * 0.16, hb * 0.16, 0.58); g.addColorStopRGBA(1, hr * 0.08, hg * 0.08, hb * 0.08, 0.62)
     ctx.setSource(g); ctx.fill()
     ctx.save(); panel(); ctx.clip()
     ctx.setSourceRGBA(0, 0, 0, 0.1); for (let yy = y + 1; yy < y + h; yy += 3) ctx.rectangle(px, yy, pw, 1); ctx.fill()
@@ -206,6 +213,7 @@ export const createModal = (spec) => {
 
     area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
+    onColorChange(() => { surf = null; ctrl.requestDraw() })
 
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
@@ -256,7 +264,7 @@ export const createModal = (spec) => {
 }
 
 
-const sectionHeader = (ctx, g, x, y, label, w) => {
+export const sectionHeader = (ctx, g, x, y, label, w) => {
     txt(ctx, x, y, label, MONO, 9, g.col, 0.85)
     ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
     const lw = ctx.textExtents(label).width
@@ -333,7 +341,7 @@ const BrtCtrl = () => {
     return ctrl
 }
 
-const rowPath = (ctx, x, y, w, h) => { const c = 5; ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
+export const rowPath = (ctx, x, y, w, h) => { const c = 5; ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
 const ROW_H = 32, ROW_GAP = 6
 const drawList = (ctx, push, x, y, w, h, items, scroll, meta, onClick, onRight) => {
     const step = ROW_H + ROW_GAP, vis = Math.max(1, Math.floor(h / step))
@@ -367,13 +375,13 @@ const drawMenu = (ctx, push, fx, fy, items, onDismiss, X, Y, W, H) => {
     if (my + mh > Y + H - 12) my = Y + H - 12 - mh
     if (mx < X + 12) mx = X + 12; if (my < Y + 12) my = Y + 12
     push({ kind: "btn", bx0: X, by0: Y, bx1: X + W, by1: Y + H, on: onDismiss })
-    ctx.setOperator(12); menuPath(ctx, mx - 2, my - 2, mw + 4, mh + 4); ctx.setSourceRGBA(RR, RG, RB, 0.25); ctx.setLineWidth(6); ctx.stroke(); ctx.setOperator(2)
+    ctx.setOperator(12); menuPath(ctx, mx - 2, my - 2, mw + 4, mh + 4); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.25); ctx.setLineWidth(6); ctx.stroke(); ctx.setOperator(2)
     menuPath(ctx, mx, my, mw, mh); ctx.setSourceRGBA(0.02, 0.07, 0.1, 0.97); ctx.fill()
     menuPath(ctx, mx, my, mw, mh); ctx.setSourceRGBA(0.72, 0.96, 1, 0.95); ctx.setLineWidth(0.9); ctx.stroke()
     items.forEach((it, i) => {
         const iy = my + 4 + i * ih
         txt(ctx, mx + 16, iy + ih / 2 + 4, it.label, TITLE, 11, it.danger ? [1, 0.4, 0.44] : CYAN, 0.93, 1)
-        if (i > 0) { ctx.setSourceRGBA(RR, RG, RB, 0.18); ctx.rectangle(mx + 6, iy, mw - 12, 1); ctx.fill() }
+        if (i > 0) { ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.18); ctx.rectangle(mx + 6, iy, mw - 12, 1); ctx.fill() }
         push({ kind: "btn", bx0: mx, by0: iy, bx1: mx + mw, by1: iy + ih, on: () => { it.on(); onDismiss() } })
     })
 }
@@ -414,7 +422,7 @@ const WifiCtrl = () => {
             drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "WIFI: ON" : "WIFI: OFF", toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", refresh, false, g.col)
             let ty = py + (st.on ? 88 : 50)
-            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [CR, CG, CB] : g.col, 0.85)
+            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [USER.green[0], USER.green[1], USER.green[2]] : g.col, 0.85)
             ty += 20
             if (st.on && st.selected) {
                 txt(ctx, px, ty, st.selected.ssid.slice(0, 22), TITLE, 13, g.accent, 0.95, 1)
@@ -496,7 +504,7 @@ const BtCtrl = () => {
             drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "BT: ON" : "BT: OFF", toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", scanBT, false, g.col)
             let ty = py + (st.on ? 88 : 50)
-            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [CR, CG, CB] : g.col, 0.85)
+            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [USER.green[0], USER.green[1], USER.green[2]] : g.col, 0.85)
             ty += 20
             if (st.on && st.selected) {
                 txt(ctx, px, ty, st.selected.name.slice(0, 22), TITLE, 13, g.accent, 0.95, 1)
@@ -536,14 +544,13 @@ const BtCtrl = () => {
     return ctrl
 }
 
-const PWRBRIGHT: [number, number, number] = [1, 0.58, 0.55]
 const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
     const key = `${bx}|${by}`, hovered = push.hoverKey === key, [hr, hg, hb] = HUDRED
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr * 0.16, hg * 0.16, hb * 0.18, hovered ? 0.55 : 0.4); ctx.fill()
     if (hovered) { ctx.setOperator(12); btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, 0.4); ctx.setLineWidth(2.4); ctx.stroke(); ctx.setOperator(2) }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, hovered ? 1 : 0.82); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
     ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(24); const gw = ctx.textExtents(glyph).width
-    ctx.setSourceRGBA(PWRBRIGHT[0], PWRBRIGHT[1], PWRBRIGHT[2], 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
+    const [pbr, pbg, pbb] = hudLite(); ctx.setSourceRGBA(pbr, pbg, pbb, 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
     ctx.setSourceRGBA(hr, hg, hb, 0.95); ctx.moveTo(bx + bw / 2 - tw / 2, by + bh - 11); ctx.showText(label)
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
@@ -670,9 +677,9 @@ const BatCtrl = () => {
     return ctrl
 }
 
-const SYSY: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
-const SYSC: [number, number, number] = [94 / 255, 244 / 255, 248 / 255]
-const SYSR: [number, number, number] = [255 / 255, 42 / 255, 58 / 255]
+const SYSY: [number, number, number] = USER.amber
+const SYSC: [number, number, number] = USER.dock
+const SYSR: [number, number, number] = USER.red
 const SYS_LOCK = "/tmp/cyber-sysmon.lock"
 const SYS_AUDIO = `${CYBER_DIR}/assets/audio`
 const sysPlay = (f, vol, mvol) => sh(`setsid -f sh -c "play -q -v ${vol} '${SYS_AUDIO}/${f}' 2>/dev/null || mpv --no-video --really-quiet --volume=${mvol} '${SYS_AUDIO}/${f}' 2>/dev/null" >/dev/null 2>&1`)
@@ -689,7 +696,7 @@ const bevel = (ctx, x, y, w, h, c = 10) => {
     ctx.moveTo(x, y); ctx.lineTo(x + w - c, y); ctx.lineTo(x + w, y + c)
     ctx.lineTo(x + w, y + h); ctx.lineTo(x + c, y + h); ctx.lineTo(x, y + h - c); ctx.closePath()
 }
-const SYSDIM: [number, number, number] = [0.62, 0.72, 0.75]
+const SYSDIM: [number, number, number] = USER.dim
 const SEGOFF: [number, number, number] = [0.34, 0.40, 0.42]
 const rdf = (f) => { try { const [ok, b2] = GLib.file_get_contents(f); return ok ? new TextDecoder().decode(b2) : "" } catch { return "" } }
 const kbToG = (kb) => kb / 1048576
@@ -1035,9 +1042,9 @@ fi`).then(() => timeout(200, fetchInitApps))
             const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
             const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
             const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
-            vg.addColorStopRGBA(0, 0.02, 0, 0.01, 0.46)
-            vg.addColorStopRGBA(0.5, 0.06, 0, 0.01, 0.68)
-            vg.addColorStopRGBA(1, 0.19, 0, 0.03, 0.92 * pulse)
+            vg.addColorStopRGBA(0, SYSR[0] * 0.02, SYSR[1] * 0.02, SYSR[2] * 0.02, 0.46)
+            vg.addColorStopRGBA(0.5, SYSR[0] * 0.06, SYSR[1] * 0.06, SYSR[2] * 0.06, 0.68)
+            vg.addColorStopRGBA(1, SYSR[0] * 0.19, SYSR[1] * 0.19, SYSR[2] * 0.19, 0.92 * pulse)
             ctx.setSource(vg); ctx.rectangle(0, 0, FW, FH); ctx.fill()
 
             const hy = Y + 40
@@ -1208,7 +1215,7 @@ const KEYBINDS = [
 const drawKeyCap = (ctx, x, y, label, h) => {
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
     const w = Math.max(26, tw + 16)
-    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(CR * 0.2, CG * 0.2, CB * 0.28, 0.55); ctx.fill()
+    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(USER.green[0] * 0.2, USER.green[1] * 0.2, USER.green[2] * 0.28, 0.55); ctx.fill()
     btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.85); ctx.setLineWidth(1); ctx.stroke()
     ctx.setSourceRGBA(0.92, 0.99, 1, 0.97); ctx.moveTo(x + w / 2 - tw / 2, y + h / 2 + 4); ctx.showText(label)
     return w
@@ -1223,6 +1230,13 @@ const HYPRBINDS = [
     ["SUPER + D", "PEEK DESKTOP"],
 ]
 const readThemeMod = () => {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(`${CYBER_DIR}/config/user_keybinds.lua`)
+        if (ok) {
+            const m = new TextDecoder().decode(bytes).match(/themeMod\s*=\s*"([^"]+)"/m)
+            if (m) return m[1].trim().replace(/\s*\+\s*/g, " + ")
+        }
+    } catch { }
     try {
         const [ok, bytes] = GLib.file_get_contents(`${CYBER_DIR}/theme.lua`)
         if (ok) {
@@ -1333,7 +1347,7 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl())]
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(ThemesCtrl())]
 
 
 export const toggleModal = (name) => {

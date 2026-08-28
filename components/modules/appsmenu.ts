@@ -5,7 +5,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
-import { NEON, f } from "./colors.ts"
+import { USER, onColorChange } from "./colors.ts"
 
 
 const AUDIO = `${CYBER_DIR}/assets/audio`
@@ -29,8 +29,6 @@ const startMenuLoop = () => execAsync(["sh", "-c",
  `play -q -v 1.5 "${AUDIO}/kiroshi_off.ogg" 2>/dev/null || mpv --no-config --really-quiet --volume=150 "${AUDIO}/kiroshi_off.ogg" 2>/dev/null`]).catch(() => {})
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
-const [RR, RG, RB] = f(NEON.red)
-const [CR, CG, CB] = f(NEON.cyan)
 
 const FOOTER_APPS = "[ TYPE ] SEARCH    [ SCROLL / ARROW KEYS ] NAVIGATE    [ ENTER / CLICK ] LAUNCH    [ ESC ] CLOSE"
 let wheelCfg: any = { title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: null, onSecondary: null, onReset: null, emptyText: "// NO APPS" }
@@ -113,20 +111,20 @@ const drawRow = (ctx, entry, x, ry, num, A, focused) => {
  const gl = focused ? 1 : 0.72
 
 
- ctx.setOperator(12); ctx.setSourceRGBA(CR, CG, CB, 0.2 * A * gl); ctx.setLineWidth(4); ctx.rectangle(nx, ny, nsz, nsz); ctx.stroke(); ctx.setOperator(2)
- ctx.setSourceRGBA(CR * 0.16, CG * 0.16, CB * 0.2, 0.34 * A); ctx.rectangle(nx, ny, nsz, nsz); ctx.fill()
- ctx.setSourceRGBA(CR, CG, CB, 0.92 * A * gl); ctx.setLineWidth(1.5); ctx.rectangle(nx, ny, nsz, nsz); ctx.stroke()
+ ctx.setOperator(12); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.2 * A * gl); ctx.setLineWidth(4); ctx.rectangle(nx, ny, nsz, nsz); ctx.stroke(); ctx.setOperator(2)
+ ctx.setSourceRGBA(USER.dock[0] * 0.16, USER.dock[1] * 0.16, USER.dock[2] * 0.2, 0.34 * A); ctx.rectangle(nx, ny, nsz, nsz); ctx.fill()
+ ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.92 * A * gl); ctx.setLineWidth(1.5); ctx.rectangle(nx, ny, nsz, nsz); ctx.stroke()
  const nm = num <= 9 ? String(num) : (num === 10 ? "0" : "")
  if (nm) {
      ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(14)
      const tw = ctx.textExtents(nm).width
-     ctx.setSourceRGBA(CR, CG, CB, A); ctx.moveTo(nx + nsz / 2 - tw / 2, ny + nsz / 2 + 5); ctx.showText(nm)
+     ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], A); ctx.moveTo(nx + nsz / 2 - tw / 2, ny + nsz / 2 + 5); ctx.showText(nm)
  }
 
 
- itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(CR * 0.16, CG * 0.16, CB * 0.2, (focused ? 0.5 : 0.3) * A); ctx.fill()
- ctx.setOperator(12); itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(CR, CG, CB, 0.22 * A * gl); ctx.setLineWidth(focused ? 5 : 4); ctx.stroke(); ctx.setOperator(2)
- itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(CR, CG, CB, (focused ? 0.97 : 0.72) * A); ctx.setLineWidth(1.6); ctx.stroke()
+ itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0] * 0.16, USER.dock[1] * 0.16, USER.dock[2] * 0.2, (focused ? 0.5 : 0.3) * A); ctx.fill()
+ ctx.setOperator(12); itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.22 * A * gl); ctx.setLineWidth(focused ? 5 : 4); ctx.stroke(); ctx.setOperator(2)
+ itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], (focused ? 0.97 : 0.72) * A); ctx.setLineWidth(1.6); ctx.stroke()
 
 
  ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(15); ctx.setSourceRGBA(1, 1, 1, (focused ? 1 : 0.9) * A)
@@ -135,10 +133,10 @@ const drawRow = (ctx, entry, x, ry, num, A, focused) => {
  ctx.moveTo(bx + 20, by + h / 2 - 2); ctx.showText(nm2)
  const bg = (entry.badge || "").toString().slice(0, 14)
  ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(8); const bgw = Math.max(46, ctx.textExtents(bg).width + 10)
- ctx.setSourceRGBA(CR, CG, CB, 0.85 * A); ctx.setLineWidth(0.8); ctx.rectangle(bx + 20, by + h / 2 + 6, bgw, 13); ctx.stroke(); ctx.moveTo(bx + 24, by + h / 2 + 16); ctx.showText(bg)
+ ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.85 * A); ctx.setLineWidth(0.8); ctx.rectangle(bx + 20, by + h / 2 + 6, bgw, 13); ctx.stroke(); ctx.moveTo(bx + 24, by + h / 2 + 16); ctx.showText(bg)
 
 
- if (entry.glyph) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(22); const gw = ctx.textExtents(entry.glyph).width; ctx.setSourceRGBA(CR, CG, CB, 0.92 * A * gl); ctx.moveTo(bx + bw - 34 - gw / 2, by + h / 2 + 8); ctx.showText(entry.glyph) }
+ if (entry.glyph) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(22); const gw = ctx.textExtents(entry.glyph).width; ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.92 * A * gl); ctx.moveTo(bx + bw - 34 - gw / 2, by + h / 2 + 8); ctx.showText(entry.glyph) }
 }
 
 const drawSearchGlitch = (ctx, top, bandH) => {
@@ -146,8 +144,8 @@ const drawSearchGlitch = (ctx, top, bandH) => {
  const nz = (k) => { const x = Math.sin(s * 1.3 + k) * 43758.5; return x - Math.floor(x) }
  for (let i = 0; i < 6; i++) {
      const by = top + nz(i * 2.1) * bandH, bh = 2 + nz(i * 0.7 + 9) * 10, sh = (nz(i * 3 + 4) - 0.5) * 55 * sf
-     ctx.setSourceRGBA(CR * 0.3, CG, CB, 0.11 * sf); ctx.rectangle(LIST_X - 60 + sh, by, ROW_W + 120, bh); ctx.fill()
-     ctx.setSourceRGBA(RR, RG * 0.2, RB * 0.2, 0.07 * sf); ctx.rectangle(LIST_X - 60 - sh, by + 1, ROW_W + 120, Math.max(1, bh - 2)); ctx.fill()
+     ctx.setSourceRGBA(USER.dock[0] * 0.3, USER.dock[1], USER.dock[2], 0.11 * sf); ctx.rectangle(LIST_X - 60 + sh, by, ROW_W + 120, bh); ctx.fill()
+     ctx.setSourceRGBA(USER.dock[0], USER.dock[1] * 0.2, USER.dock[2] * 0.2, 0.07 * sf); ctx.rectangle(LIST_X - 60 - sh, by + 1, ROW_W + 120, Math.max(1, bh - 2)); ctx.fill()
  }
 }
 
@@ -159,8 +157,8 @@ const drawIntroGlitch = (ctx, e) => {
  ctx.setOperator(12)
  for (let i = 0; i < 6; i++) {
      const by = top - 40 + nz(i * 2.3) * (bandH + 80), bh = 2 + nz(i + 5) * 16, sh = (nz(i * 3 + 1) - 0.5) * 140 * amt
-     ctx.setSourceRGBA(CR * 0.4, CG, CB, 0.12 * amt); ctx.rectangle(LIST_X - 90 + sh, by, ROW_W + 220, bh); ctx.fill()
-     ctx.setSourceRGBA(RR, RG * 0.2, RB * 0.2, 0.09 * amt); ctx.rectangle(LIST_X - 90 - sh, by + 2, ROW_W + 220, Math.max(1, bh - 2)); ctx.fill()
+     ctx.setSourceRGBA(USER.dock[0] * 0.4, USER.dock[1], USER.dock[2], 0.12 * amt); ctx.rectangle(LIST_X - 90 + sh, by, ROW_W + 220, bh); ctx.fill()
+     ctx.setSourceRGBA(USER.dock[0], USER.dock[1] * 0.2, USER.dock[2] * 0.2, 0.09 * amt); ctx.rectangle(LIST_X - 90 - sh, by + 2, ROW_W + 220, Math.max(1, bh - 2)); ctx.fill()
  }
  ctx.setOperator(2)
 }
@@ -188,20 +186,20 @@ const drawContent = (ctx) => {
  const n = filtered.length
  const top = bandTop(), cy = centerY(), bandH = VISIBLE * ROW_H
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11); ctx.setSourceRGBA(RR, RG, RB, 0.55); ctx.moveTo(LIST_X, top - 46); ctx.showText(wheelCfg.subtitle)
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.55); ctx.moveTo(LIST_X, top - 46); ctx.showText(wheelCfg.subtitle)
  ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(22)
  const titleW = ctx.textExtents(wheelCfg.title).width
- ctx.setOperator(12); ctx.setSourceRGBA(CR, CG, CB, 0.4); ctx.moveTo(LIST_X + 1, top - 16); ctx.showText(wheelCfg.title); ctx.setOperator(2)
- ctx.setSourceRGBA(CR, CG, CB, 0.97); ctx.moveTo(LIST_X, top - 16); ctx.showText(wheelCfg.title)
+ ctx.setOperator(12); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.4); ctx.moveTo(LIST_X + 1, top - 16); ctx.showText(wheelCfg.title); ctx.setOperator(2)
+ ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.97); ctx.moveTo(LIST_X, top - 16); ctx.showText(wheelCfg.title)
  if (wheelCfg.searchable) {
      ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(13)
      const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
-     ctx.setSourceRGBA(CR, CG, CB, query ? 0.95 : 0.4); ctx.moveTo(LIST_X + titleW + 24, top - 16); ctx.showText("› " + (query ? query.toUpperCase() + cur : "SEARCH…"))
+     ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], query ? 0.95 : 0.4); ctx.moveTo(LIST_X + titleW + 24, top - 16); ctx.showText("› " + (query ? query.toUpperCase() + cur : "SEARCH…"))
  }
- ctx.setSourceRGBA(CR, CG, CB, 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(LIST_X, top - 8); ctx.lineTo(LIST_X + ROW_W, top - 8); ctx.stroke()
+ ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(LIST_X, top - 8); ctx.lineTo(LIST_X + ROW_W, top - 8); ctx.stroke()
 
  if (n === 0) {
-     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(RR, RG, RB, 0.85)
+     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.85)
      ctx.moveTo(LIST_X + 30, cy); ctx.showText(query ? "// NO MATCH" : wheelCfg.emptyText)
  } else {
 
@@ -229,7 +227,7 @@ const drawContent = (ctx) => {
      if (searchFlash > 0.02) drawSearchGlitch(ctx, top, bandH)
  }
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(10); ctx.setSourceRGBA(RR, RG, RB, 0.5)
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(10); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.5)
  ctx.moveTo(LIST_X, top + bandH + 30); ctx.showText(wheelCfg.footer)
 }
 
@@ -289,6 +287,7 @@ export const AppsMenuWindow = () => {
  menuArea = DrawingArea({})
  menuArea.set_size_request(SCREEN_WIDTH, SCREEN_HEIGHT)
  menuArea.connect("draw", (_w, ctx) => (draw(ctx), false))
+ onColorChange(() => menuArea.queue_draw())
 
  const evt = EventBox({ child: menuArea })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.SCROLL_MASK) } catch {}

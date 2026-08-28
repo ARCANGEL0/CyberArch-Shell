@@ -6,8 +6,7 @@ import { toggleModal, isModalOpen, onModalChange } from "./cmodal.ts"
 import { toggleNotifHud, isNotifHudOpen, onNotifHudChange, notifCount } from "./notifmessages.ts"
 import { togglePlayer, isPlayerOpen, onPlayerChange, playPauseActive } from "./player.ts"
 import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
-import { NEON, f, RGB } from "./colors.ts"
-const NOTIF_RED: RGB = [240, 24, 20]
+import { NEON, f, RGB, onColorChange } from "./colors.ts"
 import { CYBER_DIR } from "../../env.ts"
 
 const Cairo: any = (imports as any).cairo
@@ -69,11 +68,12 @@ const drawEq = (ctx, plane, s, edge, alpha) => {
      fillQuad(ctx, plane, x0 + i * slot, baseY - bh, x0 + i * slot + bw, baseY, edge, alpha)
  }
 }
-const drawBadgeBox = (ctx, plane, bx, by, bsz, sc, edge) => {
+const drawBadgeBox = (ctx, plane, bx, by, bsz, sc, edge, labelCol = edge) => {
  if (!sc) return
  const p00 = plane.project(bx, by), p10 = plane.project(bx + bsz, by)
  const p11 = plane.project(bx + bsz, by + bsz), p01 = plane.project(bx, by + bsz)
  const [r, g, b] = f(edge)
+ const [lr, lg, lb] = f(labelCol)
  const quad = () => { ctx.newPath(); ctx.moveTo(p00[0], p00[1]); ctx.lineTo(p10[0], p10[1]); ctx.lineTo(p11[0], p11[1]); ctx.lineTo(p01[0], p01[1]); ctx.closePath() }
  quad(); ctx.setSourceRGBA(0.008, 0.043, 0.06, 0.92); ctx.fill()
  quad(); ctx.setSourceRGBA(r, g, b, 0.85); ctx.setLineWidth(1.2); ctx.stroke()
@@ -83,7 +83,7 @@ const drawBadgeBox = (ctx, plane, bx, by, bsz, sc, edge) => {
  ctx.save(); ctx.translate(ccx, ccy); ctx.rotate(ang*0.38); ctx.scale(psc, psc)
  ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(bsz * 0.58)
  const tw = ctx.textExtents(sc).width
- ctx.setSourceRGBA(r, g, b, 0.97); ctx.moveTo(-tw / 2, bsz * 0.2); ctx.showText(sc)
+ ctx.setSourceRGBA(lr, lg, lb, 0.97); ctx.moveTo(-tw / 2, bsz * 0.2); ctx.showText(sc)
  ctx.restore()
 }
 
@@ -162,27 +162,33 @@ const makeHover = (layout: typeof VLAYOUT, hv: any, getHovered: () => string | n
 const VertDock = () => {
  const on = {}, open = {}, hv = {}
   const area = DrawingArea({}); area.set_size_request(vsp.width + 10, vsp.height + 20); _dockArea = area
+ const recolorV = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
  for (const s of VLAYOUT) {
- const t = tileOf(s.k), edge = open[s.k] ? NEON.red : NEON.cyan, hov = hv[s.k] || 0
+ const t = tileOf(s.k), hov = hv[s.k] || 0
+ const hb = open[s.k] ? 1 : hov * 0.55
+ const edgeRaw: [number, number, number] = [NEON.dock[0] + (NEON.press[0] - NEON.dock[0]) * hb, NEON.dock[1] + (NEON.press[1] - NEON.dock[1]) * hb, NEON.dock[2] + (NEON.press[2] - NEON.dock[2]) * hb]
+ const edge: [number, number, number] = [edgeRaw[0] + (255 - edgeRaw[0]) * 0.05, edgeRaw[1] + (255 - edgeRaw[1]) * 0.05, edgeRaw[2] + (255 - edgeRaw[2]) * 0.05]
  const fr = vertSlotFrame(s.x, s.y, s.w, s.h)
- const [br, bg, bb] = f([4, 9, 13])
+ const [br, bg, bb] = [NEON.grid[0] * 0.12 / 255, NEON.grid[1] * 0.12 / 255, NEON.grid[2] * 0.12 / 255]
  ctx.newPath(); fr.map(([u, v]) => vsp.project(u, v)).forEach(([x, y]: [number, number], j: number) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
  ctx.setSourceRGBA(br + hov * 0.05, bg + hov * 0.09, bb + hov * 0.11, 0.55 + hov * 0.2); ctx.fill()
- if (hov > 0.02) { ctx.setOperator(12); strokePath(ctx, vsp, fr, edge, hov * 0.5, 3.4, true); ctx.setOperator(2) }
+ ctx.setOperator(12)
+ strokePath(ctx, vsp, fr, edge, (open[s.k] ? 0.16 : 0.12) + hov * 0.18, 6, true)
+ ctx.setOperator(2)
  strokePath(ctx, vsp, fr, edge, Math.min(1, (open[s.k] ? 0.9 : 0.6) + hov * 0.4), 1.4, true)
   const isz = s.h * 0.35
   const ialpha = Math.min(1, (on[s.k] ? 1 : 0.78) + hov * 0.22)
   if (t.eq) drawEq(ctx, vsp, s, edge, ialpha)
   else if (t.key === "notification") {
-    tiltImage(ctx, vsp, 45, 98, phoneIcon(), s.h * 0.47, ialpha, (on[s.k] ? 0.4 : 0) + hov * 0.5, 0.08, open[s.k] ? NOTIF_RED : null, 0.95)
+    tiltImage(ctx, vsp, 45, 98, phoneIcon(), s.h * 0.47, ialpha, (on[s.k] ? 0.4 : 0) + hov * 0.5, 0.08, open[s.k] ? NEON.press : NEON.dock, open[s.k] ? 1 : 0.85)
     const nc = notifCount()
     if (nc > 0) {
       const bx = 58, by = 90, bw = 13, bh = 18, bv = 3
       const oc: [number, number][] = [[bx + bv, by], [bx + bw - bv, by], [bx + bw, by + bv], [bx + bw, by + bh - bv], [bx + bw - bv, by + bh], [bx + bv, by + bh], [bx, by + bh - bv], [bx, by + bv]]
       const op = oc.map(([u, v]) => vsp.project(u, v))
       ctx.newPath(); op.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-      ctx.setSourceRGBA(108/255, 230/255, 246/255, 0.92); ctx.fill()
+      ctx.setSourceRGBA(NEON.dock[0] / 255, NEON.dock[1] / 255, NEON.dock[2] / 255, 0.92); ctx.fill()
       const ccx = op.reduce((s, p) => s + p[0], 0) / 8, ccy = op.reduce((s, p) => s + p[1], 0) / 8
       const ang = Math.atan2(op[1][1] - op[0][1], op[1][0] - op[0][0])
       const psc = Math.hypot(op[2][0] - op[1][0], op[2][1] - op[1][1]) / bv
@@ -227,21 +233,27 @@ const VertDock = () => {
  openRefresh()
  onModalChange(openRefresh); onPlayerChange(openRefresh); onNotifHudChange(openRefresh)
  const a = interval(6000, stateRefresh), mp = interval(1500, musicPoll)
- area.connect("destroy", () => { a.cancel(); mp.cancel(); mTick && mTick.cancel(); hover.cancel() })
- return evt
+ area.connect("destroy", () => { a.cancel(); mp.cancel(); mTick && mTick.cancel(); hover.cancel(); recolorV() })
+  return evt
 }
 
 const HorizDock = () => {
  const on = {}, open = {}, hv = {}
- const area = DrawingArea({}); area.set_size_request(hsp.width, hsp.height)
+  const area = DrawingArea({}); area.set_size_request(hsp.width, hsp.height)
+ const recolorH = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
  for (const s of HLAYOUT) {
- const t = tileOf(s.k), edge = open[s.k] ? NEON.red : NEON.cyan, hov = hv[s.k] || 0
+ const t = tileOf(s.k), hov = hv[s.k] || 0
+ const hb = open[s.k] ? 1 : hov * 0.55
+ const edgeRaw: [number, number, number] = [NEON.dock[0] + (NEON.press[0] - NEON.dock[0]) * hb, NEON.dock[1] + (NEON.press[1] - NEON.dock[1]) * hb, NEON.dock[2] + (NEON.press[2] - NEON.dock[2]) * hb]
+ const edge: [number, number, number] = [edgeRaw[0] + (255 - edgeRaw[0]) * 0.05, edgeRaw[1] + (255 - edgeRaw[1]) * 0.05, edgeRaw[2] + (255 - edgeRaw[2]) * 0.05]
  const fr = horizSlotFrame(s.x, s.y, s.w, s.h)
- const [br, bg, bb] = f([4, 9, 13])
+ const [br, bg, bb] = [NEON.grid[0] * 0.12 / 255, NEON.grid[1] * 0.12 / 255, NEON.grid[2] * 0.12 / 255]
  ctx.newPath(); fr.map(([u, v]) => hsp.project(u, v)).forEach(([x, y]: [number, number], j: number) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
  ctx.setSourceRGBA(br + hov * 0.05, bg + hov * 0.09, bb + hov * 0.11, 0.55 + hov * 0.2); ctx.fill()
- if (hov > 0.02) { ctx.setOperator(12); strokePath(ctx, hsp, fr, edge, hov * 0.5, 3.4, true); ctx.setOperator(2) }
+ ctx.setOperator(12)
+ strokePath(ctx, hsp, fr, edge, (open[s.k] ? 0.16 : 0.12) + hov * 0.18, 6, true)
+ ctx.setOperator(2)
  strokePath(ctx, hsp, fr, edge, Math.min(1, (open[s.k] ? 0.9 : 0.6) + hov * 0.4), 1.4, true)
   const isz = s.h * 0.42
   tiltText(ctx, hsp, s.x + s.w / 2 + 0.5, s.y + s.h * 0.62, t.icon, ICONF, isz, edge, Math.min(1, (on[s.k] ? 1 : 0.78) + hov * 0.22), { align: "c",extraRotate: 0.05, glow: (on[s.k] ? 0.4 : 0) + hov * 0.5 })
@@ -267,8 +279,8 @@ const HorizDock = () => {
  openRefresh()
  onModalChange(openRefresh)
  const a = interval(6000, stateRefresh)
- area.connect("destroy", () => { a.cancel(); hover.cancel() })
- return evt
+ area.connect("destroy", () => { a.cancel(); hover.cancel(); recolorH() })
+  return evt
 }
 
 export const Toggles = () => Box({ className: "dock", children: [VertDock()] })

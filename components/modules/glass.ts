@@ -4,18 +4,24 @@
 import Gdk from "gi://Gdk?version=3.0"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { NEON, f } from "./colors.ts"
+import { USER, onColorChange, glassAlpha } from "./colors.ts"
 import { makePlane, Plane } from "./proj.ts"
 
 export const Cairo: any = (imports as any).cairo
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 export { TITLE, MONO, ICONF }
-export const [RR, RG, RB] = f(NEON.cyan)
-export const [CR, CG, CB] = f([196, 248, 255])
-export const CYAN: [number, number, number] = [RR, RG, RB]
-export const ACC: [number, number, number] = [CR, CG, CB]
-export const RED: [number, number, number] = f(NEON.red) as any
+export const CYAN: [number, number, number] = USER.dock
+export const ACC: [number, number, number] = USER.white
+export const RED: [number, number, number] = USER.red
 export const RACC: [number, number, number] = [1, 0.42, 0.46]
+const updateRACC = () => {
+    const r = USER.red
+    RACC[0] = r[0] + (1 - r[0]) * 0.3
+    RACC[1] = r[1] + (1 - r[1]) * 0.3
+    RACC[2] = r[2] + (1 - r[2]) * 0.3
+}
+updateRACC()
+onColorChange(updateRACC)
 export const ch = (c: number) => String.fromCharCode(c)
 
 
@@ -44,15 +50,16 @@ export const panelPath = (ctx, x, y, w, h) => {
 
 export const drawGlass = (ctx, x, y, w, h, col: [number, number, number] = CYAN, a = 1) => {
     const [r, g, b] = col
+    const ga = glassAlpha.value
     panelPath(ctx, x, y, w, h)
     const gb = new Cairo.LinearGradient(x, y, x + w * 0.5, y + h)
-    gb.addColorStopRGBA(0, r * 0.14, g * 0.14 + 0.06, b * 0.18 + 0.02, 0.93 * a)
-    gb.addColorStopRGBA(0.5, r * 0.02 + 0.004, g * 0.04 + 0.02, b * 0.06 + 0.03, 0.9 * a)
-    gb.addColorStopRGBA(1, r * 0.04, g * 0.06 + 0.03, b * 0.1 + 0.03, 0.94 * a)
+    gb.addColorStopRGBA(0, r * 0.14, g * 0.14 + 0.06, b * 0.18 + 0.02, 0.93 * a * ga)
+    gb.addColorStopRGBA(0.5, r * 0.02 + 0.004, g * 0.04 + 0.02, b * 0.06 + 0.03, 0.9 * a * ga)
+    gb.addColorStopRGBA(1, r * 0.04, g * 0.06 + 0.03, b * 0.1 + 0.03, 0.94 * a * ga)
     ctx.setSource(gb); ctx.fill()
     ctx.save(); panelPath(ctx, x, y, w, h); ctx.clip()
     const gs = new Cairo.LinearGradient(x, y, x + w * 0.65, y + h * 0.55)
-    gs.addColorStopRGBA(0, 0.8, 0.97, 1, 0.13 * a); gs.addColorStopRGBA(0.5, r, g, b, 0)
+    gs.addColorStopRGBA(0, 0.8, 0.97, 1, 0.13 * a * ga); gs.addColorStopRGBA(0.5, r, g, b, 0)
     ctx.setOperator(12); ctx.setSource(gs); ctx.rectangle(x, y, w, h); ctx.fill(); ctx.setOperator(2)
     ctx.restore()
     const lr = r + (1 - r) * 0.45, lg = g + (1 - g) * 0.45, lb = b + (1 - b) * 0.45

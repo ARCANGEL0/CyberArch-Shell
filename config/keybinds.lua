@@ -52,6 +52,7 @@ hl.bind(themeMod .. " + G",  sock("markets"))
 hl.bind(themeMod .. " + Y", sock("modal bat"))
 hl.bind(themeMod .. " + C",  sock("modal sys"))
 hl.bind(themeMod .. " + H", sock("modal keys"))
+hl.bind(themeMod .. " + backspace", sock("modal themesettings"))
 hl.bind(themeMod .. " + E",  sock("notif-read"))
 hl.bind(themeMod .. " + X", sock("notif-dismiss"))
 

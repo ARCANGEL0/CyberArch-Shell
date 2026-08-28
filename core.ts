@@ -17,6 +17,7 @@ import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
 import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT } from "./env.ts"
+import { loadUserColors } from "./components/modules/colors.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
 import { SidePanel, openCityModal, openForecastModal } from "./components/modules/sidepanel.ts"
 import { MarketsPanel, openMarketsModal } from "./components/modules/markets.ts"
@@ -295,6 +296,7 @@ App.start({
 
  main() {
  compileCss()
+ loadUserColors()
 
  for (const mon of (App as any).get_monitors()) {
  surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors())

@@ -11,7 +11,7 @@ import { Box, DrawingArea, EventBox } from "./widget.ts"
 import { interval, Variable } from "astal"
 import { buildStats } from "./sys.ts"
 import { makePlane, fillQuad, tiltText } from "./proj.ts"
-import { RGB, f } from "./colors.ts"
+import { RGB, f, NEON, onColorChange } from "./colors.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk"
 import Gio from "gi://Gio"
@@ -23,11 +23,13 @@ const cpu = get("cpu")!, ram = get("ram")!
 
 
 const GRAY: RGB = [200, 200, 200] as any
-const LIGHTRED: RGB = [252, 113, 115] as any
-const DARKRED: RGB = [120, 36, 40] as any
-const CYAN: RGB = [85, 222, 255] as any
+const LIGHTRED: RGB = NEON.cpu
+const CYAN: RGB = NEON.cyan as RGB
+const RAMCOL: RGB = NEON.ram
+const BADGECOL: RGB = NEON.badge
+const STOCOL: RGB = NEON.badge
 
-const batColor = (p: number): RGB => p < 10 ? [255, 55, 55] as any : p < 50 ? [255, 120, 45] as any : p < 70 ? [255, 205, 55] as any : [80, 240, 150] as any
+const batColor = (p: number): RGB => p < 10 ? [255, 55, 55] as any : p < 50 ? [255, 120, 45] as any : p < 70 ? [255, 205, 55] as any : NEON.stamina
 
 const read = (p: string) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d) : "" } catch { return "" } }
 
@@ -102,6 +104,7 @@ const scanlines = (ctx: any, x0: number, x1: number, y: number, h: number, gap: 
 
 export const Monitors = () => {
     const area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+    onColorChange(() => area.queue_draw())
     const d = { sto: 0, cpu: 0, ram: 0, bat: 0 }
 
     let mx = -1, my = -1, hovered: string | null = null
@@ -158,20 +161,20 @@ export const Monitors = () => {
         const P = (px: number, py: number): [number, number] => [bx + px / 45 * S, by + py / 45 * S]
         const badge: [number, number][] = [P(1, 1), P(44, 1), P(44, 44), P(14.6, 44), P(1, 27.4)]
         poly(ctx, badge, [4, 15, 19] as any, 0.55)
-        glowShape(ctx, badge, CYAN, 3, 0.8)
-        poly(ctx, badge, CYAN, 0.96, false, 1.4)
+        glowShape(ctx, badge, BADGECOL, 3, 0.8)
+        poly(ctx, badge, BADGECOL, 0.96, false, 1.4)
         const num = badgeVal.replace("°", ""), nw = num.length * 11
-        tiltText(ctx, plane, bx + 20, by + 24, num, TITLE, 15, CYAN, 0.95, { align: "c", bold: true, glow: 0.8 })
+        tiltText(ctx, plane, bx + 20, by + 24, num, TITLE, 15, BADGECOL, 0.95, { align: "c", bold: true, glow: 0.8 })
 
         {
             const y = 15, h = 4, end = X0 + (MAIN - X0) * clamp(d.sto)
             fillQuad(ctx, plane, X0, y, MAIN, y + h, GRAY, 0.10)
-            bloom(ctx, X0, y, end, y + h, CYAN, 7, 1.2)
-            holoFill(ctx, X0, end, y, h, CYAN, 0.9)
+            bloom(ctx, X0, y, end, y + h, STOCOL, 7, 1.2)
+            holoFill(ctx, X0, end, y, h, STOCOL, 0.9)
         }
         {
             const y = 22, h = 18, ch = (MAIN - X0) * 0.05
-            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], DARKRED, 0.42)
+            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], darken(NEON.red, 0.62), 0.42)
             const end = X0 + (MAIN - X0) * clamp(d.cpu)
             const fillPts: [number, number][] = end <= MAIN - ch
                 ? [[X0, y], [end, y], [end, y + h], [X0, y + h]]
@@ -188,8 +191,8 @@ export const Monitors = () => {
             for (let i = 0; i < n; i++) {
                 const sx = X0 + i * (tw + gap)
                 const pts = RAMP.map(([px, py]) => [sx + px / 18 * tw, y + py / 60 * h]) as [number, number][]
-                if (i < lit) { glowShape(ctx, pts, CYAN, 2.8, 1.0); poly(ctx, pts, CYAN, 0.9) }
-                else poly(ctx, pts, CYAN, 0.14)
+                if (i < lit) { glowShape(ctx, pts, RAMCOL, 2.8, 1.0); poly(ctx, pts, RAMCOL, 0.9) }
+                else poly(ctx, pts, RAMCOL, 0.14)
             }
         }
         {
@@ -206,10 +209,10 @@ export const Monitors = () => {
             poly(ctx, barShape, bcol, 0.96, false, 1.2)
                     }
 
-        tiltText(ctx, plane, W, 11, `${diskUsedG}/${diskTotG}G`, MONO, 8, CYAN, 0.85, { align: "r", bold: true })
+        tiltText(ctx, plane, W, 11, `${diskUsedG}/${diskTotG}G`, MONO, 8, STOCOL, 0.85, { align: "r", bold: true })
         tiltText(ctx, plane, W, 46, cpu.percent.get(), TITLE, 24, LIGHTRED, 1, { align: "r", bold: true, glow: 0.42 })
         const ramUsed = ram.substat.get().replace(/\s*GB/i, ""), ramTot = ram.sublabel.replace(/\s*GB/i, "")
-        tiltText(ctx, plane, W - 216, 59, `${ramUsed} / ${ramTot} GB`, MONO, 10.5, CYAN, 0.95, { align: "r", bold: true, glow: 0.3 })
+        tiltText(ctx, plane, W - 216, 59, `${ramUsed} / ${ramTot} GB`, MONO, 10.5, RAMCOL, 0.95, { align: "r", bold: true, glow: 0.3 })
         const charging = isCharging()
         tiltText(ctx, plane, 6, 84, "\uf0e7", ICONF, 10, charging ? YELB : bcol, 0.95)
         if (charging) {
@@ -247,21 +250,25 @@ export const Monitors = () => {
                     [tx, ty + notch],
                 ]
 
+                const [tr, tg, tb] = f(NEON.red)
+                const [dr, dg, db] = f(darken(NEON.red, 0.95))
+                const [lr, lg, lb] = f(lighten(NEON.red, 0.6))
+
                 ctx.newPath()
                 shape.forEach(([sx, sy], i) => i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy))
                 ctx.closePath()
-                ctx.setSourceRGBA(0.12, 0, 0, 0.92)
+                ctx.setSourceRGBA(dr, dg, db, 0.92)
                 ctx.fill()
 
                 ctx.newPath()
                 shape.forEach(([sx, sy], i) => i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy))
                 ctx.closePath()
-                ctx.setSourceRGBA(252/255, 113/255, 115/255, 0.08)
+                ctx.setSourceRGBA(tr, tg, tb, 0.08)
                 ctx.fill()
 
                 for (let sy = ty + 2; sy < ty + th - 2; sy += 2.5) {
                     ctx.newPath(); ctx.moveTo(tx + 2, sy); ctx.lineTo(tx + tw - 2, sy)
-                    ctx.setSourceRGBA(252/255, 113/255, 115/255, 0.04)
+                    ctx.setSourceRGBA(tr, tg, tb, 0.04)
                     ctx.setLineWidth(0.5); ctx.stroke()
                 }
 
@@ -271,7 +278,7 @@ export const Monitors = () => {
                     ctx.newPath()
                     shape.forEach(([sx, sy], i) => i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy))
                     ctx.closePath()
-                    ctx.setSourceRGBA(252/255, 60/255, 70/255, a)
+                    ctx.setSourceRGBA(tr, tg, tb, a)
                     ctx.setLineWidth(w)
                     ctx.stroke()
                 }
@@ -281,19 +288,19 @@ export const Monitors = () => {
                 ctx.newPath()
                 shape.forEach(([sx, sy], i) => i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy))
                 ctx.closePath()
-                ctx.setSourceRGBA(252/255, 113/255, 115/255, 0.95)
+                ctx.setSourceRGBA(tr, tg, tb, 0.95)
                 ctx.setLineWidth(1.3)
                 ctx.stroke()
 
 
-                ctx.setSourceRGBA(1, 200/255, 200/255, 1)
+                ctx.setSourceRGBA(lr, lg, lb, 1)
                 ctx.setLineWidth(1.5)
                 ctx.newPath(); ctx.moveTo(tx, ty + notch); ctx.lineTo(tx + notch, ty); ctx.stroke()
                 ctx.newPath(); ctx.moveTo(tx + tw - notch, ty + th); ctx.lineTo(tx + tw, ty + th - notch); ctx.stroke()
 
 
                 const baseline = ty + pad + te.height + (te.y < 0 ? te.y : 0)
-                ctx.setSourceRGBA(1, 180/255, 180/255, 1)
+                ctx.setSourceRGBA(lr, lg, lb, 1)
                 ctx.moveTo(tx + pad, baseline)
                 ctx.showText(label)
                 ctx.restore()

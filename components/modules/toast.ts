@@ -5,7 +5,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { makePlane, strokePath, tiltText } from "./proj.ts"
-import { NEON, f } from "./colors.ts"
+import { NEON, f, onColorChange } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
 import { passthrough } from "./anim.ts"
 
@@ -132,6 +132,7 @@ export const showToast = (text?: string, opts?: Partial<Cfg>) => {
 export const ToastWindow = () => {
  buildPlane()
  area = DrawingArea({}); area.set_size_request(SCREEN_WIDTH, SCREEN_HEIGHT)
+ onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => { draw(ctx); return false })
  win = Window({
  name: "toast", className: "aug toast",

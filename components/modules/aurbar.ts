@@ -8,16 +8,18 @@ import { CYBER_DIR } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
+import { NEON, onColorChange, glassAlpha } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 
 
-const GREEN: [number, number, number] = [43, 225, 133]
-const GRBRT: [number, number, number] = [150, 255, 200]
-const BLACK: [number, number, number] = [6, 14, 9]
-const CYAN: [number, number, number] = [108, 230, 246]
-const RED: [number, number, number] = [255, 74, 68]
-const WHT: [number, number, number] = [232, 255, 240]
+const GREEN: [number, number, number] = NEON.green
+const GRBRT = (): [number, number, number] => [NEON.red[0] + (255 - NEON.red[0]) * 0.4, NEON.red[1] + (255 - NEON.red[1]) * 0.4, NEON.red[2] + (255 - NEON.red[2]) * 0.4]
+const BLACKFIX: [number, number, number] = [6, 14, 9]
+const BLACK = (): [number, number, number] => glassAlpha.value < 0.5 ? GREEN : BLACKFIX
+const CYAN: [number, number, number] = NEON.dock
+const RED: [number, number, number] = NEON.red
+const WHT: [number, number, number] = NEON.white
 const CAPBG: [number, number, number] = [4, 14, 16]
 
 const TFONT = RAJDHANI, GFONT = RAJDHANI_MED
@@ -190,8 +192,8 @@ const draw = (ctx: any) => {
 
     if (V.lineA > 0.01 && V.lineH > 0.01) {
         const lh = BH * V.lineH, y0 = ROWY - lh / 2, y1 = ROWY + lh / 2
-        ctx.setOperator(12); pfill(ctx, [[LINEX - 2, y0], [LINEX + 4, y0], [LINEX + 4, y1], [LINEX - 2, y1]], GRBRT, 0.5 * V.lineA); ctx.setOperator(2)
-        pfill(ctx, [[LINEX, y0], [LINEX + 3, y0], [LINEX + 3, y1], [LINEX, y1]], GRBRT, V.lineA)
+        ctx.setOperator(12); pfill(ctx, [[LINEX - 2, y0], [LINEX + 4, y0], [LINEX + 4, y1], [LINEX - 2, y1]], GRBRT(), 0.5 * V.lineA); ctx.setOperator(2)
+        pfill(ctx, [[LINEX, y0], [LINEX + 3, y0], [LINEX + 3, y1], [LINEX, y1]], GRBRT(), V.lineA)
     }
 
 
@@ -200,14 +202,14 @@ const draw = (ctx: any) => {
         const bvx = Math.min(18, bw), bvy = 13
         const barPts: [number, number][] = [[BARX, y0], [BARX + bw, y0], [BARX + bw, y1 - bvy], [BARX + bw - bvx, y1], [BARX, y1]]
         pfill(ctx, barPts, GREEN, 0.97 * clamp(V.barW * 4))
-        ctx.setOperator(12); strokePath(ctx, plane, barPts, GRBRT, 0.12, 2, true); ctx.setOperator(2)
+        ctx.setOperator(12); strokePath(ctx, plane, barPts, GRBRT(), 0.12, 2, true); ctx.setOperator(2)
 
 
         ctx.save(); projPath(ctx, [[BARX, y0 - 7], [BARX + bw, y0 - 7], [BARX + bw, y1 + 7], [BARX, y1 + 7]]); ctx.clip()
         const tcx = BARX + 18
-        pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK, 0.92 * V.textA)
+        pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK(), 0.92 * V.textA)
         const tfs = cTitle.length > 22 ? 13 : 16
-        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, BLACK, 0.95 * V.textA, { align: "l", bold: true } as any)
+        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, BLACK(), 0.95 * V.textA, { align: "l", bold: true } as any)
         ctx.restore()
 
         if (V.badgeA > 0.01) pimg(ctx, png("updt.png"), BARX + BW - 45, ROWY, 54, 46, V.badgeA, BADGE_ROT)
@@ -221,7 +223,7 @@ const draw = (ctx: any) => {
         const [pgx, pgy] = plane.project(tx0, GIGSY)
         ctx.save(); ctx.translate(pgx, pgy); ctx.rotate(GIGS_ROT); ctx.translate(-pgx, -pgy)
         pfill(ctx, [[tx0 + ts, tyT], [tx0 + ts, tyT + ts], [tx0, tyT + ts]], GREEN, 0.95 * A)
-        strokePath(ctx, plane, [[tx0, tyT + ts], [tx0 + ts, tyT]], GRBRT, 0.5 * A, 1)
+        strokePath(ctx, plane, [[tx0, tyT + ts], [tx0 + ts, tyT]], GRBRT(), 0.5 * A, 1)
         const gfs = 14
         tiltText(ctx, plane, tx0 + ts + 8, GIGSY, cLabel, GFONT, gfs, GREEN, 0.96 * A, { align: "l" } as any)
         if (cValue) {
@@ -245,6 +247,7 @@ const draw = (ctx: any) => {
 
 export const AurBarWindow = () => {
     area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+    onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => (draw(ctx), false))
     win = Window({
         name: "aurbar", className: "aug aurbar",
