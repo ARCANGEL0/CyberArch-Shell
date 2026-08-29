@@ -6,7 +6,8 @@ local once = function(cmd)
     end)
 end
 
-hl.exec_cmd("dbus-update-activation-environment --systemd --all") 
+hl.exec_cmd("dbus-update-activation-environment --systemd --all")
+hl.exec_cmd("sh -c 'sleep 3; hyprctl dispatch exec \"dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE\"' &")
 hl.exec_cmd("killall -9 waybar mako dunst swaync 2>/dev/null; systemctl --user stop waybar mako dunst swaync 2>/dev/null || true")
 hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null")
 hl.exec_cmd("sleep 1 && " .. cyberpunk .. "/scripts/launch-theme")
