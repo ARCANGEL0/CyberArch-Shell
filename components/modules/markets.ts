@@ -4,7 +4,7 @@ import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
-import { NEON, USER, onColorChange } from "./colors.ts"
+import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RED, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
 import { TITLE, MONO, ENIXE, FROSTBITE_WIDE, GUNSHIP_ITAL } from "./fonts.ts"
@@ -15,8 +15,8 @@ const UP: [number, number, number] = [80 / 255, 240 / 255, 150 / 255]
 const DOWN: [number, number, number] = [255 / 255, 70 / 255, 84 / 255]
 const UP_RGB: [number, number, number] = [80, 240, 150]
 const DOWN_RGB: [number, number, number] = [255, 70, 84]
-const YEL: [number, number, number] = USER.amber
-const DIMC: [number, number, number] = USER.dim
+const YEL = (): [number, number, number] => USER.amber
+const DIMC = (): [number, number, number] => USER.dim
 
 const STORE = `${CYBER_DIR}/markets.json`
 const MAXPIN = 5
@@ -354,8 +354,12 @@ const drawIcon = (ctx: any, name: string, x: number, y: number, w: number, h: nu
     ctx.save()
     ctx.translate(x, y)
     ctx.scale(w / surf.getWidth(), h / surf.getHeight())
-    ctx.setSourceSurface(surf, 0, 0)
-    ctx.paintWithAlpha(a)
+    if (imgTint.value) {
+        tintSurface(ctx, surf, surf.getWidth(), surf.getHeight(), a)
+    } else {
+        ctx.setSourceSurface(surf, 0, 0)
+        ctx.paintWithAlpha(a)
+    }
     ctx.restore()
 }
 
@@ -1258,7 +1262,7 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.setLineWidth(1)
         ctx.stroke()
         const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
-        gpango(ctx, x + 14, railY + 19, mQuery ? mQuery + cur : (tab === "crypto" ? "search coins..." : "search tickers..."), GTITLE, false, 13, mQuery ? YEL : RACC, mQuery ? 0.97 : 0.45)
+        gpango(ctx, x + 14, railY + 19, mQuery ? mQuery + cur : (tab === "crypto" ? "search coins..." : "search tickers..."), GTITLE, false, 13, mQuery ? YEL() : RACC, mQuery ? 0.97 : 0.45)
         gtxt(ctx, x + w - ctx.textExtents(mHint).width - 12, railY + 18, mHint, GMONO, 9, RACC, 0.62)
     } else {
         ctx.setSourceRGBA(0.01, 0.08, 0.10, 0.72)
@@ -1379,7 +1383,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             const link = "OPEN ARTICLE"
             const lw = ctx.textExtents(link).width
             const ly = bodyY + bodyH - 18
-            gtxt(ctx, detailX + detailW - lw - 26, ly, link, GTITLE, 10, YEL, 0.95, 1)
+            gtxt(ctx, detailX + detailW - lw - 26, ly, link, GTITLE, 10, YEL(), 0.95, 1)
             g.push({
                 kind: "news-open-detail",
                 key: `news-detail:${article.id}`,
@@ -1454,7 +1458,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             ctx.setLineWidth(sel || rowHv ? 1.15 : 0.9)
             ctx.stroke()
             if (on) {
-                ctx.setSourceRGBA(YEL[0], YEL[1], YEL[2], sel ? 0.86 : 0.62)
+                const yc = YEL(); ctx.setSourceRGBA(yc[0], yc[1], yc[2], sel ? 0.86 : 0.62)
                 ctx.rectangle(x + 12, ry + rowH - 5, 60, 2)
                 ctx.fill()
             }
@@ -1470,7 +1474,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             const locked = !on && !canPin(tab, r.id)
             const btnHv = g.push.hoverKey === `pin:${tab}:${r.id}`
             const btnPulse = btnHv ? 0.5 + Math.sin(Date.now() / 120) * 0.18 : 0
-            const btnCol: any = locked ? DIMC : (on ? YEL : CYAN)
+            const btnCol: any = locked ? DIMC() : (neonBtn.value ? USER.press : (on ? YEL() : CYAN))
             cutPath(ctx, btnX, btnY, 72, 22, 5)
             ctx.setSourceRGBA(btnCol[0], btnCol[1], btnCol[2], locked ? 0.12 : (btnHv ? 0.22 + btnPulse * 0.08 : (on ? 0.18 : 0.10)))
             ctx.fill()
@@ -1504,7 +1508,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             })
         }
         ctx.restore()
-        drawScrollbar(ctx, x + listW - 7, bodyY, bodyH, listRows.length, vis, mScroll, tab === "crypto" ? CYAN : YEL)
+        drawScrollbar(ctx, x + listW - 7, bodyY, bodyH, listRows.length, vis, mScroll, tab === "crypto" ? CYAN : YEL())
 
         const q = quotes[keyOf(tab, current?.id || "")]
         ctx.setSourceRGBA(0.01, 0.04, 0.06, 0.76)
@@ -1531,7 +1535,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 gtxt(ctx, detailX + 12, statsY, `PINNED ${pins[tab].length}/${MAXPIN}`, GMONO, 9, RACC, 0.7)
                 gtxt(ctx, detailX + 12, statsY + 18, q.name || current.name || current.sym, GTITLE, 12, ACC, 0.9, 1)
                 const meta = q.meta || {}
-                const metricCol = tab === "crypto" ? CYAN : YEL
+                const metricCol = tab === "crypto" ? CYAN : YEL()
                 const metricY = statsY + 40
                 const cellW = Math.max(110, Math.floor((detailW - 32) / 2))
                 const cellH = 34
@@ -1567,7 +1571,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 const locked = !isPinned(tab, current.id) && !canPin(tab, current.id)
                 const pinHv = g.push.hoverKey === `detail-pin:${tab}:${current.id}`
                 const pinPulse = pinHv ? 0.5 + Math.sin(Date.now() / 120) * 0.18 : 0
-                const pinCol: any = locked ? DIMC : (isPinned(tab, current.id) ? YEL : CYAN)
+                const pinCol: any = locked ? DIMC() : (neonBtn.value ? USER.press : (isPinned(tab, current.id) ? YEL() : CYAN))
                 cutPath(ctx, bx, by, bw, 24, 6)
                 ctx.setSourceRGBA(pinCol[0], pinCol[1], pinCol[2], locked ? 0.16 : (pinHv ? 0.22 + pinPulse * 0.08 : 0.12))
                 ctx.fill()

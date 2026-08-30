@@ -5,11 +5,11 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { makePlane, strokePath, tiltText } from "./proj.ts"
-import { NEON, f, onColorChange } from "./colors.ts"
+import { NEON, f, onColorChange, tintPixbuf, imgTint } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
 import { passthrough } from "./anim.ts"
 
-const cR = NEON.red, cC = NEON.cyan
+const cR = NEON.overlay, cC = NEON.dock
 
 let ALERT: any = null
 try { ALERT = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/alert.png`) } catch (e) { print("[toast] alert.png:", e) }
@@ -55,10 +55,14 @@ const drawIcon = (ctx, a) => {
  const pbW = ALERT.get_width(), pbH = ALERT.get_height()
  ctx.save()
  ctx.translate(pc[0], pc[1]); ctx.rotate(ang); ctx.scale((2 * hw) / pbW, (2 * hh) / pbH)
- ctx.setOperator(12)
- Gdk.cairo_set_source_pixbuf(ctx, ALERT, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(0.3 * a)
- ctx.setOperator(2)
- Gdk.cairo_set_source_pixbuf(ctx, ALERT, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(a)
+ if (imgTint.value) {
+     tintPixbuf(ctx, ALERT, -pbW / 2, -pbH / 2, a)
+ } else {
+     ctx.setOperator(12)
+     Gdk.cairo_set_source_pixbuf(ctx, ALERT, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(0.3 * a)
+     ctx.setOperator(2)
+     Gdk.cairo_set_source_pixbuf(ctx, ALERT, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(a)
+ }
  ctx.restore()
 }
 
@@ -74,7 +78,7 @@ const drawBar = (ctx, frac, textA) => {
  const w = Math.max(1, cfg.w * frac), bev = Math.min(13, cfg.h * 0.42)
  const pts = bevelPts(bx, 0, w, cfg.h, bev)
  const [fr, fg, fb] = f(cfg.col)
- fillPoly(ctx, pts, [fr * 0.18, fg * 0.06, fb * 0.06], 0.55)
+ fillPoly(ctx, pts, [fr * 0.18, fg * 0.18, fb * 0.18], 0.55)
  ctx.setOperator(12); strokePoly(ctx, pts, cfg.col, 0.14, 4); ctx.setOperator(2)
  strokePoly(ctx, pts, cfg.col, 0.85, 1.4)
  if (frac < 0.992) {

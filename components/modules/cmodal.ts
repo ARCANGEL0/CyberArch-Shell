@@ -16,20 +16,19 @@ import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesCtrl } from "./themesettings.ts"
-import { USER, onColorChange } from "./colors.ts"
+import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
 const YEL = [1, 0.84, 0.12]
 const GRN = [0.42, 1, 0.6]
-const HUDRED: [number, number, number] = USER.red
-const hudLite = (): [number, number, number] => [USER.red[0] + (1 - USER.red[0]) * 0.3, USER.red[1] + (1 - USER.red[1]) * 0.3, USER.red[2] + (1 - USER.red[2]) * 0.3]
+const HUDRED: [number, number, number] = USER.overlay
 let HUDC: any = null
 
 
-const rcBase = (): [number, number, number] => HUDC || [USER.dock[0], USER.dock[1], USER.dock[2]]
-const rcLabel = (): [number, number, number] => HUDC ? hudLite() : CYAN
-const rcAcc = (): [number, number, number] => HUDC ? hudLite() : ACC
+const rcBase = (): [number, number, number] => HUDC || CYAN
+const rcLabel = (): [number, number, number] => HUDC ? hudSoft.label : CYAN
+const rcAcc = (): [number, number, number] => HUDC ? hudSoft.acc : ACC
 let NCORES = 4
 sh("nproc").then((o) => { NCORES = parseInt(o.trim()) || 4 })
 const fmtTime = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`
@@ -53,7 +52,7 @@ const drawGraph = (ctx, x, y, w, h, data, maxV, col) => {
 
 export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
     value = Math.max(0, Math.min(1, value))
-    const [sr, sg, sb] = HUDC || [USER.dock[0], USER.dock[1], USER.dock[2]], hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
+    const [sr, sg, sb] = HUDC || CYAN, hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
     ctx.setSourceRGBA(sr, sg, sb, 0.14); ctx.rectangle(x, ty - 2, trackW, 4); ctx.fill()
     ctx.setOperator(12); ctx.setSourceRGBA(sr, sg, sb, 0.32); ctx.rectangle(x, ty - 3, trackW * value, 6); ctx.fill(); ctx.setOperator(2)
     ctx.setSourceRGBA(sr, sg, sb, 0.95); ctx.rectangle(x, ty - 2, trackW * value, 4); ctx.fill()
@@ -65,18 +64,19 @@ export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
 }
 export const btnPath = (ctx, bx, by, bw, bh) => { const c = 6; ctx.newPath(); ctx.moveTo(bx + c, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh - c); ctx.lineTo(bx + bw - c, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + c); ctx.closePath() }
 export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "") => {
+    const c = neonBtn.value ? USER.press : col
     const key = `${bx}|${by}`
     const hovered = push.hoverKey === key
     const fillA = active ? (hovered ? 0.62 : 0.55) : (hovered ? 0.5 : 0.34)
     const strokeA = active ? (hovered ? 1 : 0.97) : (hovered ? 1 : 0.78)
-    btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(col[0] * 0.18, col[1] * 0.18, col[2] * 0.2, fillA); ctx.fill()
+    btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0] * 0.18, c[1] * 0.18, c[2] * 0.2, fillA); ctx.fill()
     if (hovered) {
         ctx.setOperator(12)
-        btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(col[0], col[1], col[2], 0.45); ctx.setLineWidth(2.6); ctx.stroke()
+        btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], 0.45); ctx.setLineWidth(2.6); ctx.stroke()
         ctx.setOperator(2)
     }
-    btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(col[0], col[1], col[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
-    ctx.setSourceRGBA(col[0], col[1], col[2], hovered ? 1 : 0.95)
+    btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
+    ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 1 : 0.95)
     let fs = 11
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs)
     const maxW = bw - 10
@@ -375,13 +375,13 @@ const drawMenu = (ctx, push, fx, fy, items, onDismiss, X, Y, W, H) => {
     if (my + mh > Y + H - 12) my = Y + H - 12 - mh
     if (mx < X + 12) mx = X + 12; if (my < Y + 12) my = Y + 12
     push({ kind: "btn", bx0: X, by0: Y, bx1: X + W, by1: Y + H, on: onDismiss })
-    ctx.setOperator(12); menuPath(ctx, mx - 2, my - 2, mw + 4, mh + 4); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.25); ctx.setLineWidth(6); ctx.stroke(); ctx.setOperator(2)
+    ctx.setOperator(12); menuPath(ctx, mx - 2, my - 2, mw + 4, mh + 4); ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.25); ctx.setLineWidth(6); ctx.stroke(); ctx.setOperator(2)
     menuPath(ctx, mx, my, mw, mh); ctx.setSourceRGBA(0.02, 0.07, 0.1, 0.97); ctx.fill()
     menuPath(ctx, mx, my, mw, mh); ctx.setSourceRGBA(0.72, 0.96, 1, 0.95); ctx.setLineWidth(0.9); ctx.stroke()
     items.forEach((it, i) => {
         const iy = my + 4 + i * ih
         txt(ctx, mx + 16, iy + ih / 2 + 4, it.label, TITLE, 11, it.danger ? [1, 0.4, 0.44] : CYAN, 0.93, 1)
-        if (i > 0) { ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.18); ctx.rectangle(mx + 6, iy, mw - 12, 1); ctx.fill() }
+        if (i > 0) { ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.18); ctx.rectangle(mx + 6, iy, mw - 12, 1); ctx.fill() }
         push({ kind: "btn", bx0: mx, by0: iy, bx1: mx + mw, by1: iy + ih, on: () => { it.on(); onDismiss() } })
     })
 }
@@ -422,7 +422,7 @@ const WifiCtrl = () => {
             drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "WIFI: ON" : "WIFI: OFF", toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", refresh, false, g.col)
             let ty = py + (st.on ? 88 : 50)
-            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [USER.green[0], USER.green[1], USER.green[2]] : g.col, 0.85)
+            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? ACC : g.col, 0.85)
             ty += 20
             if (st.on && st.selected) {
                 txt(ctx, px, ty, st.selected.ssid.slice(0, 22), TITLE, 13, g.accent, 0.95, 1)
@@ -504,7 +504,7 @@ const BtCtrl = () => {
             drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "BT: ON" : "BT: OFF", toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", scanBT, false, g.col)
             let ty = py + (st.on ? 88 : 50)
-            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? [USER.green[0], USER.green[1], USER.green[2]] : g.col, 0.85)
+            txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? ACC : g.col, 0.85)
             ty += 20
             if (st.on && st.selected) {
                 txt(ctx, px, ty, st.selected.name.slice(0, 22), TITLE, 13, g.accent, 0.95, 1)
@@ -544,13 +544,14 @@ const BtCtrl = () => {
     return ctrl
 }
 
+const PWRBRIGHT: [number, number, number] = [1, 0.58, 0.55]
 const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
     const key = `${bx}|${by}`, hovered = push.hoverKey === key, [hr, hg, hb] = HUDRED
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr * 0.16, hg * 0.16, hb * 0.18, hovered ? 0.55 : 0.4); ctx.fill()
     if (hovered) { ctx.setOperator(12); btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, 0.4); ctx.setLineWidth(2.4); ctx.stroke(); ctx.setOperator(2) }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, hovered ? 1 : 0.82); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
     ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(24); const gw = ctx.textExtents(glyph).width
-    const [pbr, pbg, pbb] = hudLite(); ctx.setSourceRGBA(pbr, pbg, pbb, 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
+    ctx.setSourceRGBA(PWRBRIGHT[0], PWRBRIGHT[1], PWRBRIGHT[2], 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
     ctx.setSourceRGBA(hr, hg, hb, 0.95); ctx.moveTo(bx + bw / 2 - tw / 2, by + bh - 11); ctx.showText(label)
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
@@ -659,7 +660,7 @@ const BatCtrl = () => {
                 ctx.setSourceRGBA(col[0], col[1], col[2], 0.98); ctx.moveTo(x, cy + 36); ctx.showText(big)
                 txt(ctx, x + bw + 16, cy + 18, full ? "✓ FULLY CHARGED" : charging ? "⚡ CHARGING" : "ON BATTERY", MONO, 11, RED, 0.92)
                 txt(ctx, x + bw + 16, cy + 37, full ? "AC CONNECTED" : `${st.rate.toFixed(1)} W · ${st.perMin.toFixed(1)} %/min${st.mins > 0 ? " · " + fmtTime(st.mins) + (charging ? " to full" : " left") : ""}`, MONO, 8.5, col, 0.72)
-                ctx.setSourceRGBA(RED[0], RED[1], RED[2], 0.18); ctx.rectangle(x, cy + 48, w, 5); ctx.fill()
+                ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.18); ctx.rectangle(x, cy + 48, w, 5); ctx.fill()
                 ctx.setSourceRGBA(col[0], col[1], col[2], 0.9); ctx.rectangle(x, cy + 48, w * st.pct / 100, 5); ctx.fill()
                 txt(ctx, x, cy + 68, "// DRAW HISTORY · W", MONO, 8, RED, 0.45)
                 drawGraph(ctx, x, cy + 72, w, 42, st.hist, Math.max(5, ...(st.hist.length ? st.hist : [5])), col); cy += 128
@@ -679,7 +680,7 @@ const BatCtrl = () => {
 
 const SYSY: [number, number, number] = USER.amber
 const SYSC: [number, number, number] = USER.dock
-const SYSR: [number, number, number] = USER.red
+const SYSR: [number, number, number] = USER.overlay
 const SYS_LOCK = "/tmp/cyber-sysmon.lock"
 const SYS_AUDIO = `${CYBER_DIR}/assets/audio`
 const sysPlay = (f, vol, mvol) => sh(`setsid -f sh -c "play -q -v ${vol} '${SYS_AUDIO}/${f}' 2>/dev/null || mpv --no-video --really-quiet --volume=${mvol} '${SYS_AUDIO}/${f}' 2>/dev/null" >/dev/null 2>&1`)
@@ -696,7 +697,7 @@ const bevel = (ctx, x, y, w, h, c = 10) => {
     ctx.moveTo(x, y); ctx.lineTo(x + w - c, y); ctx.lineTo(x + w, y + c)
     ctx.lineTo(x + w, y + h); ctx.lineTo(x + c, y + h); ctx.lineTo(x, y + h - c); ctx.closePath()
 }
-const SYSDIM: [number, number, number] = USER.dim
+const SYSDIM: [number, number, number] = [0.62, 0.72, 0.75]
 const SEGOFF: [number, number, number] = [0.34, 0.40, 0.42]
 const rdf = (f) => { try { const [ok, b2] = GLib.file_get_contents(f); return ok ? new TextDecoder().decode(b2) : "" } catch { return "" } }
 const kbToG = (kb) => kb / 1048576
@@ -1042,9 +1043,10 @@ fi`).then(() => timeout(200, fetchInitApps))
             const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
             const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
             const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
-            vg.addColorStopRGBA(0, SYSR[0] * 0.02, SYSR[1] * 0.02, SYSR[2] * 0.02, 0.46)
-            vg.addColorStopRGBA(0.5, SYSR[0] * 0.06, SYSR[1] * 0.06, SYSR[2] * 0.06, 0.68)
-            vg.addColorStopRGBA(1, SYSR[0] * 0.19, SYSR[1] * 0.19, SYSR[2] * 0.19, 0.92 * pulse)
+            const [ov0, ov1, ov2] = USER.overlay
+            vg.addColorStopRGBA(0, ov0 * 0.08, ov1 * 0.08, ov2 * 0.08, 0.46)
+            vg.addColorStopRGBA(0.5, ov0 * 0.2, ov1 * 0.2, ov2 * 0.2, 0.68)
+            vg.addColorStopRGBA(1, ov0 * 0.62, ov1 * 0.62, ov2 * 0.62, 0.92 * pulse)
             ctx.setSource(vg); ctx.rectangle(0, 0, FW, FH); ctx.fill()
 
             const hy = Y + 40
@@ -1213,10 +1215,11 @@ const KEYBINDS = [
     ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
 ]
 const drawKeyCap = (ctx, x, y, label, h) => {
+    const kc = neonBtn.value ? USER.press : CYAN
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
     const w = Math.max(26, tw + 16)
-    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(USER.green[0] * 0.2, USER.green[1] * 0.2, USER.green[2] * 0.28, 0.55); ctx.fill()
-    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.85); ctx.setLineWidth(1); ctx.stroke()
+    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(ACC[0] * 0.2, ACC[1] * 0.2, ACC[2] * 0.28, 0.55); ctx.fill()
+    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(kc[0], kc[1], kc[2], 0.85); ctx.setLineWidth(1); ctx.stroke()
     ctx.setSourceRGBA(0.92, 0.99, 1, 0.97); ctx.moveTo(x + w / 2 - tw / 2, y + h / 2 + 4); ctx.showText(label)
     return w
 }
@@ -1258,23 +1261,24 @@ const KeysCtrl = () => createModal({
     name: "keys", tabTitle: "KEYBINDS", W: 470, H: 660,
     onOpen: () => { keysMod = readThemeMod() },
     draw: (ctx, g) => {
+        const kc = neonBtn.value ? USER.press : CYAN
         const x = g.X + 24, top = g.Y + HEADER + 10
         txt(ctx, x, top + 6, `// PREFIX  ${keysMod}  +  KEY`, MONO, 10, ACC, 0.72, 1)
         const gridTop = top + 26, colW = (g.w - 48) / 2, rowH = 30, capH = 22, half = Math.ceil(KEYBINDS.length / 2)
         KEYBINDS.forEach(([key, action], i) => {
             const cx = x + (i < half ? 0 : 1) * colW, cy = gridTop + (i % half) * rowH
             const cw = drawKeyCap(ctx, cx, cy, key, capH)
-            txt(ctx, cx + cw + 10, cy + capH / 2 + 4, action, TITLE, 11, CYAN, 0.92, 1)
+            txt(ctx, cx + cw + 10, cy + capH / 2 + 4, action, TITLE, 11, kc, 0.92, 1)
         })
 
         const sepY = gridTop + half * rowH + 16
         txt(ctx, x, sepY, "// HYPRLAND", MONO, 10, ACC, 0.72, 1)
-        ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.28); ctx.setLineWidth(1)
+        ctx.setSourceRGBA(kc[0], kc[1], kc[2], 0.28); ctx.setLineWidth(1)
         ctx.newPath(); ctx.moveTo(x + 98, sepY - 4); ctx.lineTo(g.X + g.w - 24, sepY - 4); ctx.stroke()
         const hTop = sepY + 20, hRow = 22, actX = x + 210
         HYPRBINDS.forEach(([combo, action], i) => {
             const hy = hTop + i * hRow
-            txt(ctx, x, hy, combo, MONO, 10, CYAN, 0.92, 1)
+            txt(ctx, x, hy, combo, MONO, 10, kc, 0.92, 1)
             txt(ctx, actX, hy, action, TITLE, 11, ACC, 0.85, 1)
         })
         txt(ctx, x, g.Y + g.h - 14, "ESC to close", MONO, 9, g.col, 0.42)

@@ -4,24 +4,22 @@
 import Gdk from "gi://Gdk?version=3.0"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { USER, onColorChange, glassAlpha } from "./colors.ts"
+import { USER, glassAlpha, neonBtn, onColorChange } from "./colors.ts"
 import { makePlane, Plane } from "./proj.ts"
 
 export const Cairo: any = (imports as any).cairo
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 export { TITLE, MONO, ICONF }
-export const CYAN: [number, number, number] = USER.dock
-export const ACC: [number, number, number] = USER.white
+export const CYAN: [number, number, number] = [...USER.dock] as [number, number, number]
+const syncCyan = () => {
+    const src = neonBtn.value ? USER.press : USER.dock
+    CYAN[0] = src[0]; CYAN[1] = src[1]; CYAN[2] = src[2]
+}
+onColorChange(syncCyan)
+syncCyan()
+export const ACC: [number, number, number] = USER.glassacc
 export const RED: [number, number, number] = USER.red
 export const RACC: [number, number, number] = [1, 0.42, 0.46]
-const updateRACC = () => {
-    const r = USER.red
-    RACC[0] = r[0] + (1 - r[0]) * 0.3
-    RACC[1] = r[1] + (1 - r[1]) * 0.3
-    RACC[2] = r[2] + (1 - r[2]) * 0.3
-}
-updateRACC()
-onColorChange(updateRACC)
 export const ch = (c: number) => String.fromCharCode(c)
 
 

@@ -8,19 +8,19 @@ import { CYBER_DIR } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
-import { NEON, onColorChange, glassAlpha } from "./colors.ts"
+import { NEON, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 
 
-const GREEN: [number, number, number] = NEON.green
-const GRBRT = (): [number, number, number] => [NEON.red[0] + (255 - NEON.red[0]) * 0.4, NEON.red[1] + (255 - NEON.red[1]) * 0.4, NEON.red[2] + (255 - NEON.red[2]) * 0.4]
-const BLACKFIX: [number, number, number] = [6, 14, 9]
-const BLACK = (): [number, number, number] => glassAlpha.value < 0.5 ? GREEN : BLACKFIX
-const CYAN: [number, number, number] = NEON.dock
-const RED: [number, number, number] = NEON.red
-const WHT: [number, number, number] = NEON.white
+const GREEN: [number, number, number] = NEON.aurgreen
+const GRBRT: [number, number, number] = NEON.aurbrt
+const BLACK: [number, number, number] = NEON.aurblack
+const CYAN: [number, number, number] = NEON.notifcyn
+const RED: [number, number, number] = NEON.notifred
+const WHT: [number, number, number] = NEON.aurwht
 const CAPBG: [number, number, number] = [4, 14, 16]
+const ac = (c: [number, number, number]): [number, number, number] => neonBtn.value ? NEON.press : c
 
 const TFONT = RAJDHANI, GFONT = RAJDHANI_MED
 
@@ -135,22 +135,28 @@ const pfill = (ctx: any, pts: [number, number][], c: number[], a: number) => { p
 const uwidth = (ctx: any, font: string, size: number, text: string) => { ctx.selectFontFace(font, 0, 0); ctx.setFontSize(size); return ctx.textExtents(text).width }
 
 
-const pimg = (ctx: any, surf: any, cu: number, cv: number, boxW: number, boxH: number, a: number, extraRot = 0) => {
+const pimg = (ctx: any, surf: any, cu: number, cv: number, boxW: number, boxH: number, a: number, extraRot = 0, flat = false, colorOverride: [number, number, number] | null = null) => {
     if (!surf || a <= 0.01) return
     const pw = surf.getWidth(), ph = surf.getHeight()
     const fit = Math.min(boxW / pw, boxH / ph), w = pw * fit, h = ph * fit
     const [sx, sy] = plane.project(cu, cv), sc = plane.scaleAt(cu, cv), ang = plane.angleAt(cu, cv)
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang + extraRot); ctx.scale(sc, sc); ctx.translate(-w / 2, -h / 2); ctx.scale(fit, fit)
-    ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a); ctx.restore()
+    if (imgTint.value || colorOverride) {
+        if (flat) tintSurfaceFlat(ctx, surf, pw, ph, a, colorOverride)
+        else tintSurface(ctx, surf, pw, ph, a, colorOverride)
+    } else {
+        ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
+    }
+    ctx.restore()
 }
 
 
 const ptip = (ctx: any, u: number, by: number, key: string, label: string, a: number) => {
     const s = 20, cv = by - 14
     pfill(ctx, [[u, cv], [u + s, cv], [u + s, cv + s], [u, cv + s]], CAPBG, 0.55 * a)
-    strokePath(ctx, plane, [[u, cv], [u + s, cv], [u + s, cv + s], [u, cv + s]], CYAN, 0.95 * a, 1, true)
+    strokePath(ctx, plane, [[u, cv], [u + s, cv], [u + s, cv + s], [u, cv + s]], ac(CYAN), 0.95 * a, 1, true)
     tiltText(ctx, plane, u + s / 2, by, key, TITLE, 12, WHT, a, { align: "c" } as any)
-    tiltText(ctx, plane, u + s + 6, by, label, TITLE, 11, RED, a, { align: "l" } as any)
+    tiltText(ctx, plane, u + s + 6, by, label, TITLE, 11, ac(RED), a, { align: "l" } as any)
     return s + 6 + uwidth(ctx, TITLE, 11, label)
 }
 
@@ -187,13 +193,13 @@ const draw = (ctx: any) => {
     const V = visuals()
     if (V.circleA <= 0.003 && V.barW <= 0.003 && V.lineA <= 0.003) return
 
-    pimg(ctx, png("circle.png"), V.circleX, ROWY + 2, DC, DC, V.circleA)
+    pimg(ctx, png("circle.png"), V.circleX, ROWY + 2, DC, DC, V.circleA, 0, false, circleTint.value)
 
 
     if (V.lineA > 0.01 && V.lineH > 0.01) {
         const lh = BH * V.lineH, y0 = ROWY - lh / 2, y1 = ROWY + lh / 2
-        ctx.setOperator(12); pfill(ctx, [[LINEX - 2, y0], [LINEX + 4, y0], [LINEX + 4, y1], [LINEX - 2, y1]], GRBRT(), 0.5 * V.lineA); ctx.setOperator(2)
-        pfill(ctx, [[LINEX, y0], [LINEX + 3, y0], [LINEX + 3, y1], [LINEX, y1]], GRBRT(), V.lineA)
+        ctx.setOperator(12); pfill(ctx, [[LINEX - 2, y0], [LINEX + 4, y0], [LINEX + 4, y1], [LINEX - 2, y1]], GRBRT, 0.5 * V.lineA); ctx.setOperator(2)
+        pfill(ctx, [[LINEX, y0], [LINEX + 3, y0], [LINEX + 3, y1], [LINEX, y1]], GRBRT, V.lineA)
     }
 
 
@@ -201,18 +207,23 @@ const draw = (ctx: any) => {
         const bw = BW * V.barW, y0 = ROWY - BH / 2, y1 = ROWY + BH / 2
         const bvx = Math.min(18, bw), bvy = 13
         const barPts: [number, number][] = [[BARX, y0], [BARX + bw, y0], [BARX + bw, y1 - bvy], [BARX + bw - bvx, y1], [BARX, y1]]
-        pfill(ctx, barPts, GREEN, 0.97 * clamp(V.barW * 4))
-        ctx.setOperator(12); strokePath(ctx, plane, barPts, GRBRT(), 0.12, 2, true); ctx.setOperator(2)
+        if (glassMode.value) {
+            pfill(ctx, barPts, BLACK, 0.55 * clamp(V.barW * 4) * glassAlpha.value)
+            ctx.setOperator(12); strokePath(ctx, plane, barPts, GRBRT, 0.12, 2, true); ctx.setOperator(2)
+            strokePath(ctx, plane, barPts, ac(GREEN), 0.9 * clamp(V.barW * 4), 1.4, true)
+        } else {
+            pfill(ctx, barPts, GREEN, 0.92 * clamp(V.barW * 4))
+        }
 
 
         ctx.save(); projPath(ctx, [[BARX, y0 - 7], [BARX + bw, y0 - 7], [BARX + bw, y1 + 7], [BARX, y1 + 7]]); ctx.clip()
         const tcx = BARX + 18
-        pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK(), 0.92 * V.textA)
+        pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK, 0.92 * V.textA)
         const tfs = cTitle.length > 22 ? 13 : 16
-        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, BLACK(), 0.95 * V.textA, { align: "l", bold: true } as any)
+        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, neonBtn.value ? NEON.press : (glassMode.value ? WHT : BLACK), 0.95 * V.textA, { align: "l", bold: true, glow: (glassMode.value || neonBtn.value) ? 0.55 : 0 } as any)
         ctx.restore()
 
-        if (V.badgeA > 0.01) pimg(ctx, png("updt.png"), BARX + BW - 45, ROWY, 54, 46, V.badgeA, BADGE_ROT)
+        if (V.badgeA > 0.01) pimg(ctx, png("updt.png"), BARX + BW - 45, ROWY, 54, 46, V.badgeA, BADGE_ROT, true, (imgTint.value && !glassMode.value) ? BLACK : null)
     }
 
 
@@ -222,13 +233,13 @@ const draw = (ctx: any) => {
 
         const [pgx, pgy] = plane.project(tx0, GIGSY)
         ctx.save(); ctx.translate(pgx, pgy); ctx.rotate(GIGS_ROT); ctx.translate(-pgx, -pgy)
-        pfill(ctx, [[tx0 + ts, tyT], [tx0 + ts, tyT + ts], [tx0, tyT + ts]], GREEN, 0.95 * A)
-        strokePath(ctx, plane, [[tx0, tyT + ts], [tx0 + ts, tyT]], GRBRT(), 0.5 * A, 1)
+        pfill(ctx, [[tx0 + ts, tyT], [tx0 + ts, tyT + ts], [tx0, tyT + ts]], ac(GREEN), 0.95 * A)
+        strokePath(ctx, plane, [[tx0, tyT + ts], [tx0 + ts, tyT]], GRBRT, 0.5 * A, 1)
         const gfs = 14
-        tiltText(ctx, plane, tx0 + ts + 8, GIGSY, cLabel, GFONT, gfs, GREEN, 0.96 * A, { align: "l" } as any)
+        tiltText(ctx, plane, tx0 + ts + 8, GIGSY, cLabel, GFONT, gfs, ac(GREEN), 0.96 * A, { align: "l" } as any)
         if (cValue) {
             const lw = uwidth(ctx, GFONT, gfs, cLabel)
-            tiltText(ctx, plane, tx0 + ts + 8 + lw + 7, GIGSY, cValue, GFONT, gfs + 1, GREEN, 0.98 * A, { align: "l" } as any)
+            tiltText(ctx, plane, tx0 + ts + 8 + lw + 7, GIGSY, cValue, GFONT, gfs + 1, ac(GREEN), 0.98 * A, { align: "l" } as any)
         }
         ctx.restore()
 

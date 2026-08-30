@@ -5,7 +5,9 @@ import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
-import { USER, onColorChange } from "./colors.ts"
+import { NEON, USER, f, onColorChange, menuBg, glassMode } from "./colors.ts"
+
+const Cairo = (imports as any).cairo
 
 
 const AUDIO = `${CYBER_DIR}/assets/audio`
@@ -122,7 +124,16 @@ const drawRow = (ctx, entry, x, ry, num, A, focused) => {
  }
 
 
- itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0] * 0.16, USER.dock[1] * 0.16, USER.dock[2] * 0.2, (focused ? 0.5 : 0.3) * A); ctx.fill()
+ itemPath(ctx, bx, by, bw, h)
+ if (glassMode.value) {
+     const rg = new Cairo.LinearGradient(bx, by, bx, by + h)
+     rg.addColorStopRGBA(0, USER.dock[0], USER.dock[1], USER.dock[2], (focused ? 0.14 : 0.07) * A)
+     rg.addColorStopRGBA(1, USER.dock[0], USER.dock[1], USER.dock[2], 0)
+     ctx.setSource(rg)
+ } else {
+     ctx.setSourceRGBA(USER.dock[0] * 0.16, USER.dock[1] * 0.16, USER.dock[2] * 0.2, (focused ? 0.5 : 0.3) * A)
+ }
+ ctx.fill()
  ctx.setOperator(12); itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.22 * A * gl); ctx.setLineWidth(focused ? 5 : 4); ctx.stroke(); ctx.setOperator(2)
  itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], (focused ? 0.97 : 0.72) * A); ctx.setLineWidth(1.6); ctx.stroke()
 
@@ -145,7 +156,7 @@ const drawSearchGlitch = (ctx, top, bandH) => {
  for (let i = 0; i < 6; i++) {
      const by = top + nz(i * 2.1) * bandH, bh = 2 + nz(i * 0.7 + 9) * 10, sh = (nz(i * 3 + 4) - 0.5) * 55 * sf
      ctx.setSourceRGBA(USER.dock[0] * 0.3, USER.dock[1], USER.dock[2], 0.11 * sf); ctx.rectangle(LIST_X - 60 + sh, by, ROW_W + 120, bh); ctx.fill()
-     ctx.setSourceRGBA(USER.dock[0], USER.dock[1] * 0.2, USER.dock[2] * 0.2, 0.07 * sf); ctx.rectangle(LIST_X - 60 - sh, by + 1, ROW_W + 120, Math.max(1, bh - 2)); ctx.fill()
+     ctx.setSourceRGBA(USER.press[0], USER.press[1] * 0.2, USER.press[2] * 0.2, 0.07 * sf); ctx.rectangle(LIST_X - 60 - sh, by + 1, ROW_W + 120, Math.max(1, bh - 2)); ctx.fill()
  }
 }
 
@@ -158,7 +169,7 @@ const drawIntroGlitch = (ctx, e) => {
  for (let i = 0; i < 6; i++) {
      const by = top - 40 + nz(i * 2.3) * (bandH + 80), bh = 2 + nz(i + 5) * 16, sh = (nz(i * 3 + 1) - 0.5) * 140 * amt
      ctx.setSourceRGBA(USER.dock[0] * 0.4, USER.dock[1], USER.dock[2], 0.12 * amt); ctx.rectangle(LIST_X - 90 + sh, by, ROW_W + 220, bh); ctx.fill()
-     ctx.setSourceRGBA(USER.dock[0], USER.dock[1] * 0.2, USER.dock[2] * 0.2, 0.09 * amt); ctx.rectangle(LIST_X - 90 - sh, by + 2, ROW_W + 220, Math.max(1, bh - 2)); ctx.fill()
+     ctx.setSourceRGBA(USER.press[0], USER.press[1] * 0.2, USER.press[2] * 0.2, 0.09 * amt); ctx.rectangle(LIST_X - 90 - sh, by + 2, ROW_W + 220, Math.max(1, bh - 2)); ctx.fill()
  }
  ctx.setOperator(2)
 }
@@ -167,7 +178,17 @@ const draw = (ctx) => {
  if (!active && intro <= 0.002) return
  ctx.setOperator(0); ctx.paint(); ctx.setOperator(2)
  const e = intro
- ctx.setSourceRGBA(0.01, 0.004, 0.015, 0.85 * Math.min(1, e * 2)); ctx.rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); ctx.fill()
+ const ea = Math.min(1, e * 2)
+ const [bgr, bgg, bgb] = menuBg.bg
+ ctx.setSourceRGBA(bgr / 255, bgg / 255, bgb / 255, menuBg.bgA * ea); ctx.rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); ctx.fill()
+ if (menuBg.fog && menuBg.fogA > 0.001) {
+     const [fr, fg, fb] = menuBg.fog
+     const cx = SCREEN_WIDTH / 2, cy = SCREEN_HEIGHT / 2, r1 = Math.hypot(cx, cy)
+     const grad = new Cairo.RadialGradient(cx, cy, r1 * 0.55, cx, cy, r1)
+     grad.addColorStopRGBA(0, fr / 255, fg / 255, fb / 255, 0)
+     grad.addColorStopRGBA(1, fr / 255, fg / 255, fb / 255, menuBg.fogA * ea)
+     ctx.setSource(grad); ctx.rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); ctx.fill()
+ }
  if (e >= 0.998) { drawContent(ctx); return }
  const gt = bandTop(), gy1 = gt + VISIBLE * ROW_H + 44
  ctx.save(); ctx.rectangle(LIST_X - 100, gt - 54, ROW_W + 240, gy1 - (gt - 54)); ctx.clip()
@@ -186,7 +207,7 @@ const drawContent = (ctx) => {
  const n = filtered.length
  const top = bandTop(), cy = centerY(), bandH = VISIBLE * ROW_H
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.55); ctx.moveTo(LIST_X, top - 46); ctx.showText(wheelCfg.subtitle)
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.55); ctx.moveTo(LIST_X, top - 46); ctx.showText(wheelCfg.subtitle)
  ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(22)
  const titleW = ctx.textExtents(wheelCfg.title).width
  ctx.setOperator(12); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.4); ctx.moveTo(LIST_X + 1, top - 16); ctx.showText(wheelCfg.title); ctx.setOperator(2)
@@ -199,7 +220,7 @@ const drawContent = (ctx) => {
  ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(LIST_X, top - 8); ctx.lineTo(LIST_X + ROW_W, top - 8); ctx.stroke()
 
  if (n === 0) {
-     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.85)
+     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.85)
      ctx.moveTo(LIST_X + 30, cy); ctx.showText(query ? "// NO MATCH" : wheelCfg.emptyText)
  } else {
 
@@ -227,7 +248,7 @@ const drawContent = (ctx) => {
      if (searchFlash > 0.02) drawSearchGlitch(ctx, top, bandH)
  }
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(10); ctx.setSourceRGBA(USER.dock[0], USER.dock[1], USER.dock[2], 0.5)
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(10); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.5)
  ctx.moveTo(LIST_X, top + bandH + 30); ctx.showText(wheelCfg.footer)
 }
 
@@ -316,7 +337,7 @@ export const AppsMenuWindow = () => {
   })
 
  menuWin = Window({
-     name: "appsmenu", className: "aug appsmenu",
+     name: "appsmenu", namespace: "modal_appsmenu", className: "aug appsmenu",
      anchor: Anchor.TOP | Anchor.BOTTOM | Anchor.LEFT | Anchor.RIGHT,
      layer: Layer.TOP, exclusivity: Exclusivity.IGNORE, keymode: Keymode.ON_DEMAND,
      visible: false, child: evt,

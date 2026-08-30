@@ -8,7 +8,7 @@ import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
-import { NEON, USER, onColorChange } from "./colors.ts"
+import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RED, RACC, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
@@ -17,7 +17,6 @@ const Cairo = (imports).cairo
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 const NETCOL: [number, number, number] = NEON.netinfo
-const PGREEN: [number, number, number] = [176, 255, 157]
 const W = 320, H = 530
 const MAP_DX = 100
 const minimapBase = makePlane({ w: W, h: H, yaw: 24, pitch: 3, roll: -1, focal: 1300, dist: 1300, pad: 0 })
@@ -224,7 +223,8 @@ const drawMapStatic = (ctx) => {
  const mnx = Math.min(...xs), mxx = Math.max(...xs), mny = Math.min(...ys), mxy = Math.max(...ys)
  const tw = mapTile.getWidth(), th = mapTile.getHeight()
  ctx.save(); ctx.translate(mnx, mny); ctx.scale((mxx - mnx) / tw, (mxy - mny) / th)
- ctx.setSourceSurface(mapTile, 0, 0); try { ctx.getSource().setFilter(1) } catch {}; ctx.paint(); ctx.restore()
+ ctx.setSourceSurface(mapTile, 0, 0); try { ctx.getSource().setFilter(1) } catch {}; ctx.paint()
+ tintOpaque(ctx, tw, th, 0.75); ctx.restore()
  fillQuad(ctx, minimap, MX0, MY0, MX1, MY1, [6, 7, 10], 0.16)
  } else {
  fillQuad(ctx, minimap, MX0, MY0, MX1, MY1, [14, 8, 10], 0.87)
@@ -256,27 +256,28 @@ const fmtDate = (now) => `${ordDay(now.getDate())} ${MON3[now.getMonth()]}, ${no
 
 const drawOverlay = (ctx, now) => {
  tiltText(ctx, minimap, MX0 + 8, MY0 + 10, "55S.441.20", MONO, 7, NEON.cyan, 0.34)
- tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || "NIGHT CITY").slice(0, 32), TITLE, 9, PGREEN, 0.9, { align: "r", bold: true, glow: 0.4 })
+ tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || "NIGHT CITY").slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
   const tstr = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
  const tcx = MX0 + 4, tcy = MY0 - 7
- tiltText(ctx, minimap, tcx, tcy, tstr, TITLE, 18.1, [130, 231, 215], 0.92, { bold: true, glow: 0.82,extraRotate: 0.01  })
- tiltText(ctx, minimap, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, NETCOL, 0.95, { bold: true, glow: 0.3 })
- tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, NETCOL, 0.92, { bold: true, glow: 0.3 })
+ tiltText(ctx, minimap, tcx, tcy, tstr, TITLE, 18.1, mapAccent.clock, 0.92, { bold: true, glow: 0.82,extraRotate: 0.01  })
+ const FORECOL = mapAccent.forecast || NETCOL
+ tiltText(ctx, minimap, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, FORECOL, 0.95, { bold: true, glow: 0.3 })
+ tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
  tiltText(ctx, minimap, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, NEON.cyan, 0.52, { bold: true })
- tiltText(ctx, minimap, MX1, MY1 + 16, fmtDate(now), MONO, 9.5, NETCOL, 0.9, { bold: true, align: "r", glow: 0.38 })
+ tiltText(ctx, minimap, MX1, MY1 + 16, fmtDate(now), MONO, 9.5, FORECOL, 0.9, { bold: true, align: "r", glow: 0.38 })
  const fy = MY1 + 36
  fillQuad(ctx, minimap, MX0 - 2, fy - 8, MX1 + 2, fy + 70, [0, 0, 0], 0.012)
- strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], NETCOL, 0.16, 5)
- strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], NETCOL, 0.62, 1)
- tiltText(ctx, minimap, MX0, fy, "7-DAY FORECAST", TITLE, 9, NETCOL, 0.85, { bold: true, glow: 0.32 })
+ strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.16, 5)
+ strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.62, 1)
+ tiltText(ctx, minimap, MX0, fy, "7-DAY FORECAST", TITLE, 9, FORECOL, 0.85, { bold: true, glow: 0.32 })
  tiltText(ctx, minimap, MX1, fy, "L-CLICK \u25B8 DETAILS \u00B7 R \u25B8 CITY", MONO, 7, NEON.cyan, 0.38, { align: "r" })
  const span = (MX1 - MX0) / 7
  for (let i = 0; i < 7; i++) {
  const cx = MX0 + i * span + span / 2, d = forecast[i], today = i === 0
- if (today) fillQuad(ctx, minimap, MX0 + i * span + 1, fy + 8, MX0 + (i + 1) * span - 1, fy + 66, NETCOL, 0.1)
- tiltText(ctx, minimap, cx, fy + 20, d ? d.day : "--", TITLE, 9, today ? NETCOL : NEON.white, today ? 0.97 : 0.6, { align: "c", bold: true, glow: today ? 0.3 : 0 })
- tiltText(ctx, minimap, cx, fy + 37, d ? wxIcon(WMO[d.code] || "") : "", ICONF, 13, today ? NETCOL : NEON.cyan, 0.85, { align: "c" })
- tiltText(ctx, minimap, cx, fy + 51, d ? d.hi : "--", MONO, 10, today ? NETCOL : NEON.white, 0.9, { align: "c", bold: true })
+ if (today) fillQuad(ctx, minimap, MX0 + i * span + 1, fy + 8, MX0 + (i + 1) * span - 1, fy + 66, FORECOL, 0.1)
+ tiltText(ctx, minimap, cx, fy + 20, d ? d.day : "--", TITLE, 9, today ? FORECOL : NEON.white, today ? 0.97 : 0.6, { align: "c", bold: true, glow: today ? 0.3 : 0 })
+ tiltText(ctx, minimap, cx, fy + 37, d ? wxIcon(WMO[d.code] || "") : "", ICONF, 13, today ? FORECOL : NEON.cyan, 0.85, { align: "c" })
+ tiltText(ctx, minimap, cx, fy + 51, d ? d.hi : "--", MONO, 10, today ? FORECOL : NEON.white, 0.9, { align: "c", bold: true })
  tiltText(ctx, minimap, cx, fy + 63, d ? d.lo : "--", MONO, 8, NEON.cyan, 0.5, { align: "c" })
  }
 
@@ -403,9 +404,9 @@ let fcModal: any = null, fcSel = 0, fcTick = 0, fcOpenAt = 0, fcCityTap = 0
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
 const fcReveal = () => ease((Date.now() - fcOpenAt) / 620)
 
-const YEL: [number, number, number] = USER.amber
+const YEL: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
 const ARA: [number, number, number] = RACC
-const HOT: [number, number, number] = USER.red
+const HOT: [number, number, number] = [255 / 255, 42 / 255, 58 / 255]
 
 const chamfer = (ctx, x, y, w, h, c = 11) => {
  ctx.newPath()

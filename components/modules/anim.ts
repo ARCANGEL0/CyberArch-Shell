@@ -2,7 +2,7 @@ import { App, Window, Box, DrawingArea, activeMonitor, monitorAtPoint } from "./
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
-import { NEON, f, RGB } from "./colors.ts"
+import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"
 import { showToast } from "./toast.ts"
 import GLib from "gi://GLib"
@@ -39,7 +39,7 @@ const genBreach = () => {
 
 const drawBreach = (ctx, W, H, p, title, sub, flash) => {
  const env = p < 0.14 ? p / 0.14 : 1 - (p - 0.14) / 0.86
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  const [gr, gg, gb] = f(NEON.green)
  ctx.setSourceRGBA(0.02, 0.0, 0.01, 0.4 * env)
  ctx.rectangle(0, 0, W, H); ctx.fill()
@@ -103,8 +103,8 @@ const WS_CACHE_TTL = 6000
 
 const drawWsGlitchProc = (ctx, W, H, p, seed) => {
 
- const [rr, rg, rb] = f(NEON.red)
- const [cr, cg, cb] = f(NEON.cyan)
+ const [rr, rg, rb] = f(NEON.overlay)
+ const [cr, cg, cb] = f(NEON.dock)
 
  const env = p < 0.06 ? p / 0.06 : p < 0.55 ? 1 : 1 - (p - 0.55) / 0.45
  const s = seed
@@ -212,14 +212,18 @@ const drawWsGlitchProc = (ctx, W, H, p, seed) => {
 
 const renderShatterFrame = (ctx, W, H, pix, seed) => {
  const tr = (s2) => { const x = Math.sin(s2) * 43758.5453; return x - Math.floor(x) }
- const [rr, rg, rb] = f(NEON.red)
- const [cr, cg, cb] = f(NEON.cyan)
+ const [rr, rg, rb] = f(NEON.overlay)
+ const [cr, cg, cb] = f(NEON.dock)
  const NEAR = () => { try { ctx.getSource().setFilter(WsCairo.Filter.NEAREST) } catch {} }
  const s = seed
  const MS = WS_MAX_SHIFT >> 1
 
 
- Gdk.cairo_set_source_pixbuf(ctx, pix, 0, 0); NEAR(); ctx.paint()
+ if (imgTint.value) {
+     tintPixbuf(ctx, pix, 0, 0, 1)
+ } else {
+     Gdk.cairo_set_source_pixbuf(ctx, pix, 0, 0); NEAR(); ctx.paint()
+ }
  ctx.setSourceRGBA(0.02, 0, 0.02, 0.22); ctx.rectangle(0, 0, W, H); ctx.fill()
 
 
@@ -232,7 +236,11 @@ const renderShatterFrame = (ctx, W, H, pix, seed) => {
      const shift = dir * mag
      ctx.save()
      ctx.rectangle(0, bandY, W, bandH); ctx.clip()
-     Gdk.cairo_set_source_pixbuf(ctx, pix, shift, 0); NEAR(); ctx.paint()
+     if (imgTint.value) {
+         tintPixbuf(ctx, pix, shift, 0, 1)
+     } else {
+         Gdk.cairo_set_source_pixbuf(ctx, pix, shift, 0); NEAR(); ctx.paint()
+     }
      ctx.restore()
      ctx.setSourceRGBA(rr, rg * 0.1, rb * 0.1, 0.5); ctx.rectangle(shift, bandY, 2, bandH); ctx.fill()
      ctx.setSourceRGBA(cr * 0.2, cg, cb, 0.4); ctx.rectangle(shift + W - 2, bandY, 2, bandH); ctx.fill()
@@ -309,9 +317,13 @@ const drawWs = (ctx, st: WsState, p) => {
  const surf = makeFrame(st, idx)
  ctx.save()
  ctx.scale(st.w / st.hw, st.h / st.hh)
- ctx.setSourceSurface(surf, 0, 0)
- try { ctx.getSource().setFilter(WsCairo.Filter.NEAREST) } catch {}
- ctx.paintWithAlpha(baseA)
+ if (imgTint.value) {
+     tintSurface(ctx, surf, st.hw, st.hh, baseA)
+ } else {
+     ctx.setSourceSurface(surf, 0, 0)
+     try { ctx.getSource().setFilter(WsCairo.Filter.NEAREST) } catch {}
+     ctx.paintWithAlpha(baseA)
+ }
  ctx.restore()
  if (p < 0.07) {
      const fa = (1 - p / 0.07) * 0.16
@@ -417,7 +429,7 @@ const genNumStream = () => Array.from({ length: 20 }, () => {
 })
 
 const drawRecLeft = (ctx, tick) => {
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  const a = recFade
  if (a < 0.01) return
 
@@ -426,24 +438,24 @@ const drawRecLeft = (ctx, tick) => {
  const timeStr = `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`
  const recBlinkA = 0.3 + 0.7 * Math.abs(Math.sin(recBlink))
 
- tiltText(ctx, leftPlane, 12, 28, "TIME", TITLE, 11, NEON.red, 0.85 * a, { bold: true, glow: 0.6 })
+ tiltText(ctx, leftPlane, 12, 28, "TIME", TITLE, 11, NEON.overlay, 0.85 * a, { bold: true, glow: 0.6 })
  fillQuad(ctx, leftPlane, 48, 16, 126, 35, [255, 36, 44], a)
  tiltText(ctx, leftPlane, 56, 30, timeStr, MONO, 12, [10, 0, 2], 1.0 * a, { bold: true })
- tiltText(ctx, leftPlane, 124, 45, "SCANNER", MONO, 6, NEON.red, 0.6 * a, { align: "r", bold: true })
+ tiltText(ctx, leftPlane, 124, 45, "SCANNER", MONO, 6, NEON.overlay, 0.6 * a, { align: "r", bold: true })
 
  const dotA = (0.62 + 0.38 * Math.abs(Math.sin(recBlink))) * a
  const dc = leftPlane.project(18, 52.5), dr = 5 * leftPlane.scaleAt(18, 52.5)
  ctx.setOperator(12); ctx.setSourceRGBA(rr, rg, rb, 0.15 * dotA); ctx.newPath(); ctx.arc(dc[0], dc[1], dr * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.setOperator(2)
  ctx.setSourceRGBA(rr, rg, rb, dotA); ctx.newPath(); ctx.arc(dc[0], dc[1], dr, 0, Math.PI * 2); ctx.fill()
- tiltText(ctx, leftPlane, 30, 57, "REC", TITLE, 12, NEON.red, 0.95 * a, { bold: true, glow: 0.6 })
+ tiltText(ctx, leftPlane, 30, 57, "REC", TITLE, 12, NEON.overlay, 0.95 * a, { bold: true, glow: 0.6 })
 
- tiltText(ctx, leftPlane, 12, 88, "HD", TITLE, 12, NEON.red, 0.85 * a, { bold: true, glow: 0.55 })
- tiltText(ctx, leftPlane, 12, 108, "F 5.6", MONO, 11, NEON.red, 0.8 * a, { bold: true, glow: 0.5 })
- tiltText(ctx, leftPlane, 12, 128, "ISO 100", MONO, 11, NEON.red, 0.8 * a, { bold: true, glow: 0.5 })
+ tiltText(ctx, leftPlane, 12, 88, "HD", TITLE, 12, NEON.overlay, 0.85 * a, { bold: true, glow: 0.55 })
+ tiltText(ctx, leftPlane, 12, 108, "F 5.6", MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
+ tiltText(ctx, leftPlane, 12, 128, "ISO 100", MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
 }
 
 const drawRecRight = (ctx) => {
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  const a = recFade
  if (a < 0.01) return
 
@@ -454,14 +466,14 @@ const drawRecRight = (ctx) => {
  ctx.setOperator(12); boltPath(); ctx.setSourceRGBA(rr, rg, rb, 0.4 * a); ctx.setLineWidth(5); ctx.setLineJoin(1); ctx.stroke(); ctx.setLineJoin(0); ctx.setOperator(2)
  boltPath(); ctx.setSourceRGBA(rr, rg, rb, 0.97 * a); ctx.fill()
  const camName = getUsername()
- tiltText(ctx, rightPlane, 33, 30, `CAMERA 01: ${camName}`, TITLE, 14, NEON.red, 0.95 * a, { bold: true, glow: 0.7 })
+ tiltText(ctx, rightPlane, 33, 30, `CAMERA 01: ${camName}`, TITLE, 14, NEON.overlay, 0.95 * a, { bold: true, glow: 0.7 })
  const pwr = "POWER CONNECTED"
  fillQuad(ctx, rightPlane, RIGHT_W - 124, 16, RIGHT_W - 6, 33, [255, 36, 44], a)
  tiltText(ctx, rightPlane, RIGHT_W - 13, 29, pwr, MONO, 8, [10, 0, 2], 1.0 * a, { align: "r" })
 }
 
 const drawRecBot = (ctx, tick) => {
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  const a = recFade
  if (a < 0.01) return
 
@@ -471,7 +483,7 @@ const drawRecBot = (ctx, tick) => {
  for (let i = 0; i < recNumStream.length && nx < BOT_W - 30; i++) {
  const val = recNumStream[i]
  const alpha = (0.15 + 0.12 * Math.sin(tick * 0.25 + i * 0.7)) * a
- tiltText(ctx, botPlane, nx, 28, val, MONO, 9, NEON.red, alpha)
+ tiltText(ctx, botPlane, nx, 28, val, MONO, 9, NEON.overlay, alpha)
  nx += ctx.measure ? 60 : 60
  }
 }
@@ -479,7 +491,7 @@ const drawRecBot = (ctx, tick) => {
 
 const drawRecTop = (ctx) => {
  const a = recFade; if (a < 0.01) return
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  const W = REC_TOP_W, cy = 28, label = "CYBERDECK RECORDER"
  ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(12)
  const tw = ctx.textExtents(label).width, cx = W / 2
@@ -583,7 +595,7 @@ try { recIconPix = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/rec
 
 const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
  if (a <= 0 || !recIconPix) return
- const [rr, rg, rb] = f(NEON.cyan)
+ const [rr, rg, rb] = f(NEON.dock)
  const iw = recIconPix.get_width(), ih = recIconPix.get_height()
  const scale = sz / Math.max(iw, ih)
  const dw = Math.round(iw * scale), dh = Math.round(ih * scale)
@@ -598,13 +610,17 @@ const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
  }
  ctx.setOperator(2)
  const scaled = recIconPix.scale_simple(dw, dh, GdkPixbuf.InterpType.BILINEAR)
- Gdk.cairo_set_source_pixbuf(ctx, scaled, dx, dy)
- ctx.paintWithAlpha(a)
+ if (imgTint.value) {
+     tintPixbuf(ctx, scaled, dx, dy, a)
+ } else {
+     Gdk.cairo_set_source_pixbuf(ctx, scaled, dx, dy)
+     ctx.paintWithAlpha(a)
+ }
  ctx.restore()
 }
 const recGlitchText = (ctx, x, y, full, prog, size, alpha) => {
  if (prog <= 0) return
- const [rr, rg, rb] = f(NEON.cyan)
+ const [rr, rg, rb] = f(NEON.dock)
  ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(size)
  const adv = ctx.textExtents("M").width, n = full.length, shown = prog * n
  for (let i = 0; i < n; i++) {
@@ -621,7 +637,7 @@ const recGlitchText = (ctx, x, y, full, prog, size, alpha) => {
 const drawRecBanner = (ctx, W, H, p, msg) => {
  const load = p < 0.08 ? p / 0.08 : p < 0.65 ? 1 : Math.max(0, 1 - (p - 0.65) / 0.35)
  if (load <= 0.001) return
- const [rr, rg, rb] = f(NEON.cyan), pulse = 0.5 + 0.5 * Math.sin(p * 30)
+ const [rr, rg, rb] = f(NEON.dock), pulse = 0.5 + 0.5 * Math.sin(p * 30)
 
 
  const ico = 42, bw = 360, c = 10
@@ -734,8 +750,8 @@ const drawRecBanner = (ctx, W, H, p, msg) => {
 
  ctx.restore()    }
 const drawRecTransition = (ctx, W, H, p) => {
- const [rr, rg, rb] = f(NEON.red)
- const [cr, cg, cb] = f(NEON.cyan)
+ const [rr, rg, rb] = f(NEON.overlay)
+ const [cr, cg, cb] = f(NEON.dock)
  const genv = p < 0.08 ? p / 0.08 : p < 0.32 ? 1 : Math.max(0, 1 - (p - 0.32) / 0.25)
  if (genv > 0.01) {
      ctx.setSourceRGBA(0.02, 0, 0.01, 0.12 * genv); ctx.rectangle(0, 0, W, H); ctx.fill()
@@ -778,7 +794,7 @@ const drawRecFrame = (ctx, W, H) => {
  if (!recRegionRect || recFrameFade <= 0.01) return
  const { x, y, w, h } = recRegionRect
  const a = recFrameFade
- const [rr, rg, rb] = f(NEON.red)
+ const [rr, rg, rb] = f(NEON.overlay)
  ctx.setSourceRGBA(0, 0, 0, 0.5 * a)
  ctx.rectangle(0, 0, W, y)
  ctx.rectangle(0, y + h, W, H - y - h)

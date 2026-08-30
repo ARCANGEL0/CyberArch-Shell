@@ -260,13 +260,13 @@ export const tiltImage = (
         ctx.paintWithAlpha(0.3 * glow)
         ctx.setOperator(2)
     }
-    ctx.setSourceSurface(surf, 0, 0)
-    ctx.paintWithAlpha(alpha)
-
     if (tint && tintAmt > 0.001) {
         const [tr, tg, tb] = f(tint)
         ctx.setSourceRGBA(tr, tg, tb, Math.min(1, tintAmt) * alpha)
         ctx.maskSurface(surf, 0, 0)
+    } else {
+        ctx.setSourceSurface(surf, 0, 0)
+        ctx.paintWithAlpha(alpha)
     }
     ctx.restore()
 }

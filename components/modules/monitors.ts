@@ -24,7 +24,7 @@ const cpu = get("cpu")!, ram = get("ram")!
 
 const GRAY: RGB = [200, 200, 200] as any
 const LIGHTRED: RGB = NEON.cpu
-const CYAN: RGB = NEON.cyan as RGB
+const CYAN: RGB = NEON.badge
 const RAMCOL: RGB = NEON.ram
 const BADGECOL: RGB = NEON.badge
 const STOCOL: RGB = NEON.badge
@@ -174,7 +174,7 @@ export const Monitors = () => {
         }
         {
             const y = 22, h = 18, ch = (MAIN - X0) * 0.05
-            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], darken(NEON.red, 0.62), 0.42)
+            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], NEON.darkred, 0.42)
             const end = X0 + (MAIN - X0) * clamp(d.cpu)
             const fillPts: [number, number][] = end <= MAIN - ch
                 ? [[X0, y], [end, y], [end, y + h], [X0, y + h]]

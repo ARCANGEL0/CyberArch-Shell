@@ -5,7 +5,7 @@ import GdkPixbuf from "gi://GdkPixbuf"
 import { interval } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
-import { NEON, f, onColorChange } from "./colors.ts"
+import { NEON, f, onColorChange, imgTint, tintSurface, neonBtn, launcherTint } from "./colors.ts"
 import { openAppsMenu } from "./appsmenu.ts"
 
 import { TITLE } from "./fonts.ts"
@@ -26,7 +26,7 @@ export const LauncherWindow = (mon?) => {
      const [rr, rg, rb] = f(NEON.red)
 
      const tx = 8, ty = 28
-     const col = hover ? NEON.cyan : NEON.netinfo, fl = hover ? flick : 1
+     const col = hover ? (neonBtn.value ? NEON.press : NEON.cyan) : NEON.dock, fl = hover ? flick : 1
      tiltText(ctx, prompt, tx, ty, "Apps Launcher", TITLE, 15, col, (hover ? 1 : 0.95) * fl, { bold: true, glow: (hover ? 0.32 : 0.2) * fl, bloom: (hover ? 0.6 : 0.45) * fl, shadow: 1 })
 
      const chW = 46, chH = 20, chX = 130, chY = 13
@@ -47,7 +47,16 @@ export const LauncherWindow = (mon?) => {
          ctx.translate(pc[0], pc[1]); ctx.rotate(ang); ctx.scale((2 * halfW) / pbW, (2 * halfH) / pbH)
          Gdk.cairo_set_source_pixbuf(ctx, ICON, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(1)
          ctx.rectangle(-pbW / 2, -pbH / 2, pbW, pbH); ctx.clip()
-         ctx.setOperator(5); ctx.setSourceRGBA(rr, rg, rb, 0.42); ctx.paint(); ctx.setOperator(2)
+         const ltc = imgTint.value
+         const [tr, tg, tb] = hover ? (neonBtn.value ? f(NEON.press) : f(NEON.cyan)) : (launcherTint.value ? f(launcherTint.value) : (ltc ? f(ltc) : [rr, rg, rb]))
+         ctx.setOperator(5); ctx.setSourceRGBA(tr, tg, tb, hover ? 0.62 : ((launcherTint.value || ltc) ? 0.85 : 0.42)); ctx.paint(); ctx.setOperator(2)
+         if (hover) {
+             ctx.setOperator(12)
+             Gdk.cairo_set_source_pixbuf(ctx, ICON, -pbW / 2, -pbH / 2)
+             const glowPat = ctx.getSource()
+             ctx.setSourceRGBA(tr, tg, tb, 0.45 * flick); ctx.mask(glowPat)
+             ctx.setOperator(2)
+         }
          ctx.restore()
      }
      return false

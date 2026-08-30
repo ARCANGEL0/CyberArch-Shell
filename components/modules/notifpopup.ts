@@ -8,21 +8,21 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
 import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
-import { NEON, f, onColorChange, glassAlpha } from "./colors.ts"
+import { NEON, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
 const LIFETIME = 15000
 const MAXFR = 8
 
-const RED: [number, number, number] = NEON.red
-const YEL: [number, number, number] = NEON.amber
-const CYN: [number, number, number] = NEON.dock
-const GOLDF = (): [number, number, number] => [NEON.amber[0] * 0.44, NEON.amber[1] * 0.44, NEON.amber[2] * 0.44]
-const GOLDD = (): [number, number, number] => [NEON.amber[0] * 0.29, NEON.amber[1] * 0.29, NEON.amber[2] * 0.29]
-const GREY: [number, number, number] = NEON.dim
-const GLYPH_COL = (): [number, number, number] => [NEON.red[0] * 0.55, NEON.red[1] * 0.55, NEON.red[2] * 0.55]
-const WHT: [number, number, number] = NEON.white
+const RED: [number, number, number] = NEON.notifred
+const YEL: [number, number, number] = NEON.notifyel
+const CYN: [number, number, number] = NEON.notifcyn
+const GOLDF: [number, number, number] = NEON.goldf
+const GOLDD: [number, number, number] = NEON.goldd
+const GREY: [number, number, number] = NEON.notifgrey
+const GLYPH_COL: [number, number, number] = NEON.glyphcol
+const WHT: [number, number, number] = NEON.pure
 
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const play = () => execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${SND}" 2>/dev/null || play -q "${SND}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${SND}" 2>/dev/null`]).catch(() => { })
@@ -50,7 +50,7 @@ let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
 let area: any = null, loop: any = null, win: any = null
 
 const projPath = (ctx: any, pts: [number, number][]) => { ctx.newPath(); pts.forEach(([u, v], i) => { const [x, y] = plane.project(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }); ctx.closePath() }
-const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0, tint: [number, number, number] | null = null) => {
+const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0) => {
     if (!surf || a <= 0.01) return
     const tt = Date.now()
     const jx = glitch > 0.02 ? (Math.sin(tt / 21) * 3 + (Math.sin(tt / 6.5) > 0.82 ? 6 : 0)) * glitch : 0
@@ -58,27 +58,22 @@ const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a:
     const pw = surf.getWidth(), ph = surf.getHeight(), dh = targetW * ph / pw
     const [sx, sy] = plane.project(u + jx, v + jy + dh / 2), s = plane.scaleAt(u, v + dh / 2), ang = plane.angleAt(u, v + dh / 2)
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s); ctx.translate(0, -dh / 2); ctx.scale(targetW / pw, dh / ph)
-    if (tint) {
-        try {
-            ctx.setSourceSurface(surf, 0, 0)
-            const pat = ctx.getSource()
-            ctx.setOperator(12)
-            ctx.setSourceRGBA(tint[0] / 255, tint[1] / 255, tint[2] / 255, 0.4 * a)
-            ctx.mask(pat)
-            ctx.setOperator(2)
-            ctx.setSourceRGBA(tint[0] / 255, tint[1] / 255, tint[2] / 255, 0.55 * a)
-            ctx.mask(pat)
-        } catch {
-            if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
-            ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
-        }
+    if (imgTint.value) {
+        tintSurface(ctx, surf, pw, ph, a)
     } else {
         if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
         ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
     }
     if (glitch > 0.1 && Math.sin(tt / 5) > 0.7) {
         const by = ph * (0.15 + 0.6 * (Math.sin(tt / 13) * 0.5 + 0.5)), bh = ph * 0.13
-        ctx.save(); ctx.rectangle(0, by, pw, bh); ctx.clip(); ctx.setSourceSurface(surf, pw * 0.07 * glitch, 0); ctx.paintWithAlpha(a); ctx.restore()
+        ctx.save(); ctx.rectangle(0, by, pw, bh); ctx.clip()
+        if (imgTint.value) {
+            ctx.translate(pw * 0.07 * glitch, 0)
+            tintSurface(ctx, surf, pw, ph, a)
+        } else {
+            ctx.setSourceSurface(surf, pw * 0.07 * glitch, 0); ctx.paintWithAlpha(a)
+        }
+        ctx.restore()
     }
     ctx.restore()
 }
@@ -96,6 +91,7 @@ const glyphBlock = (ctx: any, u: number, v: number, a: number) => {
     const [sx, sy] = plane.project(u, v), s = plane.scaleAt(u, v), ang = plane.angleAt(u, v)
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s)
     const cols = 7, rows = 4, fs = 3, gapx = 3, gapy = 6, off = 1
+    const [gr, gg, gb] = GLYPH_COL.map((c) => c / 255)
     ctx.selectFontFace(MONO, 0, 0)
     ctx.setFontSize(fs)
     const chars = () => {
@@ -105,28 +101,28 @@ const glyphBlock = (ctx: any, u: number, v: number, a: number) => {
                 ctx.showText(GLY[(row * cols + col * 3 + row * 7) % GLY.length])
             }
     }
-    const [nr, ng, nb] = f(NEON.red)
-    ctx.setOperator(12)
+        ctx.setOperator(12)
     for (const [dx, dy, da] of [[-3, 2, 0.04], [2, -3, 0.04], [0, 4, 0.05], [4, 0, 0.04]])
-        { ctx.setSourceRGBA(nr * 0.5, ng * 0.5, nb * 0.5, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(gr * 0.55, gg * 0.55, gb * 0.55, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
     for (const [dx, dy, da] of [[-1.5, 1.5, 0.08], [-2, 0, 0.1], [2, 0, 0.1], [0, -2, 0.1], [0, 2, 0.1]])
-        { ctx.setSourceRGBA(nr * 0.75, ng * 0.75, nb * 0.75, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(gr * 0.8, gg * 0.8, gb * 0.8, da * a); ctx.translate(dx, dy); for (let t = 0; t < 2; t++) { ctx.translate(0.2, 0.2); chars(); ctx.translate(-0.2, -0.2) } chars(); ctx.translate(-dx, -dy) }
     for (const [dx, dy, da] of [[-1, 0, 0.12], [1, 0, 0.12], [0, -1, 0.12]])
-        { ctx.setSourceRGBA(nr * 0.9, ng * 0.9, nb * 0.9, da * a); ctx.translate(dx, dy); chars(); ctx.translate(-dx, -dy) }
+        { ctx.setSourceRGBA(gr * 0.95, gg * 0.95, gb * 0.95, da * a); ctx.translate(dx, dy); chars(); ctx.translate(-dx, -dy) }
     ctx.setOperator(2)
-    ctx.setSourceRGBA(nr * 0.5, ng * 0.5, nb * 0.5, 0.8 * a)
+    ctx.setSourceRGBA(gr * 0.55, gg * 0.55, gb * 0.55, 0.8 * a)
     for (let t = 0; t < 2; t++) { ctx.translate(0.3, 0.3); chars(); ctx.translate(-0.3, -0.3) }
     chars()
     ctx.restore()
 }
 const keycap = (ctx: any, u: number, v: number, label: string, a: number, dx = 0) => {
+    const kc = neonBtn.value ? NEON.press : CYN
     const s = 24, kp: [number, number][] = [[u, v], [u + s, v], [u + s, v + s], [u, v + s]]
     projPath(ctx, kp); ctx.setSourceRGBA(0.02, 0.06, 0.07, 0.55 * a); ctx.fill()
     ctx.setOperator(12)
-    projPath(ctx, kp); ctx.setSourceRGBA(CYN[0] / 255, CYN[1] / 255, CYN[2] / 255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke()
+    projPath(ctx, kp); ctx.setSourceRGBA(kc[0] / 255, kc[1] / 255, kc[2] / 255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke()
     ctx.setOperator(2)
-    projPath(ctx, kp); ctx.setSourceRGBA(CYN[0] / 255, CYN[1] / 255, CYN[2] / 255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
-    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, CYN, a, { bold: true, align: "c", glow: 0.6 })
+    projPath(ctx, kp); ctx.setSourceRGBA(kc[0] / 255, kc[1] / 255, kc[2] / 255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
+    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, kc, a, { bold: true, align: "c", glow: 0.6 })
 }
 const drawFrame = (ctx: any, vTop: number, prog: number, body: string, app: string, top: boolean, a: number) => {
     if (a <= 0.01) return
@@ -134,11 +130,12 @@ const drawFrame = (ctx: any, vTop: number, prog: number, body: string, app: stri
     const u0 = CX + 5, v0 = vTop, v1 = vTop + FH, ch = 2, cw = 5, bc = 3
     const u1 = u0 + Math.max(122, FW * fe)
     const flk = prog > 0.02 && prog < 0.92 ? (Math.sin(Date.now() / 1000 * 52) > -0.35 ? 1 : 0.45) : 1
-    const fill = top ? GOLDF() : GOLDD(), bA = (top ? 0.95 : 0.8) * flk
+    const fill = top ? GOLDF : GOLDD, bA = (top ? 0.95 : 0.8) * flk
     const fpts: [number, number][] = [[u0, v0 - ch], [u0 + cw, v0], [u1, v0], [u1, v1], [u0 + bc, v1], [u0, v1 - bc]]
-    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, 0.85 * Af * flk * glassAlpha.value); ctx.fill()
-    ctx.setOperator(12); projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, 0.18 * Af); ctx.setLineWidth(2); ctx.stroke(); ctx.setOperator(2)
-    projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, bA * Af); ctx.setLineWidth(1); ctx.stroke()
+    const fillA = glassMode.value ? 0.5 : 0.85, glowW = glassMode.value ? 3 : 2, glowA = glassMode.value ? 0.25 : 0.18, mainW = glassMode.value ? 1.4 : 1
+    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, fillA * Af * flk * glassAlpha.value); ctx.fill()
+    ctx.setOperator(12); projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, glowA * Af); ctx.setLineWidth(glowW); ctx.stroke(); ctx.setOperator(2)
+    projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, bA * Af); ctx.setLineWidth(mainW); ctx.stroke()
     if (prog > 0.03 && prog < 0.97) { strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], WHT, 0.7, 1.5); strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], YEL, 0.5, 0.7) }
     const txt = clamp((prog - 0.55) / 0.3) * a
     if (txt > 0.01) {
@@ -156,7 +153,7 @@ const draw = (ctx: any) => {
 
     const pA = seg(intro, 0, 0.30), aA = beep(pA)
     glyphBlock(ctx, -15, 2, aA * 0.9)
-    glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL(), aA, pA, { bold: true, glow: 0.4 })
+    glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL, aA, pA, { bold: true, glow: 0.4 })
     drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA)
 
     const pB = seg(intro, 0.22, 0.48)
@@ -177,11 +174,11 @@ const draw = (ctx: any) => {
     const lowY = BASEV + (msgs.length ? msgs[msgs.length - 1].y : 0) + FH + 12
     const rA = seg(intro, 0.8, 1) * stackA
     if (rA > 0.01) {
-        const uR = CX + FW
+        const uR = CX + FW, actionCol = neonBtn.value ? NEON.press : RED
         keycap(ctx, uR - 24, lowY, "E", rA, -1)
-        tiltText(ctx, plane, uR - 34, lowY + 15, "READ MESSAGE", TITLE, 12, RED, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
+        tiltText(ctx, plane, uR - 34, lowY + 15, "READ MESSAGE", TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
         keycap(ctx, uR - 165, lowY, "X", rA)
-        tiltText(ctx, plane, uR - 175, lowY + 15, "DISMISS", TITLE, 12, RED, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
+        tiltText(ctx, plane, uR - 175, lowY + 15, "DISMISS", TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
     }
 
     ctx.restore()

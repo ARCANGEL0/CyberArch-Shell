@@ -6,7 +6,7 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
-import { NEON, onColorChange } from "./colors.ts"
+import { NEON, onColorChange, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -17,10 +17,10 @@ import { dockNotifDecr } from "./dock.ts"
 import { startTray, onTrayChange, getTrayItems, trayActivate, trayMenu, trayMenuClick, TrayItem, MenuNode } from "./tray.ts"
 const XICON = "\uf00d", ENVELOPE = "\uf0e0"
 const YELLOW: [number, number, number] = NEON.amber
-const RED: [number, number, number] = NEON.red
+const RED: [number, number, number] = NEON.notifred
 const WHITE: [number, number, number] = NEON.white
-const GREY: [number, number, number] = NEON.dim
-const dimRed = (): [number, number, number] => [NEON.red[0] * 0.3, NEON.red[1] * 0.3, NEON.red[2] * 0.3]
+const GREY: [number, number, number] = NEON.msggrey
+const DIM_RED: [number, number, number] = NEON.dimred
 const GREY_DARK: [number, number, number] = [30, 32, 36]
 const DIM_BG: [number, number, number] = [10, 12, 20]
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
@@ -68,9 +68,9 @@ const keycap = (ctx: any, u: number, v: number, label: string, a: number, dx = 0
         return [rx, ry]
     })
     projPath(ctx, kp); ctx.setSourceRGBA(0.02, 0.06, 0.07, 0.55 * a); ctx.fill()
-    ctx.setOperator(12); projPath(ctx, kp); ctx.setSourceRGBA(NEON.cyan[0]/255, NEON.cyan[1]/255, NEON.cyan[2]/255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
-    projPath(ctx, kp); ctx.setSourceRGBA(NEON.cyan[0]/255, NEON.cyan[1]/255, NEON.cyan[2]/255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
-    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, NEON.cyan, a, { bold: true, align: "c", glow: 0.6, extraRotate: 0.009 })
+    ctx.setOperator(12); projPath(ctx, kp); ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+    projPath(ctx, kp); ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
+    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, NEON.dock, a, { bold: true, align: "c", glow: 0.6, extraRotate: 0.009 })
 }
 
 const drawTrayIcon = (ctx: any, pixbuf: any, u: number, vCenter: number, size: number, a: number) => {
@@ -82,8 +82,13 @@ const drawTrayIcon = (ctx: any, pixbuf: any, u: number, vCenter: number, size: n
         const s = plane.scaleAt(u, vCenter), ang = plane.angleAt(u, vCenter)
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s)
         ctx.translate(-dw / 2, -dh / 2); ctx.scale(dw / pw, dh / ph)
-        Gdk.cairo_set_source_pixbuf(ctx, pixbuf, 0, 0)
-        ctx.paintWithAlpha(a); ctx.restore()
+        if (imgTint.value) {
+            tintPixbuf(ctx, pixbuf, 0, 0, a)
+        } else {
+            Gdk.cairo_set_source_pixbuf(ctx, pixbuf, 0, 0)
+            ctx.paintWithAlpha(a)
+        }
+        ctx.restore()
     } catch (e) { print("[tray] drawIcon:", e) }
 }
 
@@ -390,9 +395,14 @@ const draw = (ctx: any) => {
             ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s)
             ctx.translate(0, -iconDrawH / 2)
             ctx.scale(iconDrawW / pw, iconDrawH / ph)
-            ctx.setSourceSurface(phoneIcon, 0, 0); ctx.paint(); ctx.restore()
+            if (imgTint.value) {
+                tintSurface(ctx, phoneIcon, pw, ph, iconA)
+            } else {
+                ctx.setSourceSurface(phoneIcon, 0, 0); ctx.paint()
+            }
+            ctx.restore()
         } catch (e) {
-            tiltText(ctx, plane, 42, 22, "\uf095", ICONF, 20, NEON.cyan, clamp(animProg * 6) * pa, { bold: true })
+            tiltText(ctx, plane, 42, 22, "\uf095", ICONF, 20, NEON.dock, clamp(animProg * 6) * pa, { bold: true })
         }
     }
 
@@ -400,7 +410,7 @@ const draw = (ctx: any) => {
     if (animProg > 0) {
         const GL = ICONW + 10, GR = ICONW + W - 4, GT = HEADER - 19, GB = FOOTER_Y + 2
         fillQuad(ctx, plane, GL, GT, GR, GB, [22, 30, 45], 0.25 * pa)
-        fillQuad(ctx, plane, GL, GT, GR, GB, NEON.cyan, 0.02 * pa)
+        fillQuad(ctx, plane, GL, GT, GR, GB, NEON.dock, 0.02 * pa)
         strokePath(ctx, plane, [[GL, GT], [GL, GB]], [60, 100, 130], 0.1 * pa, 0.8)
         strokePath(ctx, plane, [[GL, GB], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
         strokePath(ctx, plane, [[GR, GT], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
@@ -413,7 +423,7 @@ const draw = (ctx: any) => {
         const msgHov = tabHover === "msg", appsHov = tabHover === "apps"
         const BCYAN: [number, number, number] = [160, 250, 255]
 
-        const tcol = (active: boolean, hov: boolean): [number, number, number] => (active || hov) ? BCYAN : NEON.red
+        const tcol = (active: boolean, hov: boolean): [number, number, number] => (active || hov) ? BCYAN : NEON.overlay
         const mC = tcol(msgActive, msgHov), aC = tcol(appsActive, appsHov)
 
 
@@ -435,12 +445,12 @@ const draw = (ctx: any) => {
             const titleBarEnd = msgBarEnd + 14 + Math.max(40, selectedApp.length * 7)
             fillQuad(ctx, plane, ICONW + 12, barY, msgBarEnd, barY + 2, BCYAN, 0.75 * labelA)
             fillQuad(ctx, plane, msgBarEnd + 14, barY, titleBarEnd, barY + 2, BCYAN, 0.75 * labelA)
-            strokePath(ctx, plane, [[titleBarEnd + 4, barY + 0.5], [ICONW + W - 8, barY + 0.5]], NEON.red, 0.4 * labelA, 1.2)
+            strokePath(ctx, plane, [[titleBarEnd + 4, barY + 0.5], [ICONW + W - 8, barY + 0.5]], NEON.overlay, 0.4 * labelA, 1.2)
         } else {
 
             fillQuad(ctx, plane, ICONW + 16, barY, ICONW + 128, barY + 2, mC, 0.75 * labelA)
             fillQuad(ctx, plane, ICONW + 138, barY, ICONW + 240, barY + 2, aC, 0.75 * labelA)
-            strokePath(ctx, plane, [[ICONW + 250, barY + 0.5], [ICONW + W - 8, barY + 0.5]], NEON.red, 0.4 * labelA, 1.2)
+            strokePath(ctx, plane, [[ICONW + 250, barY + 0.5], [ICONW + W - 8, barY + 0.5]], NEON.overlay, 0.4 * labelA, 1.2)
         }
     }
 
@@ -471,11 +481,11 @@ const draw = (ctx: any) => {
                 const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - bv, y1], [x0 + 10, y1], [x0 + 5, y1 + 3], [x0, y1 + 3], [x0, y0 + bv]]
                 const rp = bub.map(([u, v]) => plane.project(u, v))
                 ctx.newPath(); rp.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-                ctx.setSourceRGBA(NEON.cyan[0] / 255, NEON.cyan[1] / 255, NEON.cyan[2] / 255, 0.5 * ma); ctx.setLineWidth(1.5); ctx.stroke()
+                ctx.setSourceRGBA(NEON.dock[0] / 255, NEON.dock[1] / 255, NEON.dock[2] / 255, 0.5 * ma); ctx.setLineWidth(1.5); ctx.stroke()
             }
             strokePath(ctx, plane, [[ICONW + 24, my + ROWH - 1], [ICONW + W - 20, my + ROWH - 1]], GREY, 0.2 * ma, 0.5)
             drawTrayIcon(ctx, t.pixbuf, ICONW + 42, my + ROWH / 2 - 2, 22, ma)
-            const nameCol: [number, number, number] = hovered ? NEON.cyan : WHITE
+            const nameCol: [number, number, number] = hovered ? NEON.dock : WHITE
             tiltText(ctx, plane, ICONW + 66, my + 22, (t.title || t.id || "?").slice(0, 30), TITLE, 14, nameCol, ma, { bold: true })
             tiltText(ctx, plane, ICONW + 66, my + 39, t.id.slice(0, 36), MONO, 9, GREY, 0.5 * ma)
         }
@@ -483,8 +493,8 @@ const draw = (ctx: any) => {
             const sbX = ICONW + W - 6, sbTop = HEADER + 4, sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / gContentH))
             const thumbTop = sbTop + (scrollOffset / (gContentH - visibleH)) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
-            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
+            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.overlay, 0.9 * pa)
         }
         if (tItems.length === 0) tiltText(ctx, plane, ICONW + 22, HEADER + 26, "NO TRAY APPS", MONO, 11, GREY, 0.5 * pa)
     } else if (view === "detail" && selectedApp) {
@@ -521,7 +531,7 @@ const draw = (ctx: any) => {
             const my = HEADER + yPos[idx] - scrollOffset
             if (my + fh < HEADER || my > FOOTER_Y) continue
             const hovered = idx === hoverRow; const pulse = idx === rowPulseIdx ? rowPulse : 0
-            const FC: [number, number, number] = NEON.cyan
+            const FC: [number, number, number] = NEON.dock
 
             const x0 = ICONW + 24
             const x1 = x0 + fw
@@ -531,13 +541,13 @@ const draw = (ctx: any) => {
             const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - bv, y1], [x0 + 10, y1], [x0 + 5, y1 + 3], [x0, y1 + 3], [x0, y0 + bv]]
             const bp = bub.map(([u, v]) => plane.project(u, v))
             ctx.newPath(); bp.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-            ctx.setOperator(12); ctx.setSourceRGBA(NEON.cyan[0]/255, NEON.cyan[1]/255, NEON.cyan[2]/255, 0.2 * ma); ctx.fill(); ctx.setOperator(2)
+            ctx.setOperator(12); ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.2 * ma); ctx.fill(); ctx.setOperator(2)
             if (hovered) {
                 ctx.newPath(); bp.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-                ctx.setSourceRGBA(NEON.cyan[0]/255, NEON.cyan[1]/255, NEON.cyan[2]/255, 0.5 * ma); ctx.setLineWidth(2); ctx.stroke()
+                ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.5 * ma); ctx.setLineWidth(2); ctx.stroke()
             }
             ctx.newPath(); bp.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-            ctx.setSourceRGBA(NEON.cyan[0]/255, NEON.cyan[1]/255, NEON.cyan[2]/255, ma * (hovered ? 1 : 0.7)); ctx.setLineWidth(hovered ? 1.5 : 0.8); ctx.stroke()
+            ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, ma * (hovered ? 1 : 0.7)); ctx.setLineWidth(hovered ? 1.5 : 0.8); ctx.stroke()
 
 
             const ta = Math.min(1, ma * (hovered ? 1.1 : 1))
@@ -553,12 +563,12 @@ const draw = (ctx: any) => {
             const sbX = ICONW + W - 6; const sbTop = HEADER + 4; const sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / totalContentH))
             const maxOff2 = totalContentH - visibleH; const thumbTop = sbTop + (scrollOffset / maxOff2) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
             ctx.setOperator(12)
-            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
-            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.5 * pa, 3)
+            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.overlay, 0.9 * pa)
+            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.overlay, 0.5 * pa, 3)
             ctx.setOperator(2)
-            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.3 * pa, 5)
+            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.overlay, 0.3 * pa, 5)
         }
 
         if (shown.length === 0) {
@@ -599,12 +609,12 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
             const sbX = ICONW + W - 6; const sbTop = HEADER + 4; const sbH = visibleH - 8
             const thumbH = Math.max(8, sbH * (visibleH / gContentH))
             const gMaxOff2 = gContentH - visibleH; const thumbTop = sbTop + (scrollOffset / gMaxOff2) * (sbH - thumbH)
-            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, dimRed(), 0.3 * pa)
+            fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
             ctx.setOperator(12)
-            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.red, 0.9 * pa)
-            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.5 * pa, 3)
+            fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.overlay, 0.9 * pa)
+            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.overlay, 0.5 * pa, 3)
             ctx.setOperator(2)
-            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.red, 0.3 * pa, 5)
+            strokePath(ctx, plane, [[sbX + 0.5, thumbTop], [sbX + 0.5, thumbTop + thumbH]], NEON.overlay, 0.3 * pa, 5)
         }
 
         if (gs.length === 0) {
@@ -616,10 +626,10 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
 
     const fA = clamp((animProg - 0.30) * 5) * pa
     if (fA > 0.01) {
-        strokePath(ctx, plane, [[ICONW + 12, FOOTER_Y], [ICONW + W - 2, FOOTER_Y]], NEON.red, 0.6 * fA, 1.5)
+        strokePath(ctx, plane, [[ICONW + 12, FOOTER_Y], [ICONW + W - 2, FOOTER_Y]], NEON.overlay, 0.6 * fA, 1.5)
 
         if (view !== "apps" && getGroups().length > 0) {
-            const dc: [number, number, number] = blDismissHover ? NEON.cyan : NEON.red
+            const dc: [number, number, number] = blDismissHover ? NEON.dock : NEON.overlay
             const dg = blDismissHover ? 0.9 : 0.5
             tiltText(ctx, plane, ICONW + 14, FOOTER_Y + 22, XICON, ICONF, 12, dc, fA * 0.9, { bold: true, glow: dg })
             tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, view === "detail" ? "DISMISS ALL" : "DISMISS", ROBOTO_BOLD, 10, dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })
@@ -660,7 +670,7 @@ const drawTrayMenu = (ctx: any) => {
     menuState.mx = ux; menuState.my = uy; menuState.mh = mh; menuState.mw = mw; menuState.mscroll = msc; menuState.mmax = mmax
 
     projRect(ctx, ux, uy, mw, mh); ctx.setSourceRGBA(0.03, 0.05, 0.07, 0.98); ctx.fill()
-    projRect(ctx, ux, uy, mw, mh); ctx.setSourceRGBA(NEON.cyan[0] / 255, NEON.cyan[1] / 255, NEON.cyan[2] / 255, 0.9); ctx.setLineWidth(1); ctx.stroke()
+    projRect(ctx, ux, uy, mw, mh); ctx.setSourceRGBA(NEON.dock[0] / 255, NEON.dock[1] / 255, NEON.dock[2] / 255, 0.9); ctx.setLineWidth(1); ctx.stroke()
 
     ctx.save(); projRect(ctx, ux, uy, mw, mh); ctx.clip()
     let yy = uy + 4 - msc
@@ -668,9 +678,9 @@ const drawTrayMenu = (ctx: any) => {
         const n = vis[i]
         const h = n.type === "separator" ? MENU_SEP_H : MENU_ITEM_H
         if (yy + h < uy || yy > uy + mh) { yy += h; continue }
-        if (n.type === "separator") { strokePath(ctx, plane, [[ux + 8, yy + 4], [ux + mw - 8, yy + 4]], NEON.cyan, 0.25, 0.8); yy += h; continue }
+        if (n.type === "separator") { strokePath(ctx, plane, [[ux + 8, yy + 4], [ux + mw - 8, yy + 4]], NEON.dock, 0.25, 0.8); yy += h; continue }
         const hov = i === menuState.hover
-        if (hov) { projRect(ctx, ux + 2, yy, mw - 4, MENU_ITEM_H); ctx.setSourceRGBA(NEON.cyan[0] / 255, NEON.cyan[1] / 255, NEON.cyan[2] / 255, 0.18); ctx.fill() }
+        if (hov) { projRect(ctx, ux + 2, yy, mw - 4, MENU_ITEM_H); ctx.setSourceRGBA(NEON.dock[0] / 255, NEON.dock[1] / 255, NEON.dock[2] / 255, 0.18); ctx.fill() }
         const col: [number, number, number] = n.enabled ? (hov ? [255, 255, 255] : [210, 230, 245]) : [100, 110, 120]
         tiltText(ctx, plane, ux + 12, yy + 16, n.label || "•", ROBOTO_BOLD, 12.5, col, 1, {})
         if (n.children && n.children.length) tiltText(ctx, plane, ux + mw - 15, yy + 16, "›", ROBOTO_BOLD, 12.5, col, 1, {})
@@ -680,8 +690,8 @@ const drawTrayMenu = (ctx: any) => {
 
     if (mmax > 0) {
         const barH = mh * (mh / fullH), barY = uy + (mh - barH) * (msc / mmax)
-        fillQuad(ctx, plane, ux + mw - 4, uy + 2, ux + mw - 2, uy + mh - 2, dimRed(), 0.4)
-        fillQuad(ctx, plane, ux + mw - 4, barY, ux + mw - 2, barY + barH, NEON.cyan, 0.9)
+        fillQuad(ctx, plane, ux + mw - 4, uy + 2, ux + mw - 2, uy + mh - 2, DIM_RED, 0.4)
+        fillQuad(ctx, plane, ux + mw - 4, barY, ux + mw - 2, barY + barH, NEON.dock, 0.9)
     }
 }
 
