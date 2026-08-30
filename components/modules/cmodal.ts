@@ -22,6 +22,8 @@ const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
 const YEL = [1, 0.84, 0.12]
 const GRN = [0.42, 1, 0.6]
+// hover + drag + active tab highlight, follows the theme
+const HL: [number, number, number] = USER.hudcyan
 const HUDRED: [number, number, number] = USER.overlay
 let HUDC: any = null
 
@@ -52,7 +54,10 @@ const drawGraph = (ctx, x, y, w, h, data, maxV, col) => {
 
 export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
     value = Math.max(0, Math.min(1, value))
-    const [sr, sg, sb] = HUDC || CYAN, hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
+    const key = `sld|${x}|${ty}`
+    // dragKey holds thru the whole drag, even off the track
+    const act = push.dragKey === key || push.hoverKey === key
+    const [sr, sg, sb] = act ? HL : (HUDC || CYAN), hk = HUDC ? [1, 0.62, 0.58] : [0.85, 0.98, 1]
     ctx.setSourceRGBA(sr, sg, sb, 0.14); ctx.rectangle(x, ty - 2, trackW, 4); ctx.fill()
     ctx.setOperator(12); ctx.setSourceRGBA(sr, sg, sb, 0.32); ctx.rectangle(x, ty - 3, trackW * value, 6); ctx.fill(); ctx.setOperator(2)
     ctx.setSourceRGBA(sr, sg, sb, 0.95); ctx.rectangle(x, ty - 2, trackW * value, 4); ctx.fill()
@@ -60,13 +65,13 @@ export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
     ctx.setOperator(12); ctx.setSourceRGBA(sr, sg, sb, 0.45); ctx.rectangle(hx - sw, ty - 4, sw, 8); ctx.fill(); ctx.setOperator(2)
     ctx.setSourceRGBA(hk[0], hk[1], hk[2], 1); ctx.rectangle(hx - sw, ty - 3, sw, 6); ctx.fill()
     ctx.setSourceRGBA(sr, sg, sb, 0.85); ctx.rectangle(hx - 1, ty - 5, 1.5, 10); ctx.fill()
-    push({ kind: "sld", bx0: x - 8, by0: ty - 13, bx1: x + trackW + 8, by1: ty + 13, u0: x, v0: ty, u1: x + trackW, v1: ty, on: onChange })
+    push({ kind: "sld", hoverable: true, key, bx0: x - 8, by0: ty - 13, bx1: x + trackW + 8, by1: ty + 13, u0: x, v0: ty, u1: x + trackW, v1: ty, on: onChange })
 }
 export const btnPath = (ctx, bx, by, bw, bh) => { const c = 6; ctx.newPath(); ctx.moveTo(bx + c, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh - c); ctx.lineTo(bx + bw - c, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + c); ctx.closePath() }
-export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "") => {
-    const c = neonBtn.value ? USER.press : col
+export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "", fsMax = 11) => {
     const key = `${bx}|${by}`
     const hovered = push.hoverKey === key
+    const c = hovered ? HL : (neonBtn.value ? USER.press : col)
     const fillA = active ? (hovered ? 0.62 : 0.55) : (hovered ? 0.5 : 0.34)
     const strokeA = active ? (hovered ? 1 : 0.97) : (hovered ? 1 : 0.78)
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0] * 0.18, c[1] * 0.18, c[2] * 0.2, fillA); ctx.fill()
@@ -77,7 +82,7 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
     ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 1 : 0.95)
-    let fs = 11
+    let fs = fsMax
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs)
     const maxW = bw - 10
     let tw = ctx.textExtents(label).width
@@ -144,10 +149,13 @@ export const createModal = (spec) => {
     let surf: any = null, sctx: any = null, win: any = null, area: any = null
     let visible = false, intro = 0, introTarget = 0, seed = 0
     let animT: any = null, pollT: any = null, lastFrame = 0
-    let hitRegions: any[] = [], drag: any = null, hoverKey: any = null
+    let hitRegions: any[] = [], drag: any = null, hoverKey: any = null, pressKey: any = null, dragKey: any = null, lastXY: any = null
     const ctrl: any = { name }
 
     const push: any = (reg) => { reg.quad = projQuad(plane, reg.bx0, reg.by0, reg.bx1, reg.by1); hitRegions.push(reg) }
+    push.hoverKey = null
+    push.pressKey = null
+    push.dragKey = null
     const renderFlat = (ctx) => {
         const X = 12, Y = 12, w = W - 24, h = H - 24
         setTxtFX(spec.hud)
@@ -157,7 +165,7 @@ export const createModal = (spec) => {
             txt(ctx, X + 24, Y + 27, tabTitle, TITLE, 15, accent, 0.98, 1, 0.45)
             ctx.setSourceRGBA(col[0], col[1], col[2], 0.32); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(X + 14, Y + HEADER); ctx.lineTo(X + w - 14, Y + HEADER); ctx.stroke()
         }
-        hitRegions = []; push.hoverKey = hoverKey
+        hitRegions = []; push.hoverKey = hoverKey; push.pressKey = pressKey; push.dragKey = dragKey
         HUDC = spec.hud ? HUDRED : null
         const bX = spec.hud ? X + STRIPW : X, bW = spec.hud ? w - STRIPW : w
         spec.draw(ctx, { push, X: bX, Y, w: bW, h, col, accent, refresh: () => ctrl.requestDraw() })
@@ -210,6 +218,7 @@ export const createModal = (spec) => {
     ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
+    ctrl.hitRegions = () => hitRegions
 
     area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
@@ -226,9 +235,9 @@ export const createModal = (spec) => {
         for (const r of hitRegions) {
             if (pip(x, y, r.quad)) {
                 hit = true
-                if (r.kind === "sld") { drag = r; r.on(segParam(plane, r.u0, r.v0, r.u1, r.v1, x, y)); area.queue_draw() }
+                if (r.kind === "sld") { drag = r; dragKey = r.key; r.on(segParam(plane, r.u0, r.v0, r.u1, r.v1, x, y)); area.queue_draw() }
                 else if (b === 3 && r.onRight) r.onRight()
-                else if (r.on) r.on()
+                else if (r.on) { if (r.key) { pressKey = r.key; area.queue_draw() }; r.on() }
                 break
             }
         }
@@ -237,20 +246,21 @@ export const createModal = (spec) => {
     evt.connect("motion-notify-event", (_w, e) => {
         if (!visible) return false
         const [x, y] = xy(e)
+        lastXY = [x, y]
         if (drag) { drag.on(segParam(plane, drag.u0, drag.v0, drag.u1, drag.v1, x, y)); area.queue_draw(); return false }
         let nk: any = null
         for (const r of hitRegions) { if (r.hoverable && pip(x, y, r.quad)) { nk = r.key; break } }
         if (nk !== hoverKey) { hoverKey = nk; area.queue_draw() }
         return false
     })
-    evt.connect("leave-notify-event", () => { if (hoverKey !== null) { hoverKey = null; area.queue_draw() } return false })
-    evt.connect("button-release-event", () => { drag = null; return false })
+    evt.connect("leave-notify-event", () => { if (hoverKey !== null) { hoverKey = null; area.queue_draw() } if (pressKey !== null) { pressKey = null; area.queue_draw() } return false })
+    evt.connect("button-release-event", () => { drag = null; if (dragKey !== null) { dragKey = null; area.queue_draw() } if (pressKey !== null) { pressKey = null; area.queue_draw() } return false })
     if (spec.onScroll) evt.connect("scroll-event", (_w, e) => {
         if (!visible) return true
         let dy = 0
         try { const sd = e.get_scroll_deltas?.(); if (sd && sd[0]) dy = sd[2] } catch {}
         if (dy === 0) { let d = 1; try { const r = e.get_scroll_direction?.(); d = r ? r[1] : e.direction } catch {} dy = (d === Gdk.ScrollDirection.UP || d === 0) ? -1 : 1 }
-        spec.onScroll(dy > 0 ? 1 : -1); area.queue_draw(); return true
+        spec.onScroll(dy > 0 ? 1 : -1, lastXY); area.queue_draw(); return true
     })
     const onKeyPress = (_w, e) => { let k = 0; try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch {} if (k === Gdk.KEY_Escape) ctrl.close(); else spec.onKey?.(k); return true }
 
@@ -271,16 +281,170 @@ export const sectionHeader = (ctx, g, x, y, label, w) => {
     ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(x + lw + 10, y - 3, (x + w) - (x + lw + 10), 1.2); ctx.fill()
 }
 
-const APPS_CMD = `pactl list sink-inputs 2>/dev/null | awk '/^Sink Input #/{if(i!="")print i"|"n"|"v;i=substr($3,2);n="App";v=""}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}END{if(i!="")print i"|"n"|"v}'`
+const APPS_CMD = `pactl list sink-inputs 2>/dev/null | awk '/^Sink Input #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
+const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Output #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
 
 const APPVOL_STATE = `$HOME/.cache/cyberpunk/appvol.conf`
+const APPVOL_STATE_SRC = `$HOME/.cache/cyberpunk/appvol_src.conf`
 const shq = (s) => String(s).replace(/'/g, `'\\''`)
 const setAppVol = (name, id, t) => {
     const pct = Math.round(t * 100), nm = shq(name)
     sh(`f="${APPVOL_STATE}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-sink-input-volume ${id} ${pct}%`)
 }
+
+// NEW! audio devices + the apps using em. comes from pactl list sinks /
+// pactl list sources, wpctl only hands over the volume, no desc or state
+const SINKS_CMD = `pactl list sinks 2>/dev/null | awk 'BEGIN{id="";desc="";vol="";mute="";sus="no"}
+/^Sink #/{if(id!="")print id"|"desc"|"vol"|"mute"|"sus; id=""; desc=""; vol=""; mute=""; sus="no"}
+/^[	 ]+Name: /{name=$0; sub(/^[	 ]+Name: /,"",name); if(id=="")id=name}
+/^[ 	]+Description: /{desc=$0; sub(/^[ 	]+Description: /,"",desc)}
+/^[ 	]+Volume: /{for(k=2;k<=NF;k++)if($k ~ /%$/){vol=$k; sub(/%/,"",vol); break}}
+/^[ 	]+Mute: /{mute=$2}
+/^[ 	]+State: /{if($2=="SUSPENDED")sus="yes"}
+END{if(id!="")print id"|"desc"|"vol"|"mute"|"sus}'`
+// same awk, sources instead of sinks
+const SRCS_CMD = SINKS_CMD
+  .replace("pactl list sinks", "pactl list sources")
+  .replace("Sink #", "Source #");
+
+// per device vol, not the master one
+const SINK_VOL_SET = (id, pct) => `pactl set-sink-volume ${id} ${pct}%`
+const SRC_VOL_SET = (id, pct) => `pactl set-source-volume ${id} ${pct}%`
+const setDevVol = (kind, id, t) => {
+    const pct = Math.round(Math.max(0, Math.min(1.5, t)) * 100)
+    sh(kind === "sink" ? SINK_VOL_SET(id, pct) : SRC_VOL_SET(id, pct))
+}
+const setAppVolSrc = (name, id, t) => {
+    const pct = Math.round(t * 100), nm = shq(name)
+    sh(`f="${APPVOL_STATE_SRC}"; mkdir -p "$(dirname "$f")"; touch "$f"; awk -F= -v n='${nm}' -v v='${pct}' 'BEGIN{s=0}$1==n{print n"="v;s=1;next}{print}END{if(!s)print n"="v}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; pactl set-source-output-volume ${id} ${pct}%`)
+}
+
+// tabs management + states
+const drawTabs = (ctx, g, x, y, tabs, sel, onPick) => {
+    const tabH = 22
+    let cx = x
+    tabs.forEach((t, i) => {
+        const active = t.id === sel
+        const tw = t.w
+        const bev = 10
+        const key = `tab|${t.id}|${y}`
+        const hovered = g.push.hoverKey === key
+        const pressed = g.push.pressKey === key
+        const [sr, sg, sb] = (active || hovered) ? HL : g.accent
+        const fillA = pressed ? (active ? 0.18 : 0.04) : active ? (hovered ? 0.32 : 0.22) : (hovered ? 0.14 : 0.06)
+        const strokeA = pressed ? (active ? 0.7 : 0.18) : active ? (hovered ? 1 : 0.95) : (hovered ? 0.75 : 0.32)
+        ctx.newPath()
+        ctx.moveTo(cx, y)
+        ctx.lineTo(cx + tw - bev, y)
+        ctx.lineTo(cx + tw, y + bev)
+        ctx.lineTo(cx + tw, y + tabH)
+        ctx.lineTo(cx, y + tabH)
+        ctx.closePath()
+        ctx.setSourceRGBA(sr, sg, sb, fillA)
+        ctx.fill()
+        if (hovered && !active) {
+            ctx.save()
+            ctx.setOperator(12)
+            ctx.setSourceRGBA(sr, sg, sb, 0.35)
+            ctx.setLineWidth(2.4)
+            ctx.stroke()
+            ctx.restore()
+        }
+        ctx.setSourceRGBA(sr, sg, sb, strokeA)
+        ctx.setLineWidth(active ? 1.3 : (hovered ? 1 : 0.7))
+        ctx.stroke()
+        if (active || hovered) {
+            ctx.setSourceRGBA(sr, sg, sb, active ? 0.9 : 0.55)
+            ctx.setLineWidth(active ? 1.3 : 0.8)
+            ctx.newPath(); ctx.moveTo(cx, y + tabH); ctx.lineTo(cx + tw, y + tabH); ctx.stroke()
+        }
+        ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(10.5)
+        const lw = ctx.textExtents(t.label).width
+        const tx = cx + (tw - lw) / 2
+        const ty = y + 16
+        const labelA = pressed ? (active ? 0.85 : 0.35) : active ? (hovered ? 1 : 0.98) : (hovered ? 0.85 : 0.55)
+        txt(ctx, tx, ty, t.label, TITLE, 10.5, (active || hovered) ? HL : g.accent, labelA, 1)
+        g.push({ kind: "btn", hoverable: true, key, bx0: cx, by0: y, bx1: cx + tw, by1: y + tabH, on: () => onPick(t.id) })
+        cx += tw + 6
+    })
+}
+
+// device row -> name + slider + mute + set default
+const DEV_ROW_H = 62
+const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
+    const [BR, BG, BB] = g.col
+    const isDef = !!d.default || d.id === defId
+    const isSusp = !!d.suspended
+    const h = DEV_ROW_H
+    ctx.setSourceRGBA(BR, BG, BB, isDef ? 0.16 : 0.06); ctx.rectangle(x, y, w, h); ctx.fill()
+    ctx.setSourceRGBA(BR, BG, BB, 0.4); ctx.setLineWidth(0.7); ctx.newPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w, y + h); ctx.stroke()
+    if (isDef) {
+        ctx.setSourceRGBA(BR, BG, BB, 0.55); ctx.setLineWidth(1.2)
+        ctx.newPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.stroke()
+    }
+    if (isSusp) {
+        ctx.setSourceRGBA(BR, BG, BB, 0.25); ctx.setLineWidth(0.7)
+        for (let yy = y + 2; yy < y + h; yy += 4) { ctx.newPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke() }
+    }
+    const name = (d.desc || d.id).slice(0, 26)
+    const prefix = isSusp ? "○ " : isDef ? "● " : "  "
+    txt(ctx, x + 8, y + 13, prefix + name.toUpperCase(), MONO, 9.5, g.col, isDef && !isSusp ? 0.98 : 0.55, 1)
+    const pct = Math.round(Math.max(0, Math.min(1.5, d.vol || 0)) * 100)
+    const pctTxt = `${pct}%`
+    const pctW = ctx.textExtents(pctTxt).width
+    txt(ctx, x + w - 8 - pctW, y + 13, pctTxt, TITLE, 12, g.accent, isSusp ? 0.3 : 0.96, 1, 0.35)
+    const trackW = w - 16
+    const trackY = y + 26
+    drawSlider(ctx, g.push, x + 8, trackY, trackW, Math.min(1, d.vol || 0), (t) => { d.vol = t; setDevVol(kind, d.id, t); g.refresh() })
+    const dreg = g.push[g.push.length - 1]
+    if (dreg) {
+        dreg.scrollStep = 0.05
+        dreg.curVal = d.vol || 0
+        const dragFn = dreg.on
+        dreg.on = (t) => { dreg.curVal = t; dragFn(t) }
+        dreg.scrollFn = (v) => { d.vol = Math.max(0, Math.min(1.5, v)); setDevVol(kind, d.id, d.vol); g.refresh() }
+    }
+    const btnY = y + 38
+    const btnH = 18
+    const muteBtnW = 64
+    const setBtnW = isDef ? 132 : 88
+    const muteBx = x + w - 8 - muteBtnW
+    const setBx = x + 8
+    drawBtn(ctx, g.push, muteBx, btnY, muteBtnW, btnH, "MUTE", () => {
+        d.muted = !d.muted
+        g.refresh()
+        sh(`pactl set-${kind}-mute ${d.id} toggle`).then(() => timeout(120, () => g.refresh()))
+    }, d.muted, g.col, ch(d.muted ? 0xf026 : 0xf028), 10)
+    if (isDef) {
+        ctx.setSourceRGBA(BR, BG, BB, 0.18); ctx.setLineWidth(0.7)
+        btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.fill()
+        ctx.setSourceRGBA(BR, BG, BB, 0.55); btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.stroke()
+        ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(10)
+        const lbl = "ALREADY DEFAULT"
+        const lw = ctx.textExtents(lbl).width
+        ctx.setSourceRGBA(BR, BG, BB, 0.7)
+        ctx.moveTo(setBx + setBtnW / 2 - lw / 2, btnY + btnH / 2 + 3.5); ctx.showText(lbl)
+        g.push({ kind: "btn", hoverable: true, key: `def-${d.id}|${btnY}`, bx0: setBx, by0: btnY, bx1: setBx + setBtnW, by1: btnY + btnH, on: () => {} })
+    } else {
+        drawBtn(ctx, g.push, setBx, btnY, setBtnW, btnH, "SET DEFAULT", () => {
+            sh(`pactl set-default-${kind === "sink" ? "sink" : "source"} ${d.id}`).then(() => timeout(80, () => g.refresh()))
+        }, false, g.col, "", 10)
+    }
+}
+
+const drawSectionToggle = (ctx, g, x, y, w, leftLabel, rightLabel, sel, onPick) => {
+    const bw = (w - 4) / 2, bh = 18
+    const a = sel === "left", b = sel === "right"
+    drawBtn(ctx, g.push, x, y, bw, bh, leftLabel, () => onPick("left"), a, g.col)
+    drawBtn(ctx, g.push, x + bw + 4, y, bw, bh, rightLabel, () => onPick("right"), b, g.col)
+}
+// id is the device name not the #index, get-default-sink matches on name
+const parseDeviceList = (out, def) => out.trim().split("\n").filter(Boolean).map((l) => {
+    const a = l.split("|")
+    return { id: a[0], desc: a[1] || a[0], vol: Math.min(1.5, (parseFloat(a[2]) || 0) / 100), muted: a[3] === "yes", suspended: a[4] === "yes", default: a[0] === def }
+})
 const VolCtrl = () => {
-    const st: any = { master: 0.5, muted: false, apps: [], mic: 0.5, micMuted: false }
+    const st: any = { master: 0.5, muted: false, apps: [], recApps: [], mic: 0.5, micMuted: false, outDevices: [], inDevices: [], defSink: "", defSrc: "", volTab: "general" }
     let ctrl
     const refresh = () => {
         sh("wpctl get-volume @DEFAULT_AUDIO_SINK@").then((o) => { const m = o.match(/([\d.]+)/); st.master = m ? Math.min(1, parseFloat(m[1])) : 0; st.muted = /MUTED/.test(o); ctrl.requestDraw() })
@@ -290,37 +454,174 @@ const VolCtrl = () => {
             String(s).trim().split("\n").filter(Boolean).forEach((l) => { const i = l.indexOf("="); if (i > 0) want[l.slice(0, i)] = parseInt(l.slice(i + 1)) })
             st.apps = o.trim().split("\n").filter(Boolean).map((l) => {
                 const a = l.split("|"), name = (a[1] || "App"), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
-                return { id: a[0], name, vol: (w != null && !isNaN(w)) ? Math.min(1, w / 100) : live }
+                return { id: a[0], name, vol: (w != null && !isNaN(w)) ? Math.min(1, w / 100) : live, muted: a[3] === "yes" }
             })
             ctrl.requestDraw()
         })
+        Promise.all([sh(SRC_OUTS_CMD), sh(`cat "${APPVOL_STATE_SRC}" 2>/dev/null`)]).then(([o, s]) => {
+            const want: any = {}
+            String(s).trim().split("\n").filter(Boolean).forEach((l) => { const i = l.indexOf("="); if (i > 0) want[l.slice(0, i)] = parseInt(l.slice(i + 1)) })
+            st.recApps = o.trim().split("\n").filter(Boolean).map((l) => {
+                const a = l.split("|"), name = (a[1] || "App"), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
+                return { id: a[0], name, vol: (w != null && !isNaN(w)) ? Math.min(1, w / 100) : live, muted: a[3] === "yes" }
+            })
+            ctrl.requestDraw()
+        })
+        // default ids first, every row matches against em
+        sh("pactl get-default-sink 2>/dev/null").then((d) => {
+            st.defSink = d.trim()
+            sh(SINKS_CMD).then((o) => { st.outDevices = parseDeviceList(o, st.defSink); ctrl.requestDraw() })
+            ctrl.requestDraw()
+        })
+        sh("pactl get-default-source 2>/dev/null").then((d) => {
+            st.defSrc = d.trim()
+            sh(SRCS_CMD).then((o) => { st.inDevices = parseDeviceList(o, st.defSrc).filter((d) => !d.desc.startsWith("Monitor of ")); ctrl.requestDraw() })
+            ctrl.requestDraw()
+        })
+    }
+    const armScroll = (g, reg, getCur, apply) => {
+        if (!reg) return
+        reg.scrollStep = 0.05
+        reg.curVal = getCur()
+        const onDrag = reg.on
+        reg.on = (t: number) => { reg.curVal = t; onDrag(t) }
+        reg.scrollFn = (v: number) => { apply(Math.max(0, Math.min(1.5, v))); g.refresh() }
+    }
+    const armApp = (g, reg, getCur, apply) => {
+        if (!reg) return
+        reg.scrollStep = 0.05
+        reg.curVal = getCur()
+        const onDrag = reg.on
+        reg.on = (t: number) => { reg.curVal = t; onDrag(t) }
+        reg.scrollFn = (v: number) => { apply(Math.max(0, Math.min(1, v))); g.refresh() }
+    }
+    // outputs the current default devices + master contorls
+    const drawGeneral = (ctx, g, x, y, w) => {
+        const trackW = w - 56
+        sectionHeader(ctx, g, x, y, "// MASTER OUTPUT", w)
+        const yO = y + 18
+        drawSlider(ctx, g.push, x, yO, trackW, st.master, (t) => { st.master = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${t.toFixed(2)}`); g.refresh() })
+        const r0 = g.push[g.push.length - 1]
+        armScroll(g, r0, () => st.master, (v) => { st.master = v; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${v.toFixed(2)}`) })
+        txt(ctx, x + trackW + 12, yO + 5, st.muted ? "MUTE" : `${Math.round(st.master * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
+
+        const yIS = yO + 38
+        sectionHeader(ctx, g, x, yIS, "// MASTER INPUT", w)
+        const yI = yIS + 18
+        drawSlider(ctx, g.push, x, yI, trackW, st.mic, (t) => { st.mic = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${t.toFixed(2)}`); g.refresh() })
+        const rI = g.push[g.push.length - 1]
+        armScroll(g, rI, () => st.mic, (v) => { st.mic = v; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${v.toFixed(2)}`) })
+        txt(ctx, x + trackW + 12, yI + 5, st.micMuted ? "MUTE" : `${Math.round(st.mic * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
+
+        const muteY = yI + 38
+        const halfW = (w - 6) / 2
+        drawBtn(ctx, g.push, x, muteY, halfW, 24, st.micMuted ? "UNMUTE INPUT" : "MUTE INPUT", () => {
+            st.micMuted = !st.micMuted
+            g.refresh()
+            sh("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle").then(() => timeout(120, refresh))
+        }, st.micMuted, g.col, ch(st.micMuted ? 0xf131 : 0xf130), 10)
+        drawBtn(ctx, g.push, x + halfW + 6, muteY, halfW, 24, st.muted ? "UNMUTE OUTPUT" : "MUTE OUTPUT", () => {
+            st.muted = !st.muted
+            g.refresh()
+            sh("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle").then(() => timeout(120, refresh))
+        }, st.muted, g.col, ch(st.muted ? 0xf026 : 0xf028), 10)
+
+        const appsN = st.apps.length, recN = st.recApps.length
+        const statsY = muteY + 50
+        sectionHeader(ctx, g, x, statsY, "// ACTIVITY", w)
+        txt(ctx, x, statsY + 18, `- ${appsN} PLAYING`, MONO, 10, g.accent, 0.9, 1)
+        txt(ctx, x, statsY + 34, `- ${recN} RECORDING`, MONO, 10, g.accent, 0.9, 1)
+
+        const defY = statsY + 62
+        sectionHeader(ctx, g, x, defY, "// DEFAULT OUTPUT DEVICE", w)
+        const defOut = st.outDevices.find((d) => d.default) || st.outDevices.find((d) => d.id === st.defSink) || st.outDevices[0]
+        const defOutLbl = defOut ? (defOut.desc || defOut.id).slice(0, 40).toUpperCase() : "NO SINK"
+        drawBtn(ctx, g.push, x, defY + 18, w - 8, 24, defOutLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
+
+        const defInY = defY + 68
+        sectionHeader(ctx, g, x, defInY, "// DEFAULT INPUT DEVICE", w)
+        const defIn = st.inDevices.find((d) => d.default) || st.inDevices.find((d) => d.id === st.defSrc) || st.inDevices[0]
+        const defInLbl = defIn ? (defIn.desc || defIn.id).slice(0, 40).toUpperCase() : "NO MIC"
+        drawBtn(ctx, g.push, x, defInY + 18, w - 8, 24, defInLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
+    }
+    // all sinks + sources, monitors filtered on refresh
+    const drawDevices = (ctx, g, x, y, w) => {
+        const trackW = w
+        sectionHeader(ctx, g, x, y, "// OUTPUTS", w)
+        let cy = y + 18
+        if (!st.outDevices.length) { txt(ctx, x, cy, "no output devices", MONO, 9, g.col, 0.35); return }
+        for (const d of st.outDevices) {
+            drawDeviceRow(ctx, g, x, cy, w, d, "sink", st.defSink)
+            cy += DEV_ROW_H + 6
+        }
+        const yS = cy + 20
+        sectionHeader(ctx, g, x, yS, "// INPUTS", w)
+        let iy = yS + 18
+        if (!st.inDevices.length) { txt(ctx, x, iy, "no input devices", MONO, 9, g.col, 0.35); return }
+        for (const d of st.inDevices) {
+            drawDeviceRow(ctx, g, x, iy, w, d, "source", st.defSrc)
+            iy += DEV_ROW_H + 6
+        }
+    }
+    const drawAppRow = (ctx, g, x, y, w, a, setter) => {
+        const muteBtnW = 52
+        const pctW = 32
+        const trackW = w - muteBtnW - pctW - 14
+        const nm = (a.name || "App").slice(0, 24)
+        txt(ctx, x, y, nm.toUpperCase(), MONO, 9, g.col, a.muted ? 0.4 : 0.95)
+        const muteBx = x + w - muteBtnW
+        const pctBx = muteBx - pctW - 6
+        txt(ctx, pctBx, y + 14, `${Math.round(a.vol * 100)}%`, TITLE, 11, g.col, a.muted ? 0.4 : 0.9, 1)
+        drawSlider(ctx, g.push, x, y + 12, trackW, a.vol, (t) => { a.vol = t; setter(a.name, a.id, t); g.refresh() })
+        const rr = g.push[g.push.length - 1]
+        armApp(g, rr, () => a.vol, (v) => { a.vol = v; setter(a.name, a.id, v) })
+        drawBtn(ctx, g.push, muteBx, y + 4, muteBtnW, 18, "MUTE", () => {
+            a.muted = !a.muted
+            g.refresh()
+            sh(`pactl ${setter === setAppVol ? "set-sink-input-mute" : "set-source-output-mute"} ${a.id} toggle`).then(() => timeout(120, refresh))
+        }, a.muted, g.col, ch(a.muted ? 0xf026 : 0xf028), 10)
+    }
+    // apps playing (sink-inputs) + apps recording (source-outputs)
+    const drawApps = (ctx, g, x, y, w) => {
+        sectionHeader(ctx, g, x, y, "// APPS PLAYING", w)
+        let cy = y + 18
+        if (!st.apps.length) { txt(ctx, x, cy, "no apps playing audio", MONO, 9, g.col, 0.4); cy += 22 }
+        for (const a of st.apps) { drawAppRow(ctx, g, x, cy, w, a, setAppVol); cy += 36 }
+        const yR = cy + 20
+        sectionHeader(ctx, g, x, yR, "// APPS RECORDING", w)
+        let iy = yR + 18
+        if (!st.recApps.length) { txt(ctx, x, iy, "no apps recording audio", MONO, 9, g.col, 0.4); return }
+        for (const a of st.recApps) { drawAppRow(ctx, g, x, iy, w, a, setAppVolSrc); iy += 36 }
     }
     ctrl = createModal({
-        name: "vol", tabTitle: "AUDIO", W: 348, H: 432, hud: true, onOpen: refresh, poll: refresh, pollMs: 2000,
-        draw: (ctx, g) => {
-            const x = g.X + 18, trackW = g.w - 36 - 54, secW = g.w - 36
-            const yO = g.Y + HEADER + 30
-            sectionHeader(ctx, g, x, yO - 18, "OUTPUT", secW)
-            drawSlider(ctx, g.push, x, yO, trackW, st.master, (t) => { st.master = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${t.toFixed(2)}`); g.refresh() })
-            txt(ctx, x + trackW + 12, yO + 5, st.muted ? "MUTE" : `${Math.round(st.master * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
-            drawBtn(ctx, g.push, x, yO + 18, 132, 24, st.muted ? "MUTED" : "MUTE", () => sh("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle").then(() => timeout(140, refresh)), st.muted, g.col, ch(st.muted ? 0xf026 : 0xf028))
-
-            const yA = yO + 64
-            sectionHeader(ctx, g, x, yA, "// APPS", secW)
-            let ay = yA + 22
-            if (!st.apps.length) txt(ctx, x, ay, "no apps playing audio", MONO, 9, g.col, 0.35)
-            for (const a of st.apps.slice(0, 3)) {
-                txt(ctx, x, ay, a.name.slice(0, 22).toUpperCase(), MONO, 9, g.col, 0.95)
-                txt(ctx, x + trackW + 12, ay + 17, `${Math.round(a.vol * 100)}%`, TITLE, 12, g.col, 0.9, 1)
-                drawSlider(ctx, g.push, x, ay + 12, trackW, a.vol, (t) => { a.vol = t; setAppVol(a.name, a.id, t); g.refresh() })
-                ay += 46
+        name: "vol", tabTitle: "AUDIO", W: 480, H: 720, hud: true, onOpen: refresh, poll: refresh, pollMs: 2000,
+        onScroll: (dir, xy) => {
+            if (!xy) return
+            const [x, y] = xy
+            for (const r of ctrl.hitRegions()) {
+                if (r.scrollFn && r.kind === "sld" && pip(x, y, r.quad)) {
+                    const cur = r.curVal ?? 0
+                    const nv = Math.max(0, Math.min(1.5, cur + dir * (r.scrollStep || 0.05)))
+                    r.scrollFn(nv)
+                    r.curVal = nv
+                    ctrl.requestDraw()
+                    return
+                }
             }
-
-            const yI = g.Y + g.h - 36 - 58
-            sectionHeader(ctx, g, x, yI - 18, "INPUT", secW)
-            drawSlider(ctx, g.push, x, yI, trackW, st.mic, (t) => { st.mic = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${t.toFixed(2)}`); g.refresh() })
-            txt(ctx, x + trackW + 12, yI + 5, st.micMuted ? "MUTE" : `${Math.round(st.mic * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
-            drawBtn(ctx, g.push, x, yI + 18, 132, 24, st.micMuted ? "MUTED" : "MUTE", () => sh("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle").then(() => timeout(140, refresh)), st.micMuted, g.col, ch(st.micMuted ? 0xf131 : 0xf130))
+        },
+        draw: (ctx, g) => {
+            const x = g.X + 18, secW = g.w - 36
+            const tabY = g.Y + HEADER + 8
+            // general / devices / apps
+            drawTabs(ctx, g, x, tabY, [
+                { id: "general", label: "GENERAL", w: 92 },
+                { id: "devices", label: "DEVICES", w: 92 },
+                { id: "apps", label: "APPS", w: 78 },
+            ], st.volTab, (id) => { st.volTab = id; g.refresh() })
+            const contentY = tabY + 48
+            if (st.volTab === "general") drawGeneral(ctx, g, x, contentY, secW)
+            else if (st.volTab === "devices") drawDevices(ctx, g, x, contentY, secW)
+            else drawApps(ctx, g, x, contentY, secW)
         },
     })
     return ctrl
