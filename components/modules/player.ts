@@ -5,7 +5,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { USER, onColorChange, tintPixbuf, glassMode, imgTint } from "./colors.ts"
+import { USER, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
@@ -173,7 +173,8 @@ const renderPanel = (ctx) => {
  const tby = Y + 22, tbh = 50, tx0 = X + 14
  accentBar(ctx, X + 5, tby + 1, 9, tbh - 2, 1)
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13)
- if (imgTint.value) ctx.setSourceRGBA(USER.aurblack[0], USER.aurblack[1], USER.aurblack[2], glassMode.value ? 0.55 : 0.85)
+ if (radioBg.value) ctx.setSourceRGBA(radioBg.value.color[0] / 255, radioBg.value.color[1] / 255, radioBg.value.color[2] / 255, radioBg.value.alpha)
+ else if (imgTint.value) ctx.setSourceRGBA(USER.aurblack[0], USER.aurblack[1], USER.aurblack[2], glassMode.value ? 0.55 : 0.85)
  else ctx.setSourceRGBA(0.22, 0.02, 0.03, 0.4)
  ctx.fill()
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setOperator(12); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.12); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)

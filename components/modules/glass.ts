@@ -108,41 +108,31 @@ export const segParam = (plane: Plane, u0, v0, u1, v1, px, py) => {
 
 
 
-export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed) => {
+export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed, ss = 1) => {
 
     const e = intro, full = e >= 0.999
     const ease = full ? 1 : e * e * (3 - 2 * e)
     const dec = full ? 0 : 1 - ease
     const slideX = full ? 0 : -26 * dec
-    const s = Math.floor(seed * 55)
-    const nz = (k) => { const x = Math.sin(s * 12.9 + k * 78.2) * 43758.5; return x - Math.floor(x) }
-    const BANDS = 9
-    const shiftAt = (v) => full ? 0 : (nz(Math.floor(v / (PH / BANDS)) + 1) * 2 - 1) * 50 * dec * dec
-    const N = 50
+    const N = 400
     for (let i = 0; i < N; i++) {
         const v0 = i * PH / N, v1 = (i + 1) * PH / N
-        const dx = slideX + shiftAt(v0)
+        const dx = slideX
         const tl = plane.project(0, v0), tr = plane.project(PW, v0), bl = plane.project(0, v1)
-        const ulen = Math.hypot(tr[0] - tl[0], tr[1] - tl[1]), vlen = Math.hypot(bl[0] - tl[0], bl[1] - tl[1])
+        const br = plane.project(PW, v1)
+        const ulen0 = Math.hypot(tr[0] - tl[0], tr[1] - tl[1])
+        const ulen1 = Math.hypot(br[0] - bl[0], br[1] - bl[1])
+        const ulen = Math.max(ulen0, ulen1)
+        const vlen = Math.hypot(bl[0] - tl[0], bl[1] - tl[1])
         const ang = Math.atan2(tr[1] - tl[1], tr[0] - tl[0])
+        const sy = vlen / (v1 - v0)
+        const bleed = 1.5 / Math.max(0.0001, sy)
         screenCtx.save()
-        screenCtx.translate(tl[0] + dx, tl[1]); screenCtx.rotate(ang); screenCtx.scale(ulen / PW, vlen / (v1 - v0))
-        screenCtx.rectangle(0, -0.4, PW, (v1 - v0) + 0.8); screenCtx.clip()
-        screenCtx.setSourceSurface(surf, 0, -v0); screenCtx.paint()
+        screenCtx.translate(tl[0] + dx, tl[1]); screenCtx.rotate(ang); screenCtx.scale(ulen / PW, sy)
+        screenCtx.rectangle(0, -0.4, PW, (v1 - v0) + 0.4 + bleed); screenCtx.clip()
+        if (ss !== 1) screenCtx.scale(1 / ss, 1 / ss)
+        screenCtx.setSourceSurface(surf, 0, -v0 * ss); screenCtx.paint()
         screenCtx.restore()
     }
-    if (!full) {
-        screenCtx.setOperator(12); screenCtx.setLineJoin(0)
-        for (let b = 1; b < BANDS; b++) {
-            const v = b * PH / BANDS, off = 3 + dec * 6, a = dec * 0.6
-            const l = plane.project(14, v), rp = plane.project(PW - 14, v)
-            screenCtx.setLineWidth(1.6)
-            screenCtx.setSourceRGBA(1, 0.13, 0.24, a); screenCtx.newPath(); screenCtx.moveTo(l[0] - off, l[1]); screenCtx.lineTo(rp[0] - off, rp[1]); screenCtx.stroke()
-            screenCtx.setSourceRGBA(0.2, 1, 1, a); screenCtx.newPath(); screenCtx.moveTo(l[0] + off, l[1]); screenCtx.lineTo(rp[0] + off, rp[1]); screenCtx.stroke()
-        }
-        const a0 = plane.project(14, 0), a1 = plane.project(14, PH)
-        screenCtx.setSourceRGBA(0.85, 0.98, 1, dec * 0.85); screenCtx.setLineWidth(2.4)
-        screenCtx.newPath(); screenCtx.moveTo(a0[0] + slideX, a0[1]); screenCtx.lineTo(a1[0] + slideX, a1[1]); screenCtx.stroke()
-        screenCtx.setOperator(2)
-    }
 }
+

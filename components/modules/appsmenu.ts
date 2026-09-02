@@ -77,7 +77,7 @@ const loadApps = () => {
      appInfoCache = list; return list
  } catch (e) { print("[apps]", e); return [] }
 }
-const buildAppEntries = () => loadApps().map((a) => ({ label: a.get_name() || "", badge: "READY", icon: null, glyph: null, data: a }))
+export const buildAppEntries = () => loadApps().map((a) => ({ label: a.get_name() || "", badge: "READY", icon: null, glyph: null, data: a }))
 
 const iconFor = (app) => {
  const key = app.get_name() || ""
@@ -241,7 +241,7 @@ const drawContent = (ctx) => {
          const ry = Math.round(cy + slotPos * ROW_H - (ROW_H - 8) / 2)
          const x = LIST_X + CURVE * t * t
          num++
-         RENDER.push({ entry: filtered[idx], y0: ry, y1: ry + ROW_H - 8, num })
+         RENDER.push({ entry: filtered[idx], y0: ry, y1: ry + ROW_H - 8, num, idxAbs: base + k })
          drawRow(ctx, filtered[idx], x, ry, num, A, Math.abs(slotPos) < 0.5)
      }
      ctx.restore()
@@ -318,7 +318,14 @@ export const AppsMenuWindow = () => {
      let b = 1; try { b = e.get_button?.()[1] ?? e.button } catch {}
      const r = rowAtY(mouseY)
      if (b === 3) { if (r && wheelCfg.onSecondary) wheelCfg.onSecondary(r.entry.data); else closeWheel(); return true }
-     if (r) activate(r.entry)
+     if (r) {
+         if (typeof r.idxAbs === "number" && r.idxAbs !== Math.round(scroll)) {
+             scrollTarget = r.idxAbs
+             if (filtered.length <= VISIBLE) scrollTarget = Math.max(0, Math.min(filtered.length - 1, scrollTarget))
+             animate()
+         }
+         activate(r.entry)
+     }
      return true
  })
   evt.connect("scroll-event", (_w, e) => {

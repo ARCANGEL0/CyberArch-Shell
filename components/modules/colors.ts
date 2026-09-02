@@ -225,10 +225,10 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         overlay: [255, 60, 190],
     },
     JOHNNY: {
-        red: [255, 208, 60], cyan: [94, 244, 248], magenta: [70, 110, 190],
+        red: [255, 208, 60], cyan: [94, 244, 248], magenta: [110, 90, 220],
         green: [255, 214, 90], amber: [255, 232, 130], blue: [70, 110, 190],
         white: [250, 246, 228], dim: [130, 116, 70], grid: [40, 50, 84],
-        dock: [70, 110, 190], press: [255, 208, 60], badge: [255, 208, 60],
+        dock: [70, 110, 190], press: [255, 208, 60], badge: [94, 244, 248],
         stamina: [94, 244, 248], ram: [70, 110, 190], netinfo: [70, 110, 190],
         cpu: [255, 208, 60],
         notifred: [255, 208, 60],
@@ -420,6 +420,19 @@ const LAUNCHER_TINT: Record<string, RGB> = { SYNTHWAVE: [45, 220, 210] }
 export const launcherTint = { value: null as RGB | null }
 const updateLauncherTint = (name: string) => { launcherTint.value = LAUNCHER_TINT[name] ?? null }
 
+const LAUNCHER_LABEL_TINT: Record<string, RGB> = { JOHNNY: [255, 208, 60] }
+export const launcherLabelTint = { value: null as RGB | null }
+const updateLauncherLabelTint = (name: string) => { launcherLabelTint.value = LAUNCHER_LABEL_TINT[name] ?? null }
+
+type RadioBg = { color: RGB; alpha: number }
+const RADIO_BG: Record<string, RadioBg> = { JOHNNY: { color: [255, 208, 60], alpha: 0.16 } }
+export const radioBg = { value: null as RadioBg | null }
+const updateRadioBg = (name: string) => { radioBg.value = RADIO_BG[name] ?? null }
+
+const NOTIF_BUBBLE: Record<string, RGB> = { NETWATCH: [94, 244, 248] }
+export const notifBubble = { value: NOTIF_BUBBLE.NETWATCH as RGB | null }
+const updateNotifBubble = (name: string) => { notifBubble.value = NOTIF_BUBBLE[name] ?? null }
+
 const changeBus: Array<() => void> = []
 export const onColorChange = (cb: () => void): (() => void) => { changeBus.push(cb); return () => { const i = changeBus.indexOf(cb); if (i >= 0) changeBus.splice(i, 1) } }
 const notifyColorChange = () => { for (const cb of [...changeBus]) { try { cb() } catch (e) { print("[color] notify:", e) } } }
@@ -454,6 +467,9 @@ export const applyPalette = (name: string) => {
     updateNeonBtn(name)
     updateCircleTint(name)
     updateLauncherTint(name)
+    updateLauncherLabelTint(name)
+    updateRadioBg(name)
+    updateNotifBubble(name)
 }
 
 export const getPaletteName = (): string => {
@@ -494,6 +510,9 @@ export const loadUserColors = (): void => {
         updateNeonBtn(getPaletteName())
         updateCircleTint(getPaletteName())
         updateLauncherTint(getPaletteName())
+        updateLauncherLabelTint(getPaletteName())
+        updateRadioBg(getPaletteName())
+        updateNotifBubble(getPaletteName())
     } catch (e) { print("[color] load:", e) }
 }
 

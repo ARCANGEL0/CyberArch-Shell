@@ -9,8 +9,7 @@ end
 hl.exec_cmd("dbus-update-activation-environment --systemd --all")
 hl.exec_cmd("sh -c 'sleep 3; hyprctl dispatch exec \"dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE\"' &")
 hl.exec_cmd("killall -9 waybar mako dunst swaync 2>/dev/null; systemctl --user stop waybar mako dunst swaync 2>/dev/null || true")
-hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null")
-hl.exec_cmd("sleep 1 && " .. cyberpunk .. "/scripts/launch-theme")
+hl.exec_cmd("sh -c 'pgrep -x gjs >/dev/null 2>&1 || { " .. os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null; sleep 1; " .. cyberpunk .. "/scripts/launch-theme; }'")
 hl.exec_cmd(cyberpunk .. "/scripts/ws pin")
 once("bash " .. cyberpunk .. "/scripts/set-wallpaper")
 
@@ -32,6 +31,10 @@ hl.config({
     misc = {
         allow_session_lock_restore = true,
         force_default_wallpaper = 0,
+        -- hyprland reloads itself whenever these files change, and the modal writes
+        -- user.lua every time u save. leave this true unless u want a full reload each
+        -- time someone edits a keybind, theres a button in the modal for that
+        disable_autoreload = true,
     },
     general = {
         border_size = 2,

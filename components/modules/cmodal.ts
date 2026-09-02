@@ -2,6 +2,8 @@
 
 import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Layer, Exclusivity, Keymode } from "./widget.ts"
+
+const SS_DEFAULT = 1
 import { execAsync, interval, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
@@ -158,7 +160,7 @@ export const createModal = (spec) => {
     push.dragKey = null
     const renderFlat = (ctx) => {
         const X = 12, Y = 12, w = W - 24, h = H - 24
-        setTxtFX(spec.hud)
+        setTxtFX(false)
         if (spec.hud) { drawHudFrame(ctx, X, Y, w, h, tabTitle) }
         else if (!spec.noGlass) {
             drawGlass(ctx, X, Y, w, h, col, spec.glass ?? 1)
@@ -174,10 +176,11 @@ export const createModal = (spec) => {
     const draw = (screenCtx) => {
         screenCtx.setOperator(0); screenCtx.paint(); screenCtx.setOperator(2)
         if (intro <= 0.002 && !visible) return
-        if (!surf) { surf = new Cairo.ImageSurface(Cairo.Format.ARGB32, W, H); sctx = new Cairo.Context(surf) }
+        const ss = spec.ss ?? SS_DEFAULT
+        if (!surf) { surf = new Cairo.ImageSurface(Cairo.Format.ARGB32, W * ss, H * ss); sctx = new Cairo.Context(surf) }
         sctx.save(); sctx.setOperator(0); sctx.paint(); sctx.setOperator(2); sctx.restore()
-        renderFlat(sctx); surf.flush()
-        warpReveal(screenCtx, surf, plane, W, H, intro, seed)
+        sctx.save(); sctx.scale(ss, ss); renderFlat(sctx); sctx.restore(); surf.flush()
+        warpReveal(screenCtx, surf, plane, W, H, intro, seed, ss)
     }
     const startTimers = () => {
         if (!animT) animT = interval(60, () => {
@@ -187,7 +190,7 @@ export const createModal = (spec) => {
             if (introTarget === 0 && intro <= 0.001) { intro = 0; if (win) win.visible = false; stopTimers() }
             const idleMs = spec.idleFrameMs ?? 0
             const now = Date.now()
-            if (intro !== introTarget || idleMs <= 0 || now - lastFrame >= idleMs) { lastFrame = now; area && area.queue_draw() }
+            if (intro !== introTarget || (idleMs > 0 && now - lastFrame >= idleMs)) { lastFrame = now; area && area.queue_draw() }
         })
         if (spec.poll && !pollT) pollT = interval(spec.pollMs || 1500, spec.poll)
     }
@@ -262,13 +265,17 @@ export const createModal = (spec) => {
         if (dy === 0) { let d = 1; try { const r = e.get_scroll_direction?.(); d = r ? r[1] : e.direction } catch {} dy = (d === Gdk.ScrollDirection.UP || d === 0) ? -1 : 1 }
         spec.onScroll(dy > 0 ? 1 : -1, lastXY); area.queue_draw(); return true
     })
-    const onKeyPress = (_w, e) => { let k = 0; try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch {} if (k === Gdk.KEY_Escape) ctrl.close(); else spec.onKey?.(k); return true }
+    const kv = (e) => { let k = 0; try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch {} return k }
+    const kmask = (e) => { try { const r = e.get_state?.(); return r ? r[1] : (e.state || 0) } catch { return 0 } }
+    const onKeyPress = (_w, e) => { const k = kv(e); const m = kmask(e); if (spec.onKeyRaw) spec.onKeyRaw(k, m, true); if (k === Gdk.KEY_Escape) ctrl.close(); else spec.onKey?.(k); return true }
+    const onKeyRelease = (_w, e) => { if (spec.onKeyRaw) spec.onKeyRaw(kv(e), kmask(e), false); return true }
 
     const winOpts: any = { name: `modal_${name}`, namespace: `modal_${name}`, className: "aug modal", layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE, keymode: spec.keymode ?? Keymode.EXCLUSIVE, visible: false, child: evt }
     if (spec.anchorRight) { winOpts.anchor = Anchor.RIGHT; winOpts.margin_right = Math.round(SCREEN_WIDTH * 0.25) }
     else if (spec.anchorLeft) { winOpts.anchor = Anchor.LEFT; winOpts.margin_left = spec.marginLeft ?? Math.round(SCREEN_WIDTH * 0.03) }
     win = Window(winOpts)
     win.connect("key-press-event", onKeyPress)
+    win.connect("key-release-event", onKeyRelease)
     ctrl.win = win
     return ctrl
 }
@@ -1515,13 +1522,19 @@ const KEYBINDS = [
     ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
     ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
 ]
-const drawKeyCap = (ctx, x, y, label, h) => {
-    const kc = neonBtn.value ? USER.press : CYAN
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
-    const w = Math.max(26, tw + 16)
-    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(ACC[0] * 0.2, ACC[1] * 0.2, ACC[2] * 0.28, 0.55); ctx.fill()
-    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(kc[0], kc[1], kc[2], 0.85); ctx.setLineWidth(1); ctx.stroke()
-    ctx.setSourceRGBA(0.92, 0.99, 1, 0.97); ctx.moveTo(x + w / 2 - tw / 2, y + h / 2 + 4); ctx.showText(label)
+export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number } = {}) => {
+    const kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
+    const fillA = opts.glow ? 0.45 : (opts.muted ? 0.18 : 0.55)
+    const strokeA = opts.glow ? 1.0 : (opts.muted ? 0.4 : 0.85)
+    const txtA = opts.muted ? 0.55 : 0.97
+    const txtCol = opts.muted ? [0.6, 0.7, 0.78] : [0.92, 0.99, 1]
+    const fs = opts.fs ?? 11
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs); const tw = ctx.textExtents(label).width
+    const w = Math.max(26 * (fs / 11), tw + 16)
+    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(ACC[0] * 0.2, ACC[1] * 0.2, ACC[2] * 0.28, fillA); ctx.fill()
+    if (opts.glow) { ctx.setOperator(12); btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(kc[0], kc[1], kc[2], 0.55); ctx.setLineWidth(2.4); ctx.stroke(); ctx.setOperator(2) }
+    btnPath(ctx, x, y, w, h); ctx.setSourceRGBA(kc[0], kc[1], kc[2], strokeA); ctx.setLineWidth(1); ctx.stroke()
+    ctx.setSourceRGBA(txtCol[0], txtCol[1], txtCol[2], txtA); ctx.moveTo(x + w / 2 - tw / 2, y + h / 2 + fs * 0.36); ctx.showText(label)
     return w
 }
 const HYPRBINDS = [

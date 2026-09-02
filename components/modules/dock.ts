@@ -6,7 +6,7 @@ import { toggleModal, isModalOpen, onModalChange } from "./cmodal.ts"
 import { toggleNotifHud, isNotifHudOpen, onNotifHudChange, notifCount } from "./notifmessages.ts"
 import { togglePlayer, isPlayerOpen, onPlayerChange, playPauseActive } from "./player.ts"
 import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
-import { NEON, f, RGB, onColorChange, imgTint, neonBtn } from "./colors.ts"
+import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./colors.ts"
 const NOTIF_RED: RGB = NEON.notifbadge
 import { CYBER_DIR } from "../../env.ts"
 
@@ -184,7 +184,8 @@ const VertDock = () => {
       const oc: [number, number][] = [[bx + bv, by], [bx + bw - bv, by], [bx + bw, by + bv], [bx + bw, by + bh - bv], [bx + bw - bv, by + bh], [bx + bv, by + bh], [bx, by + bh - bv], [bx, by + bv]]
       const op = oc.map(([u, v]) => vsp.project(u, v))
       ctx.newPath(); op.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-      ctx.setSourceRGBA(NEON.badge[0] / 255, NEON.badge[1] / 255, NEON.badge[2] / 255, 0.92); ctx.fill()
+      const nbc = notifBubble.value ?? NEON.press
+      ctx.setSourceRGBA(nbc[0] / 255, nbc[1] / 255, nbc[2] / 255, 0.92); ctx.fill()
       const ccx = op.reduce((s, p) => s + p[0], 0) / 8, ccy = op.reduce((s, p) => s + p[1], 0) / 8
       const ang = Math.atan2(op[1][1] - op[0][1], op[1][0] - op[0][0])
       const psc = Math.hypot(op[2][0] - op[1][0], op[2][1] - op[1][1]) / bv

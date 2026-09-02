@@ -588,8 +588,9 @@ if [ ! -f "$HYLUA" ] && [ -f "$HYDIR/hyprland.conf" ]; then
   warn "hyprland.conf exists but hyprland.lua takes precedence — once the .lua exists, the .conf is ignored."
   warn "Migrate your old .conf settings into the .lua (or keep them; the theme ships in the .lua)."
 fi
-WRAPLUA='package.path = os.getenv("HOME") .. "/.config/hypr/themes/cyberpunk/?.lua;" .. (package.path or "")
+WRAPLUA='package.path = os.getenv("HOME") .. "/.config/hypr/themes/cyberpunk/?.lua;" .. os.getenv("HOME") .. "/.config/hypr/?.lua;" .. (package.path or "")
 require("theme")
+require("user")
 '
 if [ -f "$HYLUA" ] && grep -q 'themes/cyberpunk/theme.lua' "$HYLUA"; then
   ok "theme already loads from $HYLUA"
@@ -607,9 +608,65 @@ else
       ok "created $HYLUA"
     fi
   else
-    warn "add these two lines to $HYLUA yourself:"
+    warn "add these lines to $HYLUA yourself:"
     printf "    ${B}package.path = os.getenv(\"HOME\") .. \"/.config/hypr/themes/cyberpunk/?.lua;\" .. (package.path or \"\")${R}\n"
     printf "    ${B}require(\"theme\")${R}\n"
+    printf "    ${B}require(\"user\")${R}\n"
+  fi
+fi
+
+hdr "HYPRLAND · user.lua template"
+USERLUA="$HYDIR/user.lua"
+if [ -f "$USERLUA" ]; then
+  ok "user.lua already present at $USERLUA"
+else
+  printf "[!] Create %s from the cyberpunk template? (y/N) " "$USERLUA"
+  read -r ans </dev/tty
+  if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+    cat > "$USERLUA" <<'USEREOF'
+if _G.__cyberpunk_user_loaded then return end
+if not _G.__cyberpunk_user_scan then _G.__cyberpunk_user_loaded = true end
+
+local cyberpunk = os.getenv("HOME") .. "/.config/hypr/themes/cyberpunk"
+local augSock   = os.getenv("XDG_RUNTIME_DIR") .. "/astal/cyberpunk.sock"
+
+local once = function(cmd)
+    hl.on("hyprland.start", function() hl.exec_cmd(cmd) end)
+end
+
+local function sock(msg)
+    return hl.dsp.exec_cmd('echo "' .. msg .. '" | socat - UNIX-CONNECT:' .. augSock)
+end
+
+local function app(path)
+    return hl.dsp.exec_cmd(cyberpunk .. "/" .. path)
+end
+
+local function rawbind(combo, run, opts)
+    if opts then hl.bind(combo, run, opts) else hl.bind(combo, run) end
+end
+
+CD = CD or {}
+CD.sock = sock
+CD.app  = app
+
+once("pgrep hypridle >/dev/null 2>&1 || hypridle")
+once("copyq --start-server")
+once("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
+once("nm-applet --indicator")
+once("blueman-applet")
+once(cyberpunk .. "/scripts/overkill prewarm")
+
+hl.define_submap("kill", function()
+    hl.bind("mouse:272", app("scripts/overkill kill"))
+    hl.bind("escape",    app("scripts/overkill exit"))
+end)
+
+USEREOF
+    ok "created user.lua template at $USERLUA"
+    warn "edit $USERLUA to add your own hl.bind, CD.rebind, or CD.add calls."
+  else
+    warn "user.lua not created |::| theme's keybinds.lua will skip CD.rebind/CD.add until it exists."
   fi
 fi
 
