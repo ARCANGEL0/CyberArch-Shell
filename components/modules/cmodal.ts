@@ -11,7 +11,7 @@ import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 import { Anchor } from "./widget.ts"
 import {
     Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
-    makeModalPlane, drawGlass, txt, pango, pip, projQuad, segParam, warpReveal, setTxtFX,
+    makeModalPlane, drawGlass, txt, pango, warpReveal, unwarpRevealPoint, setTxtFX,
 } from "./glass.ts"
 import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
@@ -154,7 +154,7 @@ export const createModal = (spec) => {
     let hitRegions: any[] = [], drag: any = null, hoverKey: any = null, pressKey: any = null, dragKey: any = null, lastXY: any = null
     const ctrl: any = { name }
 
-    const push: any = (reg) => { reg.quad = projQuad(plane, reg.bx0, reg.by0, reg.bx1, reg.by1); hitRegions.push(reg) }
+    const push: any = (reg) => { hitRegions.push(reg) }
     push.hoverKey = null
     push.pressKey = null
     push.dragKey = null
@@ -231,14 +231,21 @@ export const createModal = (spec) => {
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
     const wbtn = (e) => { try { return e.get_button?.()[1] ?? e.button } catch { return 1 } }
     const xy = (e) => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1], c[2]] } catch {} try { const x = e.x, y = e.y; if (x != null && y != null) return [x, y] } catch {} return [0, 0] }
+    const localPoint = (e) => { const [x, y] = xy(e); return unwarpRevealPoint(x, y, plane, W, H, intro, seed) }
+    const contains = (r, x, y) => x >= Math.min(r.bx0, r.bx1) && x <= Math.max(r.bx0, r.bx1) && y >= Math.min(r.by0, r.by1) && y <= Math.max(r.by0, r.by1)
+    const sliderParam = (r, x, y) => {
+        const dx = r.u1 - r.u0, dy = r.v1 - r.v0, len2 = dx * dx + dy * dy || 1
+        return Math.max(0, Math.min(1, ((x - r.u0) * dx + (y - r.v0) * dy) / len2))
+    }
     evt.connect("button-press-event", (_w, e) => {
         if (!visible) return true
-        const [x, y] = xy(e); const b = wbtn(e)
+        const point = localPoint(e); if (!point) return false
+        const [x, y] = point; const b = wbtn(e)
         let hit = false
         for (const r of hitRegions) {
-            if (pip(x, y, r.quad)) {
+            if (contains(r, x, y)) {
                 hit = true
-                if (r.kind === "sld") { drag = r; dragKey = r.key; r.on(segParam(plane, r.u0, r.v0, r.u1, r.v1, x, y)); area.queue_draw() }
+                if (r.kind === "sld") { drag = r; dragKey = r.key; r.on(sliderParam(r, x, y)); area.queue_draw() }
                 else if (b === 3 && r.onRight) r.onRight()
                 else if (r.on) { if (r.key) { pressKey = r.key; area.queue_draw() }; r.on() }
                 break
@@ -248,11 +255,13 @@ export const createModal = (spec) => {
     })
     evt.connect("motion-notify-event", (_w, e) => {
         if (!visible) return false
-        const [x, y] = xy(e)
+        const point = localPoint(e)
+        if (!point) { if (hoverKey !== null) { hoverKey = null; area.queue_draw() }; return false }
+        const [x, y] = point
         lastXY = [x, y]
-        if (drag) { drag.on(segParam(plane, drag.u0, drag.v0, drag.u1, drag.v1, x, y)); area.queue_draw(); return false }
+        if (drag) { drag.on(sliderParam(drag, x, y)); area.queue_draw(); return false }
         let nk: any = null
-        for (const r of hitRegions) { if (r.hoverable && pip(x, y, r.quad)) { nk = r.key; break } }
+        for (const r of hitRegions) { if (r.hoverable && contains(r, x, y)) { nk = r.key; break } }
         if (nk !== hoverKey) { hoverKey = nk; area.queue_draw() }
         return false
     })
@@ -606,7 +615,7 @@ const VolCtrl = () => {
             if (!xy) return
             const [x, y] = xy
             for (const r of ctrl.hitRegions()) {
-                if (r.scrollFn && r.kind === "sld" && pip(x, y, r.quad)) {
+                if (r.scrollFn && r.kind === "sld" && x >= Math.min(r.bx0, r.bx1) && x <= Math.max(r.bx0, r.bx1) && y >= Math.min(r.by0, r.by1) && y <= Math.max(r.by0, r.by1)) {
                     const cur = r.curVal ?? 0
                     const nv = Math.max(0, Math.min(1.5, cur + dir * (r.scrollStep || 0.05)))
                     r.scrollFn(nv)
