@@ -1,5 +1,6 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
+import { execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 
 export type RGB = [number, number, number]
@@ -388,6 +389,7 @@ const MAP_ACCENT: Record<string, MapAccent> = {
     ARCTIC: { clock: [255, 255, 255], city: [130, 220, 255], forecast: null },
     SYNTHWAVE: { clock: [255, 60, 220], city: [100, 255, 170], forecast: [255, 60, 220] },
     JOHNNY: { clock: [255, 208, 60], city: [176, 255, 157], forecast: null },
+    GHOST: { clock: [0, 208, 60], city: [176, 255, 157], forecast: null },
 }
 export const mapAccent = { ...MAP_ACCENT_DEF }
 const updateMapAccent = (name: string) => {
@@ -454,6 +456,13 @@ export const hexToRgb = (hex: string): RGB | null => {
 export const rgbToHex = ([r, g, b]: RGB) =>
     "#" + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("")
 
+// each theme has its own .toml terminal file, this maps them
+const RIO_STYLES: Record<string, string> = { GHOST: "ghost", KITTY: "kitty", SYNTHWAVE: "synthwave", ARCTIC: "arctic", BLOODMOON: "bloodmoon", DARK: "dark", JOHNNY: "johnny" }
+
+const applyRioStyle = (name: string) => {
+    execAsync([`${CYBER_DIR}/scripts/rio-style`, RIO_STYLES[name] ?? "cybercore"]).catch(() => "")
+}
+
 export const applyPalette = (name: string) => {
     const p = PALETTES[name]
     if (!p) return
@@ -470,6 +479,7 @@ export const applyPalette = (name: string) => {
     updateLauncherLabelTint(name)
     updateRadioBg(name)
     updateNotifBubble(name)
+    applyRioStyle(name)
 }
 
 export const getPaletteName = (): string => {
@@ -513,6 +523,7 @@ export const loadUserColors = (): void => {
         updateLauncherLabelTint(getPaletteName())
         updateRadioBg(getPaletteName())
         updateNotifBubble(getPaletteName())
+        applyRioStyle(getPaletteName())
     } catch (e) { print("[color] load:", e) }
 }
 

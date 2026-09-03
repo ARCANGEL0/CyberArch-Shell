@@ -8,27 +8,29 @@ filter_linear0 = true
 
 shader1 = blur_horiz.slang
 alias1 = blur1
-scale_1 = 1.0
+scale1 = 1.0
 scale_type1 = source
 filter_linear1 = true
 
 shader2 = blur_vert.slang
 alias2 = blur2
-scale_2 = 1.0
+scale2 = 1.0
 scale_type2 = source
 filter_linear2 = true
 
-shader3 = newpixie-crt.slang
+shader3 = kitty-pop.slang
 filter_linear3 = true
 scale_type3 = viewport
 
-vignette = 0.72
-ghosting = 1.8
-use_frame = 0.0
-wiggle_toggle = 0.0
-scanroll = 1.0
+acc_modulate = 0.22
+blur_x = 2.20
+blur_y = 2.20
 
-textures = "frametexture"
-frametexture = __RIO_IMAGES__/crtframe.png
-frametexture_linear = true
-frametexture_wrap_mode = clamp_to_border
+vignette = 0.55
+ghosting = 0.45
+
+textures = "kittytex"
+kittytex = __RIO_IMAGES__/kitty.png
+kittytex_linear = true
+kittytex_wrap_mode = clamp_to_border
+kittytex_mipmap = false

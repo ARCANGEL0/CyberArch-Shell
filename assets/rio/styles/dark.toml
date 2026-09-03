@@ -1,10 +1,10 @@
-theme = "cybercore"
+theme = "crimson"
 
 draw-bold-text-with-light-colors = true
 
-line-height = 1.18
+line-height = 1.16
 
-margin = [14, 18, 10, 18]
+margin = [14, 20, 18, 20]
 
 scrollback-history-limit = 20000
 confirm-before-quit = true
@@ -14,14 +14,14 @@ hide-mouse-cursor-when-typing = true
 
 [colors]
 
-cursor = "#00ffff"
-vi-cursor = "#00ffff"
-selection-background = "#c4d8f2"
-selection-foreground = "#00ffff"
+cursor = "#FF142D"
+vi-cursor = "#FF6B7C"
+selection-background = "#4A0A14"
+selection-foreground = "#FFFFFF"
 
 [window]
-opacity = 0.97
-opacity-cells = true
+opacity = 0.0
+opacity-cells = false
 blur = true
 decorations = "Enabled"
 
@@ -65,7 +65,7 @@ blinking-interval = 600
 [effects]
 trail-cursor = true
 custom-mouse-cursor = false
-trail-cursor-color = "#00ffff"
+trail-cursor-color = "#FF142D"
 
 [navigation]
 mode = "Tab"
@@ -78,28 +78,28 @@ enable-scroll-bar = true
 
 [[navigation.color-automation]]
 program = "nvim"
-color = "#00F0FF"
+color = "#FF3B52"
 
 [[navigation.color-automation]]
 program = "vim"
-color = "#00F0FF"
+color = "#FF3B52"
 
 [[navigation.color-automation]]
 program = "ssh"
-color = "#FF2FD6"
+color = "#8C9299"
 
 [[navigation.color-automation]]
 program = "sudo"
-color = "#FF2E6E"
+color = "#FF142D"
 
 [[navigation.color-automation]]
 program = "btop"
-color = "#31FFB0"
+color = "#C6CAD0"
 
 [panel]
 padding = [6]
 border-width = 1
-border-radius = 6
+border-radius = 9
 row-gap = 4
 column-gap = 4
 
@@ -112,6 +112,6 @@ audio = true
 
 [renderer]
 backend = "Webgpu"
-filters = ["__RIO_SHADER__/newpixie-crt.slangp"]
+filters = ["__RIO_SHADERS__/crimson-smooth/crimson-smooth.slangp"]
 strategy = "events"
 disable-unfocused-render = false

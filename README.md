@@ -89,7 +89,7 @@ This is my attempt to recreate Cyberpunk 2077 UI entirely on **Hyprland**, using
   
 - **Quickshell lockscreen** -> ANimated loginscreen with qs.
  
-- **Terminals** -> Installs Rio Terminal for 'glassy cyan' cyber terminals, and Cool-Retro-Term by Swordfish90, and sets a 'Netrunner' profile for default, in same style of the terminal windows in-game, along with an optional fish installation and 'SAMURAI' banner.
+- **Terminal** -> Installs Cool-Retro-Term by Swordfish90 with a red 'Netrunner' profile, in same style of the terminal windows in-game, and the theme default terminal (Rio GPU Terminal) with _custom frames/colors/layouts_ for each theme applied on CyberArch, each theme loads a different .toml theme configuration. Along with an optional fish installation and 'SAMURAI' banner.
 
 ---
 

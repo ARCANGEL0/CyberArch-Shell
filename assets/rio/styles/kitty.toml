@@ -1,0 +1,130 @@
+theme = "kitty-pop"
+
+draw-bold-text-with-light-colors = true
+
+line-height = 1.16
+
+margin = [14, 18, 10, 18]
+
+scrollback-history-limit = 20000
+confirm-before-quit = true
+copy-on-select = false
+hide-mouse-cursor-when-typing = true
+
+
+[window]
+opacity = 0.0
+opacity-cells = false
+blur = true
+decorations = "Enabled"
+
+[fonts]
+family = "Fantasque Sans Mono"
+size = 17
+use-drawable-chars = true
+hinting = true
+features = ["calt", "liga"]
+disable-warnings-not-found = false
+
+
+
+symbol-map = [
+  { start = "23FB", end = "23FF", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E000", end = "E00B", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E0A0", end = "E0A4", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E0B0", end = "E0D8", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E200", end = "E2AA", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E300", end = "E3E4", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E5FA", end = "E6B8", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "E700", end = "E8F0", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "EA60", end = "EC1F", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "ED00", end = "EFCF", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "F300", end = "F382", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "F400", end = "F534", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "F0001", end = "F1AF1", "font-family" = "Symbols Nerd Font Mono" },
+  { start = "21D0", end = "21FF", "font-family" = "DejaVu Sans" },
+  { start = "1F300", end = "1FAFF", "font-family" = "Noto Color Emoji" },
+
+  { start = "2600", end = "26A1", "font-family" = "DejaVu Sans" },
+  { start = "26A2", end = "276C", "font-family" = "DejaVu Sans" },
+  { start = "2772", end = "27C0", "font-family" = "DejaVu Sans" },
+]
+
+[fonts.regular]
+family = "Fantasque Sans Mono"
+style = "Normal"
+weight = 400
+
+[fonts.bold]
+family = "Fantasque Sans Mono"
+style = "Normal"
+weight = 700
+
+[fonts.italic]
+family = "Fantasque Sans Mono"
+style = "Italic"
+weight = 400
+
+[fonts.bold-italic]
+family = "Fantasque Sans Mono"
+style = "Italic"
+weight = 700
+
+[cursor]
+shape = "block"
+blinking = true
+blinking-interval = 550
+
+[effects]
+trail-cursor = true
+custom-mouse-cursor = false
+trail-cursor-color = "#FFC2E6"
+
+[navigation]
+mode = "Tab"
+hide-if-single = true
+use-split = true
+current-working-directory = true
+unfocused-split-opacity = 0.55
+enable-scroll-bar = true
+
+
+[[navigation.color-automation]]
+program = "nvim"
+color = "#FFC2E6"
+
+[[navigation.color-automation]]
+program = "vim"
+color = "#FFC2E6"
+
+[[navigation.color-automation]]
+program = "ssh"
+color = "#E3CCFF"
+
+[[navigation.color-automation]]
+program = "sudo"
+color = "#FFB3C7"
+
+[[navigation.color-automation]]
+program = "btop"
+color = "#F0CBFF"
+
+[panel]
+padding = [6]
+border-width = 1
+border-radius = 10
+row-gap = 4
+column-gap = 4
+
+[title]
+content = "{{ title || program }}"
+placeholder = "♡ rio"
+
+[bell]
+audio = true
+
+[renderer]
+backend = "Webgpu"
+filters = ["__RIO_SHADERS__/kitty-pop/kitty-pop.slangp"]
+strategy = "events"
+disable-unfocused-render = false

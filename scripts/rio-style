@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# stuff to change theme. this script copies the respective .toml file over config.toml, so switching
+# theme changes the terminal theme too basically. keep it cp and not mv, rio watches config.toml by
+# inode and mv makes it lose track of the file
+set -u
+STYLE="${1:-cybercore}"
+RIO="${XDG_CONFIG_HOME:-$HOME/.config}/rio"
+SRC="$RIO/styles/$STYLE.toml"
+[ -f "$SRC" ] || exit 0
+[ -f "$RIO/config.toml" ] && [ "$(cat "$RIO/.rio-style" 2>/dev/null)" = "$STYLE" ] && exit 0
+cp "$SRC" "$RIO/config.toml"
+printf '%s\n' "$STYLE" > "$RIO/.rio-style"

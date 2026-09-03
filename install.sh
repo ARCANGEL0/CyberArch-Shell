@@ -1046,11 +1046,6 @@ gt_rust_err() { rustc -vV 2>&1 | grep -v '^$' | head -1; }
 if [ ! -d "$GTSRC" ]; then
   warn "GPU Terminal assets missing. |::| Skipping..."
 else
-  printf "[!] Install custom terminal to match theme? (y/N) "
-  read -r ans </dev/tty
-  if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then
-    warn "GPU Terminal not installed. |::| Skipping..."
-  else
     GT_OK=0
     GT_DEPS="rust llvm-libs cmake pkgconf binutils fontconfig freetype2 libxkbcommon wayland vulkan-icd-loader mesa glibc lib32-glibc"
     step "installing rust toolchain + build dependencies..."
@@ -1082,16 +1077,28 @@ else
       fi
     fi
     if [ "$GT_OK" = 1 ]; then
-      step "deploying terminal theme and CRT shader..."
-      mkdir -p "$GTCFG/themes" "$GTCFG/shaders" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
+      step "deploying terminal styles and GPU shaders..."
+      # rio stuff is split in 3 folders, styles/ is a full config.toml for each theme, themes/ is just
+      # the colors and shaders/ has the .slangp chain per look. rio-style copies the style over
+      # config.toml when u switch theme
+      mkdir -p "$GTCFG/themes" "$GTCFG/shaders" "$GTCFG/styles" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
       if [ -f "$GTCFG/config.toml" ] && [ ! -f "$GTCFG/config.toml.pre-cyberpunk" ]; then
         cp "$GTCFG/config.toml" "$GTCFG/config.toml.pre-cyberpunk" && ok "previous terminal config backed up"
       fi
-      cp "$GTSRC/config.toml" "$GTCFG/config.toml"
+      cp "$GTSRC/styles/"*.toml "$GTCFG/styles/"
       cp "$GTSRC/themes/"*.toml "$GTCFG/themes/"
-      rm -rf "$GTCFG/shaders/newpixie-flat"
-      cp -r "$GTSRC/shaders/newpixie-flat" "$GTCFG/shaders/"
-      sed -i "s|__RIO_SHADER__|$GTCFG/shaders/newpixie-flat|g" "$GTCFG/config.toml"
+      for d in "$GTSRC/shaders/"*/; do
+        n="$(basename "$d")"
+        rm -rf "$GTCFG/shaders/$n"
+        cp -r "$d" "$GTCFG/shaders/"
+      done
+      sed -i "s|__RIO_SHADERS__|$GTCFG/shaders|g" "$GTCFG/styles/"*.toml
+      for f in "$GTCFG/shaders/"*/*.slangp; do
+        [ -f "$f" ] && sed -i "s|__RIO_IMAGES__|$GTSRC/images|g" "$f"
+      done
+      cp "$GTCFG/styles/cybercore.toml" "$GTCFG/config.toml"
+      printf 'cybercore\n' > "$GTCFG/.rio-style"
+      ok "terminal styles installed |::| cybercore active, the GHOST/KITTY/SYNTHWAVE/ARCTIC/BLOODMOON/DARK/JOHNNY palettes swap in their own"
       sed "s|__RIO_BIN__|$GTBIN|g" "$GTSRC/desktop/rio.desktop" > "$HOME/.local/share/applications/rio.desktop"
       cp "$GTSRC/desktop/rio.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/rio.svg"
       mkdir -p "$HOME/.local/bin"
@@ -1104,7 +1111,6 @@ else
       gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
       ok "Cyber Terminal installed |::| use $GTKEY to open the Terminal."
     fi
-  fi
 fi
 
 hdr "ACTIVATE THEMING"

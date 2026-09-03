@@ -8,27 +8,23 @@ filter_linear0 = true
 
 shader1 = blur_horiz.slang
 alias1 = blur1
-scale_1 = 1.0
+scale1 = 1.0
 scale_type1 = source
 filter_linear1 = true
 
 shader2 = blur_vert.slang
 alias2 = blur2
-scale_2 = 1.0
+scale2 = 1.0
 scale_type2 = source
 filter_linear2 = true
 
-shader3 = newpixie-crt.slang
+shader3 = bloodmoon-veil.slang
 filter_linear3 = true
 scale_type3 = viewport
 
-vignette = 0.72
-ghosting = 1.8
-use_frame = 0.0
-wiggle_toggle = 0.0
-scanroll = 1.0
+acc_modulate = 0.10
+blur_x = 4.25
+blur_y = 4.25
 
-textures = "frametexture"
-frametexture = __RIO_IMAGES__/crtframe.png
-frametexture_linear = true
-frametexture_wrap_mode = clamp_to_border
+veil = 1.00
+glow = 1.00
