@@ -116,7 +116,11 @@ export const segParam = (plane: Plane, u0, v0, u1, v1, px, py) => {
 
 
 const REVEAL_BANDS = 9
-const REVEAL_SLICES = 240
+const REVEAL_SLICES = 72
+const planeFit = (plane: Plane, PW, PH) => {
+    const o = plane.project(0, 0), e = plane.project(PW, PH)
+    return { ox: o[0], oy: o[1], fx: (e[0] - o[0]) / PW, fy: (e[1] - o[1]) / PH }
+}
 const revealState = (intro, seed, PH) => {
     const e = intro, full = e >= 0.999
     const ease = full ? 1 : e * e * (3 - 2 * e)
@@ -144,6 +148,12 @@ const revealSlice = (plane: Plane, PW, PH, state, i) => {
 
 export const unwarpRevealPoint = (px, py, plane: Plane, PW, PH, intro, seed): [number, number] | null => {
     const state = revealState(intro, seed, PH)
+    if (state.full) {
+        const { ox, oy, fx, fy } = planeFit(plane, PW, PH)
+        const u = (px - ox) / fx, v = (py - oy) / fy
+        if (u < 0 || u > PW || v < -0.4 || v > PH + 1.9) return null
+        return [u, Math.max(0, Math.min(PH, v))]
+    }
     for (let i = REVEAL_SLICES - 1; i >= 0; i--) {
         const b = revealSlice(plane, PW, PH, state, i)
         const dx = px - b.x, dy = py - b.y
@@ -157,6 +167,14 @@ export const unwarpRevealPoint = (px, py, plane: Plane, PW, PH, intro, seed): [n
 
 export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed, ss = 1) => {
     const state = revealState(intro, seed, PH)
+    if (state.full) {
+        const { ox, oy, fx, fy } = planeFit(plane, PW, PH)
+        screenCtx.save()
+        screenCtx.translate(ox, oy); screenCtx.scale(fx / ss, fy / ss)
+        screenCtx.setSourceSurface(surf, 0, 0); screenCtx.paint()
+        screenCtx.restore()
+        return
+    }
     for (let i = 0; i < REVEAL_SLICES; i++) {
         const b = revealSlice(plane, PW, PH, state, i)
         const { v0, v1 } = b
@@ -167,20 +185,18 @@ export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed, s
         screenCtx.setSourceSurface(surf, 0, -v0 * ss); screenCtx.paint()
         screenCtx.restore()
     }
-    if (!state.full) {
-        const { dec, slideX } = state
-        screenCtx.setOperator(12); screenCtx.setLineJoin(0)
-        for (let b = 1; b < REVEAL_BANDS; b++) {
-            const v = b * PH / REVEAL_BANDS, off = 3 + dec * 6, a = dec * 0.6
-            const l = plane.project(14, v), rp = plane.project(PW - 14, v)
-            screenCtx.setLineWidth(1.6)
-            screenCtx.setSourceRGBA(RED[0], RED[1], RED[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] - off, l[1]); screenCtx.lineTo(rp[0] - off, rp[1]); screenCtx.stroke()
-            screenCtx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] + off, l[1]); screenCtx.lineTo(rp[0] + off, rp[1]); screenCtx.stroke()
-        }
-        const a0 = plane.project(14, 0), a1 = plane.project(14, PH)
-        const er = CYAN[0] + (1 - CYAN[0]) * 0.75, eg = CYAN[1] + (1 - CYAN[1]) * 0.75, eb = CYAN[2] + (1 - CYAN[2]) * 0.75
-        screenCtx.setSourceRGBA(er, eg, eb, dec * 0.85); screenCtx.setLineWidth(2.4)
-        screenCtx.newPath(); screenCtx.moveTo(a0[0] + slideX, a0[1]); screenCtx.lineTo(a1[0] + slideX, a1[1]); screenCtx.stroke()
-        screenCtx.setOperator(2)
+    const { dec, slideX } = state
+    screenCtx.setOperator(12); screenCtx.setLineJoin(0)
+    for (let b = 1; b < REVEAL_BANDS; b++) {
+        const v = b * PH / REVEAL_BANDS, off = 3 + dec * 6, a = dec * 0.6
+        const l = plane.project(14, v), rp = plane.project(PW - 14, v)
+        screenCtx.setLineWidth(1.6)
+        screenCtx.setSourceRGBA(RED[0], RED[1], RED[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] - off, l[1]); screenCtx.lineTo(rp[0] - off, rp[1]); screenCtx.stroke()
+        screenCtx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] + off, l[1]); screenCtx.lineTo(rp[0] + off, rp[1]); screenCtx.stroke()
     }
+    const a0 = plane.project(14, 0), a1 = plane.project(14, PH)
+    const er = CYAN[0] + (1 - CYAN[0]) * 0.75, eg = CYAN[1] + (1 - CYAN[1]) * 0.75, eb = CYAN[2] + (1 - CYAN[2]) * 0.75
+    screenCtx.setSourceRGBA(er, eg, eb, dec * 0.85); screenCtx.setLineWidth(2.4)
+    screenCtx.newPath(); screenCtx.moveTo(a0[0] + slideX, a0[1]); screenCtx.lineTo(a1[0] + slideX, a1[1]); screenCtx.stroke()
+    screenCtx.setOperator(2)
 }
