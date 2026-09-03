@@ -52,18 +52,21 @@ Rectangle {
     property real cityLon: 0
 
     Component.onCompleted: {
-        try {
-            var xhr = new XMLHttpRequest()
-            xhr.open("GET", "file://" + sddm.homeDir + "/.config/hypr/themes/cyberpunk/config/city.json", false)
-            xhr.send()
-            if (xhr.status === 200 || xhr.status === 0) {
+        var cityPaths = ["/.local/share/cyberdeck/city.json", "/.config/hypr/themes/cyberpunk/config/city.json"]
+        for (var i = 0; i < cityPaths.length; i++) {
+            try {
+                var xhr = new XMLHttpRequest()
+                xhr.open("GET", "file://" + sddm.homeDir + cityPaths[i], false)
+                xhr.send()
+                if (!xhr.responseText) continue
                 var o = JSON.parse(xhr.responseText)
                 if (o.name) root.cityName = String(o.name).toUpperCase()
                 if (o.full) root.cityFull = String(o.full).toUpperCase()
                 if (typeof o.lat === "number") root.cityLat = o.lat
                 if (typeof o.lon === "number") root.cityLon = o.lon
-            }
-        } catch(e) {}
+                break
+            } catch(e) {}
+        }
         root.loadNewsCache()
         root.ui = 1; fadeIn.start(); riseIn.start(); pwd.forceActiveFocus(); focusRetry.restart()
         root.sessionSig = root.genSig()

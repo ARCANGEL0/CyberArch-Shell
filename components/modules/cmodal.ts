@@ -7,7 +7,7 @@ const SS_DEFAULT = 1
 import { execAsync, interval, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
-import { CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 import { Anchor } from "./widget.ts"
 import {
     Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
@@ -1548,9 +1548,9 @@ const HYPRBINDS = [
 ]
 const readThemeMod = () => {
     try {
-        const [ok, bytes] = GLib.file_get_contents(`${CYBER_DIR}/config/user_keybinds.lua`)
+        const [ok, bytes] = GLib.file_get_contents(USER_LUA)
         if (ok) {
-            const m = new TextDecoder().decode(bytes).match(/themeMod\s*=\s*"([^"]+)"/m)
+            const m = new TextDecoder().decode(bytes).match(/CD\.themeMod\(\s*["']([^"']+)["']\s*\)/m)
             if (m) return m[1].trim().replace(/\s*\+\s*/g, " + ")
         }
     } catch { }

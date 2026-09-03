@@ -4,6 +4,13 @@
 ## waits for the wayland socket, then starts awww daemon b4 setting the image
 set -u
 wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
+wallpaper_conf="${HOME}/.local/share/cyberdeck/wallpaper"
+if [ -r "$wallpaper_conf" ]; then
+    read -r user_wallpaper <"$wallpaper_conf" || user_wallpaper=""
+    if [ -n "$user_wallpaper" ] && [ -r "$user_wallpaper" ]; then
+        wallpaper="$user_wallpaper"
+    fi
+fi
 cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/awww"
 mkdir -p "$cache_dir"
 

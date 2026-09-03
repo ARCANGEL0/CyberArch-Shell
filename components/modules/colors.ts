@@ -1,7 +1,7 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
 import { execAsync } from "astal"
-import { CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR } from "../../env.ts"
 
 export type RGB = [number, number, number]
 
@@ -652,7 +652,7 @@ export const setUserAlpha = (key: string, a: number) => {
 }
 
 const COLOR_KEYS = Object.keys(NEON)
-const USER_PATH = `${CYBER_DIR}/config/user_colors.lua`
+const USER_PATH = `${USER_DIR}/user_colors.lua`
 
 export const loadUserColors = (): void => {
     try {
@@ -693,7 +693,7 @@ export const saveUserColors = (): void => {
                 : `users["${k}"] = { ${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${a.toFixed(3)} }\n`
         }
         for (const k of Object.keys(OVR)) if (OVR[k]) out += `over["${k}"] = true\n`
-        const dir = `${CYBER_DIR}/config`
+        const dir = USER_DIR
         GLib.mkdir_with_parents(dir, 0o755)
         GLib.file_set_contents(USER_PATH, out)
     } catch (e) { print("[color] save:", e) }

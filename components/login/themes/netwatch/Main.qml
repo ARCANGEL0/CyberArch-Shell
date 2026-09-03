@@ -53,7 +53,7 @@ Rectangle {
     property string cityFull: "UNKNOWN LOCATION"
     property real cityLat: 0
     property real cityLon: 0
-    Process { id: cityProc; command: ["sh","-c","cat ~/.config/hypr/themes/cyberpunk/config/city.json 2>/dev/null || echo '{}'"]; running: true
+    Process { id: cityProc; command: ["sh","-c","cat ~/.local/share/cyberdeck/city.json 2>/dev/null || cat ~/.config/hypr/themes/cyberpunk/config/city.json 2>/dev/null || echo '{}'"]; running: true
         stdout: StdioCollector { onStreamFinished: {
             try {
                 var o = JSON.parse(this.text)
