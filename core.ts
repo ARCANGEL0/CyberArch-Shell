@@ -41,7 +41,17 @@ import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
 
+const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = `${COMPONENTS_DIR}/style/cyber.css`
+
+const compileCss = async () => {
+ try {
+ await execAsync(["sassc", SCSS, CSS])
+ } catch (e) {
+ print("[cyberpunk] sassc:", e)
+ }
+ App.apply_css(CSS, true)
+}
 
 const hudWins = []
 const surface = (mon, name, anchor, child, extra = {}) => {
@@ -287,7 +297,7 @@ App.start({
 
 
  main() {
- App.apply_css(CSS, true)
+ compileCss()
  loadUserColors()
 
  for (const mon of (App as any).get_monitors()) {
