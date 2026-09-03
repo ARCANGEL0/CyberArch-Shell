@@ -116,7 +116,7 @@ export const segParam = (plane: Plane, u0, v0, u1, v1, px, py) => {
 
 
 const REVEAL_BANDS = 9
-const REVEAL_SLICES = 400
+const REVEAL_SLICES = 240
 const revealState = (intro, seed, PH) => {
     const e = intro, full = e >= 0.999
     const ease = full ? 1 : e * e * (3 - 2 * e)
@@ -174,11 +174,12 @@ export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed, s
             const v = b * PH / REVEAL_BANDS, off = 3 + dec * 6, a = dec * 0.6
             const l = plane.project(14, v), rp = plane.project(PW - 14, v)
             screenCtx.setLineWidth(1.6)
-            screenCtx.setSourceRGBA(1, 0.13, 0.24, a); screenCtx.newPath(); screenCtx.moveTo(l[0] - off, l[1]); screenCtx.lineTo(rp[0] - off, rp[1]); screenCtx.stroke()
-            screenCtx.setSourceRGBA(0.2, 1, 1, a); screenCtx.newPath(); screenCtx.moveTo(l[0] + off, l[1]); screenCtx.lineTo(rp[0] + off, rp[1]); screenCtx.stroke()
+            screenCtx.setSourceRGBA(RED[0], RED[1], RED[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] - off, l[1]); screenCtx.lineTo(rp[0] - off, rp[1]); screenCtx.stroke()
+            screenCtx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], a); screenCtx.newPath(); screenCtx.moveTo(l[0] + off, l[1]); screenCtx.lineTo(rp[0] + off, rp[1]); screenCtx.stroke()
         }
         const a0 = plane.project(14, 0), a1 = plane.project(14, PH)
-        screenCtx.setSourceRGBA(0.85, 0.98, 1, dec * 0.85); screenCtx.setLineWidth(2.4)
+        const er = CYAN[0] + (1 - CYAN[0]) * 0.75, eg = CYAN[1] + (1 - CYAN[1]) * 0.75, eb = CYAN[2] + (1 - CYAN[2]) * 0.75
+        screenCtx.setSourceRGBA(er, eg, eb, dec * 0.85); screenCtx.setLineWidth(2.4)
         screenCtx.newPath(); screenCtx.moveTo(a0[0] + slideX, a0[1]); screenCtx.lineTo(a1[0] + slideX, a1[1]); screenCtx.stroke()
         screenCtx.setOperator(2)
     }
