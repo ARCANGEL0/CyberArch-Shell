@@ -1,6 +1,6 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
-import { CYBER_DIR } from "../../env.ts"
+import { CONFIG_DIR } from "../../env.ts"
 
 export type RGB = [number, number, number]
 
@@ -490,7 +490,7 @@ export const setUserColor = (key: string, rgb: RGB) => { setColor(key, rgb) }
 export const getUserColor = (key: string): RGB => [NEON[key][0], NEON[key][1], NEON[key][2]] as RGB
 
 const COLOR_KEYS = Object.keys(NEON)
-const USER_PATH = `${CYBER_DIR}/config/user_colors.lua`
+const USER_PATH = `${CONFIG_DIR}/user_colors.lua`
 
 export const loadUserColors = (): void => {
     try {
@@ -523,8 +523,6 @@ export const saveUserColors = (): void => {
             const c = NEON[k]
             out += `users["${k}"] = { ${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])} }\n`
         }
-        const dir = `${CYBER_DIR}/config`
-        GLib.mkdir_with_parents(dir, 0o755)
         GLib.file_set_contents(USER_PATH, out)
     } catch (e) { print("[color] save:", e) }
 }
