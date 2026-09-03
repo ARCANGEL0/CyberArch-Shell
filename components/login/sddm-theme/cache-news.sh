@@ -3,7 +3,7 @@
 # run via cron: */10 * * * * ~/.config/hypr/themes/cyberpunk/components/login/sddm-theme/cache-news.sh
 
 CACHE="/tmp/cyberpunk-news-cache.json"
-CITY_FILE="$HOME/.local/share/cyberdeck/city.json"
+CITY_FILE="$HOME/.config/cyberarch/city.json"
 [ -r "$CITY_FILE" ] || CITY_FILE="$HOME/.config/hypr/themes/cyberpunk/config/city.json"
 
 strip_tags() { sed 's/<[^>]*>//g'; }

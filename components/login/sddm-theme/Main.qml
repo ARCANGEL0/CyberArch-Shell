@@ -52,7 +52,7 @@ Rectangle {
     property real cityLon: 0
 
     Component.onCompleted: {
-        var cityPaths = ["/.local/share/cyberdeck/city.json", "/.config/hypr/themes/cyberpunk/config/city.json"]
+        var cityPaths = ["/.config/cyberarch/city.json", "/.config/hypr/themes/cyberpunk/config/city.json"]
         for (var i = 0; i < cityPaths.length; i++) {
             try {
                 var xhr = new XMLHttpRequest()

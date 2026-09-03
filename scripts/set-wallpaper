@@ -3,13 +3,20 @@
 # FIX FOR THE AWWW ISSUES
 ## waits for the wayland socket, then starts awww daemon b4 setting the image
 set -u
-wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
-wallpaper_conf="${HOME}/.local/share/cyberdeck/wallpaper"
-if [ -r "$wallpaper_conf" ]; then
-    read -r user_wallpaper <"$wallpaper_conf" || user_wallpaper=""
-    if [ -n "$user_wallpaper" ] && [ -r "$user_wallpaper" ]; then
-        wallpaper="$user_wallpaper"
+wallpapers_path="${HOME}/Pictures/Wallpapers"
+wallpaper_lua="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch/wallpaper.lua"
+wallpaper="${wallpapers_path}/lucy.png"
+if [ -r "$wallpaper_lua" ]; then
+    lua_wallpaper="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$wallpaper_lua" | tail -n 1)"
+    if [ -n "${lua_wallpaper:-}" ]; then
+        wallpaper="$lua_wallpaper"
     fi
+fi
+if [ "$#" -ge 1 ] && [ -n "${1:-}" ]; then
+    wallpaper="$1"
+fi
+if [ ! -r "$wallpaper" ]; then
+    wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
 fi
 cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/awww"
 mkdir -p "$cache_dir"

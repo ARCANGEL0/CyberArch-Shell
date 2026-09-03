@@ -11,7 +11,17 @@ hl.exec_cmd("sh -c 'sleep 3; hyprctl dispatch exec \"dbus-update-activation-envi
 hl.exec_cmd("killall -9 waybar mako dunst swaync 2>/dev/null; systemctl --user stop waybar mako dunst swaync 2>/dev/null || true")
 hl.exec_cmd("sh -c 'pgrep -x gjs >/dev/null 2>&1 || { " .. os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null; sleep 1; " .. cyberpunk .. "/scripts/launch-theme; }'")
 hl.exec_cmd(cyberpunk .. "/scripts/ws pin")
-once("bash " .. cyberpunk .. "/scripts/set-wallpaper")
+local user_dir = os.getenv("HOME") .. "/.config/cyberarch"
+local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
+local set_wallpaper = wallpapers_path .. "/lucy.png"
+local wf = loadfile(user_dir .. "/wallpaper.lua")
+if wf then
+    local ok, res = pcall(wf)
+    if ok and type(res) == "string" and res ~= "" then
+        set_wallpaper = res
+    end
+end
+once("bash " .. cyberpunk .. "/scripts/set-wallpaper '" .. set_wallpaper .. "'")
 
 hl.exec_cmd("mkdir -p " .. os.getenv("HOME") .. "/.config/kitty && ln -sfn " .. cyberpunk .. "/assets/kitty/kitty.conf " .. os.getenv("HOME") .. "/.config/kitty/kitty.conf")
 hl.exec_cmd("mkdir -p " .. os.getenv("HOME") .. "/.local/share/icons && ln -sfn " .. cyberpunk .. "/assets/gtk/iconpack " .. os.getenv("HOME") .. "/.local/share/icons/iconpack")

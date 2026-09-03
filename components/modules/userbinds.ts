@@ -10,9 +10,7 @@
 
 import GLib from "gi://GLib"
 import { execAsync } from "astal"
-
-const HOME = GLib.get_home_dir()
-const USER_LUA = `${HOME}/.config/hypr/user.lua`
+import { USER_LUA } from "../../env.ts"
 
 export type Rebind = {
     action_id: string

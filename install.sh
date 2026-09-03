@@ -197,10 +197,41 @@ fi
 if [ -f "$THEME/assets/img/lucy_lock.mp4" ]; then
   cp -f "$THEME/assets/img/lucy_lock.mp4" "$LOGINDST/themes/netwatch/bg.mp4"
 fi
+USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch"
+WALLPAPERS_PATH="$HOME/Pictures/Wallpapers"
+mkdir -p "$USER_DIR" "$WALLPAPERS_PATH"
+if [ -d "$HOME/.local/share/cyberdeck" ]; then
+  for f in city.json markets.json user_colors.lua; do
+    if [ -f "$HOME/.local/share/cyberdeck/$f" ] && [ ! -f "$USER_DIR/$f" ]; then
+      cp -f "$HOME/.local/share/cyberdeck/$f" "$USER_DIR/$f"
+      ok "migrated $f → $USER_DIR/$f"
+    fi
+  done
+fi
 if [ -f "$THEME/assets/img/lucy_wallpaper.png" ]; then
   mkdir -p "$CANON/assets/img"
   cp -f "$THEME/assets/img/lucy_wallpaper.png" "$CANON/assets/img/lucy_wallpaper.png"
   ok "wallpaper deployed → $CANON/assets/img/lucy_wallpaper.png"
+  if [ ! -f "$WALLPAPERS_PATH/lucy.png" ]; then
+    cp -f "$THEME/assets/img/lucy_wallpaper.png" "$WALLPAPERS_PATH/lucy.png"
+    ok "wallpaper copied → $WALLPAPERS_PATH/lucy.png"
+  else
+    ok "wallpaper kept → $WALLPAPERS_PATH/lucy.png"
+  fi
+fi
+if [ ! -f "$USER_DIR/wallpaper.lua" ]; then
+  DEFAULT_WP="$WALLPAPERS_PATH/lucy.png"
+  OLD_WP="$HOME/.local/share/cyberdeck/wallpaper"
+  if [ -r "$OLD_WP" ]; then
+    read -r prev_wp <"$OLD_WP" || prev_wp=""
+    if [ -n "${prev_wp:-}" ] && [ -r "$prev_wp" ]; then
+      DEFAULT_WP="$prev_wp"
+    fi
+  fi
+  printf 'wallpaper = "%s"\nreturn wallpaper\n' "$DEFAULT_WP" > "$USER_DIR/wallpaper.lua"
+  ok "wallpaper.lua created → $USER_DIR/wallpaper.lua"
+else
+  ok "wallpaper.lua kept → $USER_DIR/wallpaper.lua"
 fi
 chmod +x "$LOGINDST/lock.sh" 2>/dev/null
 mkdir -p "$HOME/.config/qylock"
