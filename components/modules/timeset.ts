@@ -4,11 +4,12 @@ import Gio from "gi://Gio"
 import { execAsync } from "astal"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RED, RACC, Cairo, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
+import { USER } from "./colors.ts"
 
-const YEL: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
+const YEL: [number, number, number] = USER.amber
 const ARA: [number, number, number] = RACC
-const AC2: [number, number, number] = [1, 0.68, 0.7]
-const HOT: [number, number, number] = [255 / 255, 42 / 255, 58 / 255]
+const AC2: [number, number, number] = USER.glassacc
+const HOT: [number, number, number] = USER.red
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 

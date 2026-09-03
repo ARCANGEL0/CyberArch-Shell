@@ -1,7 +1,7 @@
 import { execAsync, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import { Keymode } from "./widget.ts"
-import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex } from "./colors.ts"
+import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
 import { createModal, drawBtn, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
@@ -42,7 +42,7 @@ export const ThemesCtrl = () => {
     ctrl = createModal({
         name: "themesettings", tabTitle: "THEME", ss: 2, W: 560, H: 860, yaw: 15, pitch: 0, roll: 0,
         anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
-        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
+        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
         onClose: () => {
             closeWheel()
             releaseKeys()
@@ -124,6 +124,78 @@ export const ThemesCtrl = () => {
     return ctrl
 }
 
+type ColRow = [string, string, boolean]
+const SECTIONS: [string, ColRow[]][] = [
+    ["// GENERAL", [
+        ["cyan", "ACCENT COLOR", false],
+        ["modalbg", "MODALS BACKGROUND", true],
+        ["glassacc", "MODALS FOREGROUND", false],
+        ["modalhov", "MODAL HOVER", false],
+        ["wheelbg", "WHEEL BACKGROUND", true],
+        ["wheelfg", "WHEEL FOREGROUND", false],
+    ]],
+    ["// GAUGE BARS", [
+        ["badge", "BADGE", false],
+        ["xpbar", "EXPERIENCE BAR", false],
+        ["cpu", "HEALTH BAR", false],
+        ["ram", "RAM BAR", false],
+        ["stamina", "STAMINA BAR", false],
+    ]],
+    ["// DOCK", [
+        ["dockv", "VERTICAL DOCK", false],
+        ["dockvh", "VERTICAL HOVER", false],
+        ["dockh", "HORIZONTAL DOCK", false],
+        ["dockhh", "HORIZONTAL HOVER", false],
+    ]],
+    ["// LAUNCHER", [
+        ["launchico", "LAUNCHER ICON", false],
+        ["launchlbl", "LAUNCHER LABEL", false],
+    ]],
+    ["// MINIMAP PANE", [
+        ["mapclock", "CLOCK", false],
+        ["mapcity", "CITY", false],
+        ["maptile", "MINIMAP TILE TINT", true],
+        ["mapaccent", "TEXT ACCENT", false],
+        ["mapwx", "WEATHER", false],
+    ]],
+    ["// NETWORK", [
+        ["netinfo", "NETWORK FOREGROUND", false],
+        ["netchip", "NETWORK CHIP", false],
+        ["netdown", "NET DOWNLOAD", false],
+        ["netup", "NET UPLOAD", false],
+    ]],
+    ["// MARKET", [
+        ["mktacc", "MARKET ACCENT", false],
+        ["mkthov", "MARKET HOVER", false],
+    ]],
+    ["// POPUPS", [
+        ["aurbg", "AUR FRAME BACKGROUND", true],
+        ["aurfg", "AUR FRAME FOREGROUND", false],
+        ["auricon", "AUR ICON", false],
+        ["aurlbl", "AUR LABELS", false],
+        ["notifbadge", "NOTIFICATION BADGE", false],
+        ["notifphone", "NOTIFICATION PHONE", false],
+        ["notifmail", "NOTIFICATION MAIL", false],
+        ["notifheads", "NOTIFICATION HEADSUP", false],
+        ["notiftitle", "NOTIFICATION TITLE", false],
+        ["notiffg", "NOTIFICATION FOREGROUND", false],
+        ["notifbg", "NOTIFICATION BACKGROUND", true],
+        ["notiflbl", "NOTIFICATION LABELS", false],
+    ]],
+    ["// RADIOPORT", [
+        ["radiotitle", "HEADER TITLE", false],
+        ["radiohdrbg", "HEADER BACKGROUND", true],
+        ["radioacc", "RADIOPORT ACCENT", false],
+        ["radiovol", "VOLUME FOREGROUND", false],
+        ["radiotrkfg", "TRACKS FOREGROUND", false],
+        ["radiotrkbg", "TRACKS BACKGROUND", true],
+        ["radioctl", "RADIOPORT CONTROLS", false],
+    ]],
+]
+
+const CROW_H = 24
+const CSEC_H = 30
+
 const drawColors = (ctx, g, x, y, w) => {
     sectionHeader(ctx, g, x, y, "// PALETTE", w)
     const names = Object.keys(PALETTES), cols = 4, bw = (w - (cols - 1) * 8) / cols, bh = 24, top = y + 12
@@ -132,28 +204,68 @@ const drawColors = (ctx, g, x, y, w) => {
         drawBtn(ctx, g.push, bx, by, bw, bh, name === "NETWATCH" ? "★" + name : name, () => applyColors(name), selPalette === name, g.col)
     })
     const gridH = Math.ceil(names.length / cols) * (bh + 6)
-    const lY = top + gridH + 14
-    sectionHeader(ctx, g, x, lY, "// LIVE COLORS", w)
-    const KEY_LABEL: [string, string][] = [
-        ["red", "PRIMARY RED"], ["cyan", "ACCENT"], ["magenta", "MAGENTA"], ["green", "GREEN"],
-        ["amber", "AMBER"], ["blue", "BLUE"], ["white", "WHITE"], ["dim", "DIM"], ["grid", "GRID"],
-        ["dock", "DOCK"], ["press", "PRESS"], ["badge", "BADGE"], ["stamina", "STAMINA"], ["ram", "RAM"],
-        ["netinfo", "NET/MARKET"],
-    ]
-    const rowH = 22
-    KEY_LABEL.forEach(([key, label], i) => {
-        const ry = lY + 8 + i * (rowH + 2)
-        if (ry + rowH > y + 0) {
-            const rgb = getUserColor(key)
-            ctx.setSourceRGBA(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0.95)
-            ctx.rectangle(x, ry, 16, 16); ctx.fill()
-            txt(ctx, x + 22, ry + 12, label, TITLE, 9.5, g.accent, 0.9, 1)
-            txt(ctx, x + 118, ry + 12, rgbToHex(rgb), MONO, 8.5, g.col, 0.75)
-            drawHueStrip(ctx, g.push, x + w - 76, ry - 2, 76, 18, key)
+    const footY = g.Y + g.h - 34
+    const visTop = top + gridH + 10
+    const visBottom = footY - 10
+    const visHeight = visBottom - visTop
+
+    const layout: { y: number; kind: "sec" | "row"; label: string; key: string; alp: boolean }[] = []
+    let yAcc = 0
+    for (const [title, rows] of SECTIONS) {
+        layout.push({ y: yAcc, kind: "sec", label: title, key: "", alp: false })
+        yAcc += CSEC_H
+        for (const [key, label, alp] of rows) {
+            layout.push({ y: yAcc, kind: "row", label, key, alp })
+            yAcc += CROW_H
         }
-    })
-    const footY = lY + 8 + KEY_LABEL.length * (rowH + 2) + 8
-    drawBtn(ctx, g.push, x, footY, w, 28, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; ctrl.requestDraw() }, false, [1, 0.4, 0.44])
+        yAcc += 8
+    }
+    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    kbMaxScroll = maxScroll
+    if (kbScroll > maxScroll) kbScroll = maxScroll
+    if (kbScroll < 0) kbScroll = 0
+
+    ctx.save()
+    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
+    ctx.clip()
+    for (const it of layout) {
+        const ry = visTop + it.y - kbScroll
+        if (it.kind === "sec") {
+            if (ry + CSEC_H >= visTop && ry <= visBottom) sectionHeader(ctx, g, x, ry + 6, it.label, w)
+            continue
+        }
+        if (ry + CROW_H < visTop || ry > visBottom) continue
+        const hit = ry >= visTop - 1 && ry + CROW_H <= visBottom + 1
+        drawColorRow(ctx, g, x, ry, w, it.key, it.label, it.alp, hit)
+    }
+    ctx.restore()
+
+    if (maxScroll > 0) {
+        const fillH = visHeight * (kbScroll / maxScroll)
+        const barH = Math.max(20, visHeight - fillH)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
+    }
+    drawBtn(ctx, g.push, x, footY, w, 28, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44])
+}
+
+const noPush = (_r: any) => {}
+const drawColorRow = (ctx, g, x, ry, w, key: string, label: string, alp: boolean, hit = true) => {
+    const push = hit ? g.push : noPush
+    const rgb = getUserColor(key)
+    ctx.setSourceRGBA(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0.95)
+    ctx.rectangle(x, ry + 3, 14, 14); ctx.fill()
+    ctx.setSourceRGBA(1, 1, 1, 0.28); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, ry + 3.5, 13, 13); ctx.stroke()
+    txt(ctx, x + 20, ry + 14, label, TITLE, 9, g.accent, 0.9, 1)
+    txt(ctx, x + 190, ry + 14, rgbToHex(rgb), MONO, 8, g.col, 0.72)
+    drawStrip(ctx, push, "hue", key, x + 236, ry + 2, 100, 16)
+    drawStrip(ctx, push, "val", key, x + 342, ry + 2, 62, 16)
+    if (alp && hasAlpha(key)) {
+        drawStrip(ctx, push, "alp", key, x + 410, ry + 2, 52, 16)
+        txt(ctx, x + 466, ry + 14, getUserAlpha(key).toFixed(2), MONO, 7.5, g.col, 0.72)
+    }
 }
 
 const hueRgb = (t: number): [number, number, number] => {
@@ -162,19 +274,73 @@ const hueRgb = (t: number): [number, number, number] => {
     const [r, gc, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x] : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x]
     return [Math.round(r * 255), Math.round(gc * 255), Math.round(b * 255)]
 }
-const pickHue = (key: string, t: number) => {
-    setUserColor(key, hueRgb(t))
+const rgbVal = (c: [number, number, number]) => Math.max(c[0], c[1], c[2]) / 255
+const rgbHue = (c: [number, number, number]): number => {
+    const r = c[0] / 255, gc = c[1] / 255, b = c[2] / 255
+    const mx = Math.max(r, gc, b), mn = Math.min(r, gc, b), d = mx - mn
+    if (d < 0.0005) return 0
+    const h = mx === r ? ((gc - b) / d + 6) % 6 : mx === gc ? (b - r) / d + 2 : (r - gc) / d + 4
+    return h / 6
+}
+const valBase: Record<string, [number, number, number]> = {}
+const baseOf = (key: string, c: [number, number, number]): [number, number, number] => {
+    const mx = Math.max(c[0], c[1], c[2])
+    if (mx >= 1) { valBase[key] = [c[0] * 255 / mx, c[1] * 255 / mx, c[2] * 255 / mx]; return valBase[key] }
+    return valBase[key] ?? [255, 255, 255]
+}
+const commit = (key: string, c: [number, number, number]) => {
+    setUserColor(key, c)
     saveUserColors()
     ctrl.requestDraw()
 }
-const drawHueStrip = (ctx, push, x, y, w, h, key: string) => {
+const pickHue = (key: string, t: number) => {
+    const v = Math.max(0.06, rgbVal(getUserColor(key)))
+    const h = hueRgb(t)
+    valBase[key] = h
+    commit(key, [h[0] * v, h[1] * v, h[2] * v])
+}
+const pickVal = (key: string, t: number) => {
+    const n = baseOf(key, getUserColor(key))
+    const v = Math.max(0, Math.min(1, t))
+    commit(key, [n[0] * v, n[1] * v, n[2] * v])
+}
+const pickAlpha = (key: string, t: number) => {
+    setUserAlpha(key, Math.max(0, Math.min(1, t)))
+    saveUserColors()
+    ctrl.requestDraw()
+}
+const drawStrip = (ctx, push, kind: "hue" | "val" | "alp", key: string, x, y, w, h) => {
+    const cur = getUserColor(key)
     const grad = new Cairo.LinearGradient(x, 0, x + w, 0)
-    for (let i = 0; i <= 6; i++) { const [r, gc, b] = hueRgb(i / 6); grad.addColorStopRGBA(i / 6, r / 255, gc / 255, b / 255, 1) }
+    let mark = 0
+    if (kind === "hue") {
+        for (let i = 0; i <= 6; i++) { const [r, gc, b] = hueRgb(i / 6); grad.addColorStopRGBA(i / 6, r / 255, gc / 255, b / 255, 1) }
+        mark = rgbHue(cur)
+    } else if (kind === "val") {
+        const n = baseOf(key, cur)
+        grad.addColorStopRGBA(0, 0, 0, 0, 1)
+        grad.addColorStopRGBA(1, n[0] / 255, n[1] / 255, n[2] / 255, 1)
+        mark = rgbVal(cur)
+    } else {
+        grad.addColorStopRGBA(0, cur[0] / 255, cur[1] / 255, cur[2] / 255, 0)
+        grad.addColorStopRGBA(1, cur[0] / 255, cur[1] / 255, cur[2] / 255, 1)
+        mark = getUserAlpha(key)
+    }
     ctx.save(); ctx.rectangle(x, y, w, h); ctx.clip()
+    if (kind === "alp") {
+        const sq = 4
+        for (let i = 0; i * sq < w; i++) for (let j = 0; j * sq < h; j++) {
+            ctx.setSourceRGBA(0.55, 0.6, 0.65, ((i + j) % 2) ? 0.34 : 0.1)
+            ctx.rectangle(x + i * sq, y + j * sq, sq, sq); ctx.fill()
+        }
+    }
     ctx.setSource(grad); ctx.rectangle(x, y, w, h); ctx.fill()
     ctx.restore()
     ctx.setSourceRGBA(1, 1, 1, 0.4); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, y + 0.5, w - 1, h - 1); ctx.stroke()
-    push({ kind: "sld", bx0: x, by0: y, bx1: x + w, by1: y + h, u0: x, v0: y, u1: x + w, v1: y, on: (t: number) => pickHue(key, t) })
+    const mx = x + Math.max(1.2, Math.min(w - 1.2, mark * w))
+    ctx.setSourceRGBA(0, 0, 0, 0.75); ctx.setLineWidth(2.6); ctx.newPath(); ctx.moveTo(mx, y + 1); ctx.lineTo(mx, y + h - 1); ctx.stroke()
+    ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.1); ctx.newPath(); ctx.moveTo(mx, y + 1); ctx.lineTo(mx, y + h - 1); ctx.stroke()
+    push({ kind: "sld", bx0: x, by0: y, bx1: x + w, by1: y + h, u0: x, v0: y, u1: x + w, v1: y, on: (t: number) => kind === "hue" ? pickHue(key, t) : kind === "val" ? pickVal(key, t) : pickAlpha(key, t) })
 }
 
 type CaptureKind = "theme" | "user" | "thememod" | "newuser"

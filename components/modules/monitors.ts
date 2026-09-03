@@ -11,7 +11,7 @@ import { Box, DrawingArea, EventBox } from "./widget.ts"
 import { interval, Variable } from "astal"
 import { buildStats } from "./sys.ts"
 import { makePlane, fillQuad, tiltText } from "./proj.ts"
-import { RGB, f, NEON, onColorChange } from "./colors.ts"
+import { RGB, f, NEON, onColorChange, isOvr } from "./colors.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk"
 import Gio from "gi://Gio"
@@ -27,7 +27,7 @@ const LIGHTRED: RGB = NEON.cpu
 const CYAN: RGB = NEON.badge
 const RAMCOL: RGB = NEON.ram
 const BADGECOL: RGB = NEON.badge
-const STOCOL: RGB = NEON.badge
+const STOCOL: RGB = NEON.xpbar
 
 const batColor = (p: number): RGB => p < 10 ? [255, 55, 55] as any : p < 50 ? [255, 120, 45] as any : p < 70 ? [255, 205, 55] as any : NEON.stamina
 
@@ -174,7 +174,7 @@ export const Monitors = () => {
         }
         {
             const y = 22, h = 18, ch = (MAIN - X0) * 0.05
-            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], NEON.darkred, 0.42)
+            poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], isOvr("cpu") ? darken(NEON.cpu, 0.55) : NEON.darkred, 0.42)
             const end = X0 + (MAIN - X0) * clamp(d.cpu)
             const fillPts: [number, number][] = end <= MAIN - ch
                 ? [[X0, y], [end, y], [end, y + h], [X0, y + h]]

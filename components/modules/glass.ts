@@ -4,7 +4,7 @@
 import Gdk from "gi://Gdk?version=3.0"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { USER, glassAlpha, neonBtn, onColorChange } from "./colors.ts"
+import { USER, USER_A, isOvr, glassAlpha, neonBtn, onColorChange } from "./colors.ts"
 import { makePlane, Plane } from "./proj.ts"
 
 export const Cairo: any = (imports as any).cairo
@@ -19,7 +19,7 @@ onColorChange(syncCyan)
 syncCyan()
 export const ACC: [number, number, number] = USER.glassacc
 export const RED: [number, number, number] = USER.red
-export const RACC: [number, number, number] = [1, 0.42, 0.46]
+export const RACC: [number, number, number] = USER.glassacc
 export const ch = (c: number) => String.fromCharCode(c)
 
 
@@ -48,12 +48,19 @@ export const panelPath = (ctx, x, y, w, h) => {
 
 export const drawGlass = (ctx, x, y, w, h, col: [number, number, number] = CYAN, a = 1) => {
     const [r, g, b] = col
-    const ga = glassAlpha.value
+    const ga = glassAlpha.value * USER_A.modalbg
     panelPath(ctx, x, y, w, h)
     const gb = new Cairo.LinearGradient(x, y, x + w * 0.5, y + h)
-    gb.addColorStopRGBA(0, r * 0.14, g * 0.14 + 0.06, b * 0.18 + 0.02, 0.93 * a * ga)
-    gb.addColorStopRGBA(0.5, r * 0.02 + 0.004, g * 0.04 + 0.02, b * 0.06 + 0.03, 0.9 * a * ga)
-    gb.addColorStopRGBA(1, r * 0.04, g * 0.06 + 0.03, b * 0.1 + 0.03, 0.94 * a * ga)
+    if (isOvr("modalbg")) {
+        const m = USER.modalbg
+        gb.addColorStopRGBA(0, m[0], m[1], m[2], 0.93 * a * ga)
+        gb.addColorStopRGBA(0.5, m[0] * 0.6, m[1] * 0.6, m[2] * 0.6, 0.9 * a * ga)
+        gb.addColorStopRGBA(1, m[0] * 0.8, m[1] * 0.8, m[2] * 0.8, 0.94 * a * ga)
+    } else {
+        gb.addColorStopRGBA(0, r * 0.14, g * 0.14 + 0.06, b * 0.18 + 0.02, 0.93 * a * ga)
+        gb.addColorStopRGBA(0.5, r * 0.02 + 0.004, g * 0.04 + 0.02, b * 0.06 + 0.03, 0.9 * a * ga)
+        gb.addColorStopRGBA(1, r * 0.04, g * 0.06 + 0.03, b * 0.1 + 0.03, 0.94 * a * ga)
+    }
     ctx.setSource(gb); ctx.fill()
     ctx.save(); panelPath(ctx, x, y, w, h); ctx.clip()
     const gs = new Cairo.LinearGradient(x, y, x + w * 0.65, y + h * 0.55)

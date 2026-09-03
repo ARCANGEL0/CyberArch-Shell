@@ -25,7 +25,7 @@ const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 const YEL = [1, 0.84, 0.12]
 const GRN = [0.42, 1, 0.6]
 // hover + drag + active tab highlight, follows the theme
-const HL: [number, number, number] = USER.hudcyan
+const HL: [number, number, number] = USER.modalhov
 const HUDRED: [number, number, number] = USER.overlay
 let HUDC: any = null
 
@@ -852,13 +852,13 @@ const BtCtrl = () => {
     return ctrl
 }
 
-const PWRBRIGHT: [number, number, number] = [1, 0.58, 0.55]
 const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
     const key = `${bx}|${by}`, hovered = push.hoverKey === key, [hr, hg, hb] = HUDRED
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr * 0.16, hg * 0.16, hb * 0.18, hovered ? 0.55 : 0.4); ctx.fill()
     if (hovered) { ctx.setOperator(12); btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, 0.4); ctx.setLineWidth(2.4); ctx.stroke(); ctx.setOperator(2) }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, hovered ? 1 : 0.82); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
     ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(24); const gw = ctx.textExtents(glyph).width
+    const PWRBRIGHT = rcAcc()
     ctx.setSourceRGBA(PWRBRIGHT[0], PWRBRIGHT[1], PWRBRIGHT[2], 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
     ctx.setSourceRGBA(hr, hg, hb, 0.95); ctx.moveTo(bx + bw / 2 - tw / 2, by + bh - 11); ctx.showText(label)

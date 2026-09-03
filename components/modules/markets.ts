@@ -1007,20 +1007,20 @@ export const MarketsPanel = () => {
         const list = viewTab === "news"
             ? (newsMini.length >= 5 ? newsMini : newsRows).slice(0, 5)
             : (pins[viewTab] || [])
-        tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.netinfo, 0.95, { bold: true, glow: 0.3 })
+        tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.mktacc, 0.95, { bold: true, glow: 0.3 })
         const tabs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
         let tx = RX1 - 162
         for (const [label, id] of tabs) {
             const on = viewTab === id
             const hv = hoverAnim[id] || 0
-            const col: any = on ? NEON.cyan : (hv > 0.02 ? NEON.amber : NEON.dim)
+            const col: any = on ? NEON.mktacc : (hv > 0.02 ? NEON.mkthov : NEON.dim)
             tiltText(ctx, MARKET_PLANE, tx, 16, label, TITLE, 10, col, on ? 1 : 0.55 + hv * 0.4, { bold: true, glow: on ? 0.35 : hv * 0.4 })
             const uw = on ? 46 : 46 * hv
             if (uw > 0.5) fillQuad(ctx, MARKET_PLANE, tx, 19, tx + uw, 20.4, col, on ? 0.9 : 0.5 + hv * 0.4)
             tx += 56
         }
         fillQuad(ctx, MARKET_PLANE, RX0 - 2, 24, RX1 + 2, 196, [0, 0, 0], 0.014)
-        fillQuad(ctx, MARKET_PLANE, RX0, 24, RX1, 25, NEON.red, 0.35)
+        fillQuad(ctx, MARKET_PLANE, RX0, 24, RX1, 25, NEON.mktacc, 0.35)
         if (!list.length) {
             tiltText(ctx, MARKET_PLANE, RX0, 48, viewTab === "news" ? "NEWS LOADING..." : "NO PINS - DOUBLE CLICK TO ADD", MONO, 8, NEON.dim, 0.6)
             return false
@@ -1032,7 +1032,7 @@ export const MarketsPanel = () => {
                 const accent: any = mixRgb(NEON.dim, NEON.white, hv)
                 tiltText(ctx, MARKET_PLANE, RX0 + hv * 4, y, trunc(row.title, 32), TITLE, 10.5, accent, 0.65 + hv * 0.34, { bold: true, glow: 0.08 + hv * 0.34 })
                 tiltText(ctx, MARKET_PLANE, RX0 + hv * 4, y + 11, `${trunc(row.source, 16)}  ${relTime(row.ts)}`, MONO, 6.4, mixRgb(NEON.dim, [210, 220, 226], hv), 0.52 + hv * 0.28)
-                fillQuad(ctx, MARKET_PLANE, RX0, y + 16, rowX1, y + 16.6, hv > 0.02 ? NEON.cyan : NEON.grid, 0.24 + hv * 0.36)
+                fillQuad(ctx, MARKET_PLANE, RX0, y + 16, rowX1, y + 16.6, hv > 0.02 ? NEON.mkthov : NEON.grid, 0.24 + hv * 0.36)
                 miniHits.push({ id: row.id, quad: projQuad(MARKET_PLANE, RX0 - 2, y - 7, rowX1, y + 15) })
             })
         } else {
@@ -1042,7 +1042,7 @@ export const MarketsPanel = () => {
                 const up = q && q.chg >= 0
                 const col: any = q ? (up ? UP_RGB : DOWN_RGB) : NEON.dim
                 const sym = q ? q.sym : (viewTab === "crypto" ? cryptoSym(id) : id.toUpperCase().slice(0, 10))
-                tiltText(ctx, MARKET_PLANE, RX0, y, String(sym).slice(0, 8), TITLE, 11, NEON.cyan, 0.97, { bold: true, glow: 0.35 })
+                tiltText(ctx, MARKET_PLANE, RX0, y, String(sym).slice(0, 8), TITLE, 11, NEON.mktacc, 0.97, { bold: true, glow: 0.35 })
                 tiltText(ctx, MARKET_PLANE, RX0, y + 11, q ? String(q.name).slice(0, 18) : "loading", MONO, 6.5, NEON.dim, 0.55)
                 if (q && (!q.hist || q.hist.length < 4)) ensureSeries(viewTab, id)
                 if (q) {

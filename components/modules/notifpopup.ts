@@ -8,7 +8,7 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
 import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
-import { NEON, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn } from "./colors.ts"
+import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -16,9 +16,9 @@ const LIFETIME = 15000
 const MAXFR = 8
 
 const RED: [number, number, number] = NEON.notifred
-const YEL: [number, number, number] = NEON.notifyel
-const CYN: [number, number, number] = NEON.notifcyn
-const GOLDF: [number, number, number] = NEON.goldf
+const YEL: [number, number, number] = NEON.notiffg
+const CYN: [number, number, number] = NEON.notiflbl
+const GOLDF: [number, number, number] = NEON.notifbg
 const GOLDD: [number, number, number] = NEON.goldd
 const GREY: [number, number, number] = NEON.notifgrey
 const GLYPH_COL: [number, number, number] = NEON.glyphcol
@@ -50,7 +50,7 @@ let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
 let area: any = null, loop: any = null, win: any = null
 
 const projPath = (ctx: any, pts: [number, number][]) => { ctx.newPath(); pts.forEach(([u, v], i) => { const [x, y] = plane.project(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }); ctx.closePath() }
-const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0) => {
+const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0, tint: [number, number, number] | null = null) => {
     if (!surf || a <= 0.01) return
     const tt = Date.now()
     const jx = glitch > 0.02 ? (Math.sin(tt / 21) * 3 + (Math.sin(tt / 6.5) > 0.82 ? 6 : 0)) * glitch : 0
@@ -58,7 +58,9 @@ const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a:
     const pw = surf.getWidth(), ph = surf.getHeight(), dh = targetW * ph / pw
     const [sx, sy] = plane.project(u + jx, v + jy + dh / 2), s = plane.scaleAt(u, v + dh / 2), ang = plane.angleAt(u, v + dh / 2)
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s); ctx.translate(0, -dh / 2); ctx.scale(targetW / pw, dh / ph)
-    if (imgTint.value) {
+    if (tint) {
+        tintSurface(ctx, surf, pw, ph, a, tint, 1)
+    } else if (imgTint.value) {
         tintSurface(ctx, surf, pw, ph, a)
     } else {
         if (glow || glitch > 0.02) { ctx.setOperator(12); ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha((glitch > 0.02 ? 0.5 : 0.3) * a); ctx.setOperator(2) }
@@ -67,9 +69,9 @@ const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a:
     if (glitch > 0.1 && Math.sin(tt / 5) > 0.7) {
         const by = ph * (0.15 + 0.6 * (Math.sin(tt / 13) * 0.5 + 0.5)), bh = ph * 0.13
         ctx.save(); ctx.rectangle(0, by, pw, bh); ctx.clip()
-        if (imgTint.value) {
+        if (tint || imgTint.value) {
             ctx.translate(pw * 0.07 * glitch, 0)
-            tintSurface(ctx, surf, pw, ph, a)
+            tintSurface(ctx, surf, pw, ph, a, tint, tint ? 1 : -1)
         } else {
             ctx.setSourceSurface(surf, pw * 0.07 * glitch, 0); ctx.paintWithAlpha(a)
         }
@@ -130,16 +132,16 @@ const drawFrame = (ctx: any, vTop: number, prog: number, body: string, app: stri
     const u0 = CX + 5, v0 = vTop, v1 = vTop + FH, ch = 2, cw = 5, bc = 3
     const u1 = u0 + Math.max(122, FW * fe)
     const flk = prog > 0.02 && prog < 0.92 ? (Math.sin(Date.now() / 1000 * 52) > -0.35 ? 1 : 0.45) : 1
-    const fill = top ? GOLDF : GOLDD, bA = (top ? 0.95 : 0.8) * flk
+    const fill: [number, number, number] = top ? GOLDF : (isOvr("notifbg") ? [GOLDF[0] * 0.66, GOLDF[1] * 0.65, GOLDF[2] * 0.58] : GOLDD), bA = (top ? 0.95 : 0.8) * flk
     const fpts: [number, number][] = [[u0, v0 - ch], [u0 + cw, v0], [u1, v0], [u1, v1], [u0 + bc, v1], [u0, v1 - bc]]
     const fillA = glassMode.value ? 0.5 : 0.85, glowW = glassMode.value ? 3 : 2, glowA = glassMode.value ? 0.25 : 0.18, mainW = glassMode.value ? 1.4 : 1
-    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, fillA * Af * flk * glassAlpha.value); ctx.fill()
+    projPath(ctx, fpts); ctx.setSourceRGBA(fill[0] / 255, fill[1] / 255, fill[2] / 255, fillA * Af * flk * glassAlpha.value * USER_A.notifbg); ctx.fill()
     ctx.setOperator(12); projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, glowA * Af); ctx.setLineWidth(glowW); ctx.stroke(); ctx.setOperator(2)
     projPath(ctx, fpts); ctx.setSourceRGBA(YEL[0] / 255, YEL[1] / 255, YEL[2] / 255, bA * Af); ctx.setLineWidth(mainW); ctx.stroke()
     if (prog > 0.03 && prog < 0.97) { strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], WHT, 0.7, 1.5); strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], YEL, 0.5, 0.7) }
     const txt = clamp((prog - 0.55) / 0.3) * a
     if (txt > 0.01) {
-        glitchText(ctx, u0 + 15, v0 + FH / 2 + 3, body, NEUE, 14, YEL, txt, clamp((prog - 0.55) / 0.4), { bold: true })
+        glitchText(ctx, u0 + 15, v0 + FH / 2 + 3, body, NEUE, 14, NEON.notiffg, txt, clamp((prog - 0.55) / 0.4), { bold: true })
         if (!top) tiltText(ctx, plane, u1 - 5, v0 + 7, app, NEUE, 5, GREY, txt * 0.95, { bold: true, align: "r" })
     }
 }
@@ -154,16 +156,16 @@ const draw = (ctx: any) => {
     const pA = seg(intro, 0, 0.30), aA = beep(pA)
     glyphBlock(ctx, -15, 2, aA * 0.9)
     glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL, aA, pA, { bold: true, glow: 0.4 })
-    drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA)
+    drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA, isOvr("notifphone") ? NEON.notifphone : null)
 
     const pB = seg(intro, 0.22, 0.48)
-    drawIcon(ctx, png("file.png"), 3, 23, 76, softg(pB), true, (1 - pB) * 0.5)
+    drawIcon(ctx, png("file.png"), 3, 23, 76, softg(pB), true, (1 - pB) * 0.5, isOvr("notifbadge") ? NEON.notifbadge : null)
 
     const pC = seg(intro, 0.52, 0.74), aC = beep(pC)
-    drawIcon(ctx, png("message.png"), 67, 16, 30, aC, true, 1 - pC)
-    glitchText(ctx, CX + 32, 36, msgs.length > 1 ? "NEW MESSAGES" : "NEW MESSAGE", NAVINE, 15, YEL, aC, pC, { bold: true, glow: 0.5, shadow: 0.8 })
+    drawIcon(ctx, png("message.png"), 67, 16, 30, aC, true, 1 - pC, isOvr("notifmail") ? NEON.notifmail : null)
+    glitchText(ctx, CX + 32, 36, msgs.length > 1 ? "NEW MESSAGES" : "NEW MESSAGE", NAVINE, 15, NEON.notifheads, aC, pC, { bold: true, glow: 0.5, shadow: 0.8 })
     const pN = seg(intro, 0.58, 0.80)
-    glitchText(ctx, CX + 2, 63, msgs[0].app, NAVINE, 20, CYN, clamp(pN * 1.3), pN, { bold: true, glow: 0.45 })
+    glitchText(ctx, CX + 2, 63, msgs[0].app, NAVINE, 20, NEON.notiftitle, clamp(pN * 1.3), pN, { bold: true, glow: 0.45 })
 
     const stackA = closing ? clamp(intro * 1.4) : 1
     msgs.forEach((m, i) => {
@@ -174,7 +176,7 @@ const draw = (ctx: any) => {
     const lowY = BASEV + (msgs.length ? msgs[msgs.length - 1].y : 0) + FH + 12
     const rA = seg(intro, 0.8, 1) * stackA
     if (rA > 0.01) {
-        const uR = CX + FW, actionCol = neonBtn.value ? NEON.press : RED
+        const uR = CX + FW, actionCol = neonBtn.value ? NEON.press : NEON.notiflbl
         keycap(ctx, uR - 24, lowY, "E", rA, -1)
         tiltText(ctx, plane, uR - 34, lowY + 15, "READ MESSAGE", TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
         keycap(ctx, uR - 165, lowY, "X", rA)

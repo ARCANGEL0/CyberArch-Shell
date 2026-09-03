@@ -166,7 +166,7 @@ const VertDock = () => {
  const recolorV = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
  for (const s of VLAYOUT) {
- const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.press : NEON.dock
+ const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.dockvh : NEON.dockv
  const fr = vertSlotFrame(s.x, s.y, s.w, s.h)
  const [br, bg, bb] = f([4, 9, 13])
  ctx.newPath(); fr.map(([u, v]) => vsp.project(u, v)).forEach(([x, y]: [number, number], j: number) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
@@ -240,7 +240,7 @@ const HorizDock = () => {
  const recolorH = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
  for (const s of HLAYOUT) {
- const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.press : NEON.dock
+ const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.dockhh : NEON.dockh
  const fr = horizSlotFrame(s.x, s.y, s.w, s.h)
  const [br, bg, bb] = f([4, 9, 13])
  ctx.newPath(); fr.map(([u, v]) => hsp.project(u, v)).forEach(([x, y]: [number, number], j: number) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()

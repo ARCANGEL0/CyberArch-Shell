@@ -5,12 +5,13 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
-import { USER, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
+import { USER, USER_A, isOvr, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
 const Cairo: any = (imports as any).cairo
 const cR = USER.red, cC = USER.dock
+const aCC = USER.radioacc, aTI = USER.radiotitle, aVO = USER.radiovol, aTF = USER.radiotrkfg, aCL = USER.radioctl, aTB = USER.radiotrkbg
 
 const PW = 560, PH = 648, CSZ = 186
 let pWin: any = null, pArea: any = null
@@ -150,8 +151,8 @@ const accentBar = (ctx, x, y, w, h, lum) => {
      ctx.lineTo(x, y + h - c)
      ctx.closePath()
  }
- path(); ctx.setSourceRGBA(cR[0] * lum, cR[1] * lum, cR[2] * lum, 0.95); ctx.fill()
- path(); ctx.setSourceRGBA(cR[0] * lum * 0.45, cR[1] * lum * 0.45, cR[2] * lum * 0.45, 0.9); ctx.setLineWidth(1.3); ctx.stroke()
+ path(); ctx.setSourceRGBA(aCC[0] * lum, aCC[1] * lum, aCC[2] * lum, 0.95); ctx.fill()
+ path(); ctx.setSourceRGBA(aCC[0] * lum * 0.45, aCC[1] * lum * 0.45, aCC[2] * lum * 0.45, 0.9); ctx.setLineWidth(1.3); ctx.stroke()
 }
 const keyChip = (ctx, x, yc, key, label, boxCol, labelCol, a) => {
  const ks = 9
@@ -168,18 +169,19 @@ const keyChip = (ctx, x, yc, key, label, boxCol, labelCol, a) => {
 const renderPanel = (ctx) => {
  const X = 0, Y = 0
 
- txt(ctx, X + 14, Y + 14, "TRN_TCLAS_B00095", MONO, 9, cR, 0.55, 1)
+ txt(ctx, X + 14, Y + 14, "TRN_TCLAS_B00095", MONO, 9, aCC, 0.55, 1)
 
  const tby = Y + 22, tbh = 50, tx0 = X + 14
  accentBar(ctx, X + 5, tby + 1, 9, tbh - 2, 1)
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13)
+ const hA = USER_A.radiohdrbg
  if (radioBg.value) ctx.setSourceRGBA(radioBg.value.color[0] / 255, radioBg.value.color[1] / 255, radioBg.value.color[2] / 255, radioBg.value.alpha)
- else if (imgTint.value) ctx.setSourceRGBA(USER.aurblack[0], USER.aurblack[1], USER.aurblack[2], glassMode.value ? 0.55 : 0.85)
- else ctx.setSourceRGBA(0.22, 0.02, 0.03, 0.4)
+ else if (imgTint.value) ctx.setSourceRGBA(USER.aurblack[0], USER.aurblack[1], USER.aurblack[2], (glassMode.value ? 0.55 : 0.85) * hA)
+ else ctx.setSourceRGBA(0.22, 0.02, 0.03, 0.4 * hA)
  ctx.fill()
- bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setOperator(12); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.12); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
- bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.82); ctx.setLineWidth(1.3); ctx.stroke()
- ptext(ctx, X + 28, tby + 34, "RADIOPORT", TITLE, true, 26, cC, 0.98, 0.5)
+ bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setOperator(12); ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.12); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+ bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.82); ctx.setLineWidth(1.3); ctx.stroke()
+ ptext(ctx, X + 28, tby + 34, "RADIOPORT", TITLE, true, 26, aTI, 0.98, 0.5)
 
  const csz = CSZ, cx = X + 16, cy = Y + 102, bev = 14
  accentBar(ctx, X + 7, cy + 1, 9, csz - 2, 0.62)
@@ -187,38 +189,38 @@ const renderPanel = (ctx) => {
  if (coverScaled) { Gdk.cairo_set_source_pixbuf(ctx, coverScaled, cx, cy); ctx.paint() }
  else { ctx.setSourceRGBA(0.03, 0.07, 0.09, 0.55); ctx.rectangle(cx, cy, csz, csz); ctx.fill() }
  ctx.restore()
- bevelPath(ctx, cx, cy, csz, csz, bev); ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.82); ctx.setLineWidth(1.4); ctx.stroke()
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.4); ctx.setLineWidth(1)
+ bevelPath(ctx, cx, cy, csz, csz, bev); ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.82); ctx.setLineWidth(1.4); ctx.stroke()
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.4); ctx.setLineWidth(1)
  const gn = 5, gsz = 5, gm = 20, gstep = (csz - gm * 2) / (gn - 1)
  for (let r = 0; r < gn; r++) for (let c = 0; c < gn; c++) ctx.rectangle(cx + gm + c * gstep - gsz / 2, cy + gm + r * gstep - gsz / 2, gsz, gsz)
  ctx.stroke()
  const tl = [`IMAGE NAME:  ${trunc((title || "SIGNAL").toUpperCase(), 16)}`, "IMAGE TYPE:  NETRUNNER AUDIO STREAM", "[STREAM CACHED]", "SECTOR ADDR:  00000000"]
- tl.forEach((s, i) => txt(ctx, cx + 8, cy + csz - 42 + i * 11, s, MONO, 7.5, cR, 0.82, 1))
+ tl.forEach((s, i) => txt(ctx, cx + 8, cy + csz - 42 + i * 11, s, MONO, 7.5, aCC, 0.82, 1))
 
  const rx = X + 222
- txt(ctx, rx, cy - 6, status === "Paused" ? "PAUSED" : "NOW PLAYING", MONO, 9, cR, 0.72, 1)
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.8); ctx.setLineWidth(1.4); ctx.newPath(); ctx.moveTo(rx, cy + 1); ctx.lineTo(X + PW, cy + 1); ctx.stroke()
+ txt(ctx, rx, cy - 6, status === "Paused" ? "PAUSED" : "NOW PLAYING", MONO, 9, aCC, 0.72, 1)
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.8); ctx.setLineWidth(1.4); ctx.newPath(); ctx.moveTo(rx, cy + 1); ctx.lineTo(X + PW, cy + 1); ctx.stroke()
  if (title) {
-     ptext(ctx, rx, cy + 40, trunc((artist || source || "—").toUpperCase(), 30), TITLE, true, 21, cR, 0.97, 0.3)
-     ptext(ctx, rx, cy + 62, trunc(title, 38), TITLE, true, 15, cR, 0.9)
+     ptext(ctx, rx, cy + 40, trunc((artist || source || "—").toUpperCase(), 30), TITLE, true, 21, aCC, 0.97, 0.3)
+     ptext(ctx, rx, cy + 62, trunc(title, 38), TITLE, true, 15, aCC, 0.9)
  } else {
-     ptext(ctx, rx, cy + 46, "NOT PLAYING ANY AUDIO", TITLE, true, 17, cR, 0.85, 0.2)
+     ptext(ctx, rx, cy + 46, "NOT PLAYING ANY AUDIO", TITLE, true, 17, aCC, 0.85, 0.2)
  }
 
- txt(ctx, rx, cy + 120, "VOLUME", TITLE, 15, cR, 0.95, 1)
- txt(ctx, rx + 110, cy + 120, muted ? "MUTE" : `${vol}%`, TITLE, 17, cC, 0.97, 1)
+ txt(ctx, rx, cy + 120, "VOLUME", TITLE, 15, aVO, 0.95, 1)
+ txt(ctx, rx + 110, cy + 120, muted ? "MUTE" : `${vol}%`, TITLE, 17, aVO, 0.97, 1)
 
  const pbx = rx, pbw = X + PW - rx, pby = cy + 150, fr = length > 0 ? Math.min(1, position / length) : 0
- ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.22); ctx.rectangle(pbx, pby, pbw, 2.5); ctx.fill()
- ctx.setOperator(12); ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.5); ctx.rectangle(pbx, pby - 1.5, pbw * fr, 5.5); ctx.fill(); ctx.setOperator(2)
- ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.97); ctx.rectangle(pbx, pby, pbw * fr, 2.5); ctx.fill()
- txt(ctx, pbx, pby + 16, fmt(position), MONO, 9, cC, 0.85, 1)
- const dur = fmt(length); txt(ctx, X + PW - measure(ctx, dur, MONO, 9, 1), pby + 16, dur, MONO, 9, cC, 0.85, 1)
+ ctx.setSourceRGBA(aVO[0], aVO[1], aVO[2], 0.22); ctx.rectangle(pbx, pby, pbw, 2.5); ctx.fill()
+ ctx.setOperator(12); ctx.setSourceRGBA(aVO[0], aVO[1], aVO[2], 0.5); ctx.rectangle(pbx, pby - 1.5, pbw * fr, 5.5); ctx.fill(); ctx.setOperator(2)
+ ctx.setSourceRGBA(aVO[0], aVO[1], aVO[2], 0.97); ctx.rectangle(pbx, pby, pbw * fr, 2.5); ctx.fill()
+ txt(ctx, pbx, pby + 16, fmt(position), MONO, 9, aVO, 0.85, 1)
+ const dur = fmt(length); txt(ctx, X + PW - measure(ctx, dur, MONO, 9, 1), pby + 16, dur, MONO, 9, aVO, 0.85, 1)
 
  const lY = Y + 308, rowH = 42
  hitRegions = []
- listIcon(ctx, X + 35, lY + rowH / 2 - 6, cC, 0.55)
- ptext(ctx, X + 58, lY + rowH / 2 + 5, "TRACKLIST", TITLE, true, 17, cC, 0.82)
+ listIcon(ctx, X + 35, lY + rowH / 2 - 6, aTF, 0.55)
+ ptext(ctx, X + 58, lY + rowH / 2 + 5, "TRACKLIST", TITLE, true, 17, aTF, 0.82)
  const srcs = players.filter((p) => p.title || p.status === "Playing")
  const shown = Math.min(srcs.length + 1, 7)
  iconPos = null
@@ -229,28 +231,28 @@ const renderPanel = (ctx) => {
      const nm = trunc(`${freqOf(i)}  ${(p.title || prettyName(p.name))}${p.artist ? " - " + p.artist : ""}`.toUpperCase(), 30)
      const hov = i === hoverIdx ? hoverA : 0
      if (sel) {
-         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.1); ctx.fill()
-         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setOperator(12); ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.3); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
-         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(cC[0], cC[1], cC[2], 1); ctx.setLineWidth(1.6); ctx.stroke()
+         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(aTB[0], aTB[1], aTB[2], 0.1 * USER_A.radiotrkbg); ctx.fill()
+         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setOperator(12); ctx.setSourceRGBA(aTF[0], aTF[1], aTF[2], 0.3); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+         bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(aTF[0], aTF[1], aTF[2], 1); ctx.setLineWidth(1.6); ctx.stroke()
          iconPos = { x: X + 36, y: ry + rh / 2 + 5 }
-         ptext(ctx, X + 58, ry + rh / 2 + 5, nm, TITLE, true, 16, cC, 0.98, 0.28)
+         ptext(ctx, X + 58, ry + rh / 2 + 5, nm, TITLE, true, 16, aTF, 0.98, 0.28)
      } else {
-         if (hov > 0.02) { bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(cC[0], cC[1], cC[2], 0.07 * hov); ctx.fill() }
-         listIcon(ctx, X + 35, ry + rh / 2 - 6, cC, 0.5 + 0.35 * hov)
-         ptext(ctx, X + 58, ry + rh / 2 + 5, nm, TITLE, false, 16, cC, 0.62 + 0.32 * hov, 0)
+         if (hov > 0.02) { bevelPath(ctx, X + 24, ry, PW - 40, rh, 11); ctx.setSourceRGBA(aTB[0], aTB[1], aTB[2], 0.07 * hov * USER_A.radiotrkbg); ctx.fill() }
+         listIcon(ctx, X + 35, ry + rh / 2 - 6, aTF, 0.5 + 0.35 * hov)
+         ptext(ctx, X + 58, ry + rh / 2 + 5, nm, TITLE, false, 16, aTF, 0.62 + 0.32 * hov, 0)
      }
      hitRegions.push({ x: X + 24, y: ry, w: PW - 40, h: rowH, act: "src:" + p.name, srcIdx: i })
  })
  const sbX = X + PW - 5, sbH = rowH * shown - 8
  ctx.setOperator(12)
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.45); ctx.rectangle(sbX - 3, lY, 9, sbH); ctx.fill()
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.4); ctx.rectangle(sbX - 1, lY, 5, sbH); ctx.fill()
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.45); ctx.rectangle(sbX - 3, lY, 9, sbH); ctx.fill()
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.4); ctx.rectangle(sbX - 1, lY, 5, sbH); ctx.fill()
  ctx.setOperator(2)
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 1); ctx.rectangle(sbX, lY, 3, sbH); ctx.fill()
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 1); ctx.rectangle(sbX, lY, 3, sbH); ctx.fill()
 
- ctx.setSourceRGBA(cR[0], cR[1], cR[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(X, PH - 50); ctx.lineTo(X + PW, PH - 50); ctx.stroke()
+ ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(X, PH - 50); ctx.lineTo(X + PW, PH - 50); ctx.stroke()
  const lg = ["// AUTHORIZED OPS ONLY", "// ACCESS LOGGED &", "// TRACED TO RADIOPORT"]
- lg.forEach((s, i) => txt(ctx, X + 6, PH - 24 + i * 8, s, MONO, 7, cR, 0.5, 1))
+ lg.forEach((s, i) => txt(ctx, X + 6, PH - 24 + i * 8, s, MONO, 7, aCC, 0.5, 1))
   const chips = [
   ["↑", "PREVIOUS SOURCE", null],
   ["↓", "NEXT SOURCE", null],
@@ -267,16 +269,16 @@ const renderPanel = (ctx) => {
   const totalW2 = cw2.reduce((a, b) => a + b, 0) + (row2.length - 1) * 9
   let bx1 = X + PW - totalW1 - 12, bx2 = X + PW - totalW2 - 12
   const byc1 = PH - 38, byc2 = PH - 14
-  row1.forEach(([k, l, act]) => { const sx = bx1; bx1 = keyChip(ctx, bx1, byc1, k, l, cC, cR, 0.95); hitRegions.push({ x: sx, y: byc1 - 11, w: bx1 - sx, h: 20, act }); bx1 += 9 })
-  row2.forEach(([k, l, act]) => { const sx = bx2; bx2 = keyChip(ctx, bx2, byc2, k, l, cC, cR, 0.95); hitRegions.push({ x: sx, y: byc2 - 11, w: bx2 - sx, h: 20, act }); bx2 += 9 })
+  row1.forEach(([k, l, act]) => { const sx = bx1; bx1 = keyChip(ctx, bx1, byc1, k, l, aCL, aCL, 0.95); hitRegions.push({ x: sx, y: byc1 - 11, w: bx1 - sx, h: 20, act }); bx1 += 9 })
+  row2.forEach(([k, l, act]) => { const sx = bx2; bx2 = keyChip(ctx, bx2, byc2, k, l, aCL, aCL, 0.95); hitRegions.push({ x: sx, y: byc2 - 11, w: bx2 - sx, h: 20, act }); bx2 += 9 })
 }
 
 const drawActiveIcon = (ctx, x, y, al) => {
  const pt = Date.now() - playStart
- if (status === "Paused") pauseIcon(ctx, x, y, cC, 0.95 * al)
- else if (status === "Playing" && pt < 300) playGlyph(ctx, x, y, cC, 0.95 * al)
- else if (status === "Playing" && pt < 420) eqIconGlitch(ctx, x, y, cC, 0.95 * al, (420 - pt) / 120)
- else eqIcon(ctx, x, y, cC, 0.95 * al)
+ if (status === "Paused") pauseIcon(ctx, x, y, aTF, 0.95 * al)
+ else if (status === "Playing" && pt < 300) playGlyph(ctx, x, y, aTF, 0.95 * al)
+ else if (status === "Playing" && pt < 420) eqIconGlitch(ctx, x, y, aTF, 0.95 * al, (420 - pt) / 120)
+ else eqIcon(ctx, x, y, aTF, 0.95 * al)
 }
 
 const renderToCache = () => {
@@ -304,7 +306,7 @@ const draw = (ctx, aw, ah) => {
  ctx.restore()
  if (e < 0.999) {
      const sy = Y0 + ease * PH
-     ctx.setOperator(12); ctx.setSourceRGBA(cC[0], cC[1], cC[2], (1 - ease) * 0.7); ctx.setLineWidth(2)
+     ctx.setOperator(12); ctx.setSourceRGBA(aTF[0], aTF[1], aTF[2], (1 - ease) * 0.7); ctx.setLineWidth(2)
      ctx.newPath(); ctx.moveTo(X0, sy); ctx.lineTo(X0 + PW, sy); ctx.stroke(); ctx.setOperator(2)
  }
 }

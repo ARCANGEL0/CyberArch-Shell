@@ -931,11 +931,11 @@ export const setRecording = (on, payload = "", region: any = null) => {
      setHudHidden(true, g)
      showRecHud(g)
      if (region) showRecFrame(region, g)
-     showToast("RECORDING STARTED", { y: 70, w: 380, h: 46, col: [242, 91, 86], textCol: [242, 91, 86] })
+     showToast("RECORDING STARTED", { y: 70, w: 380, h: 46, col: NEON.f25, textCol: NEON.f25 })
  } else {
      recOn = false
      hideRecHud()
      hideRecFrame()
-     timeout(180, () => { showToast("RECORDING STOPPED", { y: 70, w: 380, h: 46, col: [242, 91, 86], textCol: [242, 91, 86] }); showAllHud() })
+     timeout(180, () => { showToast("RECORDING STOPPED", { y: 70, w: 380, h: 46, col: NEON.f25, textCol: NEON.f25 }); showAllHud() })
  }
 }

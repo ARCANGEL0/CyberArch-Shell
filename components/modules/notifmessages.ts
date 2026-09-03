@@ -6,7 +6,7 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
-import { NEON, onColorChange, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
+import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -23,6 +23,7 @@ const GREY: [number, number, number] = NEON.msggrey
 const DIM_RED: [number, number, number] = NEON.dimred
 const GREY_DARK: [number, number, number] = [30, 32, 36]
 const DIM_BG: [number, number, number] = [10, 12, 20]
+const PANEL_BG: [number, number, number] = [22, 30, 45]
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const ICON_3D = `${CYBER_DIR}/assets/icons/file.png`
 let phoneIcon: any = null
@@ -68,9 +69,9 @@ const keycap = (ctx: any, u: number, v: number, label: string, a: number, dx = 0
         return [rx, ry]
     })
     projPath(ctx, kp); ctx.setSourceRGBA(0.02, 0.06, 0.07, 0.55 * a); ctx.fill()
-    ctx.setOperator(12); projPath(ctx, kp); ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
-    projPath(ctx, kp); ctx.setSourceRGBA(NEON.dock[0]/255, NEON.dock[1]/255, NEON.dock[2]/255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
-    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, NEON.dock, a, { bold: true, align: "c", glow: 0.6, extraRotate: 0.009 })
+    ctx.setOperator(12); projPath(ctx, kp); ctx.setSourceRGBA(NEON.notiflbl[0]/255, NEON.notiflbl[1]/255, NEON.notiflbl[2]/255, 0.25 * a); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
+    projPath(ctx, kp); ctx.setSourceRGBA(NEON.notiflbl[0]/255, NEON.notiflbl[1]/255, NEON.notiflbl[2]/255, 0.95 * a); ctx.setLineWidth(1); ctx.stroke()
+    tiltText(ctx, plane, u + s / 2 + dx, v + s / 2 + 4, label, TITLE, 13, NEON.notiflbl, a, { bold: true, align: "c", glow: 0.6, extraRotate: 0.009 })
 }
 
 const drawTrayIcon = (ctx: any, pixbuf: any, u: number, vCenter: number, size: number, a: number) => {
@@ -395,22 +396,24 @@ const draw = (ctx: any) => {
             ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s)
             ctx.translate(0, -iconDrawH / 2)
             ctx.scale(iconDrawW / pw, iconDrawH / ph)
-            if (imgTint.value) {
+            if (isOvr("notifbadge")) {
+                tintSurface(ctx, phoneIcon, pw, ph, iconA, NEON.notifbadge, 1)
+            } else if (imgTint.value) {
                 tintSurface(ctx, phoneIcon, pw, ph, iconA)
             } else {
                 ctx.setSourceSurface(phoneIcon, 0, 0); ctx.paint()
             }
             ctx.restore()
         } catch (e) {
-            tiltText(ctx, plane, 42, 22, "\uf095", ICONF, 20, NEON.dock, clamp(animProg * 6) * pa, { bold: true })
+            tiltText(ctx, plane, 42, 22, "\uf095", ICONF, 20, NEON.notifbadge, clamp(animProg * 6) * pa, { bold: true })
         }
     }
 
 
     if (animProg > 0) {
         const GL = ICONW + 10, GR = ICONW + W - 4, GT = HEADER - 19, GB = FOOTER_Y + 2
-        fillQuad(ctx, plane, GL, GT, GR, GB, [22, 30, 45], 0.25 * pa)
-        fillQuad(ctx, plane, GL, GT, GR, GB, NEON.dock, 0.02 * pa)
+        fillQuad(ctx, plane, GL, GT, GR, GB, isOvr("notifbg") ? NEON.notifbg : PANEL_BG, 0.25 * pa * USER_A.notifbg)
+        fillQuad(ctx, plane, GL, GT, GR, GB, NEON.notiftitle, 0.02 * pa * USER_A.notifbg)
         strokePath(ctx, plane, [[GL, GT], [GL, GB]], [60, 100, 130], 0.1 * pa, 0.8)
         strokePath(ctx, plane, [[GL, GB], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
         strokePath(ctx, plane, [[GR, GT], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
@@ -421,7 +424,7 @@ const draw = (ctx: any) => {
         const labelA = clamp((animProg - 0.10) * 5) * pa
         const msgActive = view !== "apps", appsActive = view === "apps"
         const msgHov = tabHover === "msg", appsHov = tabHover === "apps"
-        const BCYAN: [number, number, number] = [160, 250, 255]
+        const BCYAN: [number, number, number] = NEON.notiftitle
 
         const tcol = (active: boolean, hov: boolean): [number, number, number] => (active || hov) ? BCYAN : NEON.overlay
         const mC = tcol(msgActive, msgHov), aC = tcol(appsActive, appsHov)
@@ -629,7 +632,7 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
         strokePath(ctx, plane, [[ICONW + 12, FOOTER_Y], [ICONW + W - 2, FOOTER_Y]], NEON.overlay, 0.6 * fA, 1.5)
 
         if (view !== "apps" && getGroups().length > 0) {
-            const dc: [number, number, number] = blDismissHover ? NEON.dock : NEON.overlay
+            const dc: [number, number, number] = blDismissHover ? NEON.notiflbl : NEON.overlay
             const dg = blDismissHover ? 0.9 : 0.5
             tiltText(ctx, plane, ICONW + 14, FOOTER_Y + 22, XICON, ICONF, 12, dc, fA * 0.9, { bold: true, glow: dg })
             tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, view === "detail" ? "DISMISS ALL" : "DISMISS", ROBOTO_BOLD, 10, dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })

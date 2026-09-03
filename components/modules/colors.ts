@@ -46,6 +46,45 @@ export const NEON: Record<string, RGB> = {
     overlay: [255, 42, 58],
     pure: [255, 255, 255],
     glassacc: [196, 248, 255],
+    modalbg: [0, 0, 0],
+    modalhov: [85, 222, 255],
+    wheelbg: [15, 39, 40],
+    wheelfg: [94, 244, 248],
+    xpbar: [94, 244, 248],
+    dockv: [94, 244, 248],
+    dockh: [94, 244, 248],
+    dockvh: [255, 42, 58],
+    dockhh: [255, 42, 58],
+    launchico: [255, 255, 255],
+    launchlbl: [255, 42, 58],
+    mapclock: [130, 231, 215],
+    mapcity: [176, 255, 157],
+    mapwx: [255, 222, 105],
+    mapaccent: [94, 244, 248],
+    maptile: [255, 255, 255],
+    netchip: [255, 222, 105],
+    netdown: [255, 42, 58],
+    netup: [94, 244, 248],
+    mktacc: [255, 222, 105],
+    mkthov: [255, 178, 36],
+    aurbg: [6, 14, 9],
+    aurfg: [232, 255, 240],
+    auricon: [255, 20, 45],
+    aurlbl: [43, 225, 133],
+    notifphone: [94, 244, 248],
+    notifmail: [108, 230, 246],
+    notifheads: [255, 214, 46],
+    notiftitle: [255, 74, 68],
+    notiffg: [178, 184, 192],
+    notifbg: [0, 0, 0],
+    notiflbl: [108, 230, 246],
+    radiotitle: [94, 244, 248],
+    radiohdrbg: [0, 0, 0],
+    radioacc: [255, 42, 58],
+    radiovol: [94, 244, 248],
+    radiotrkfg: [94, 244, 248],
+    radiotrkbg: [0, 0, 0],
+    radioctl: [94, 244, 248],
 }
 
 export type PaletteName = "NETWATCH" | "DARK" | "KITTY" | "BLOODMOON" | "ARCTIC" | "SYNTHWAVE" | "JOHNNY" | "GHOST"
@@ -285,13 +324,66 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
     },
 }
 
-export const USER: Record<string, [number, number, number]> = {
-    red: f(NEON.red), cyan: f(NEON.cyan), magenta: f(NEON.magenta),
-    green: f(NEON.green), amber: f(NEON.amber), blue: f(NEON.blue),
-    white: f(NEON.white), dim: f(NEON.dim), grid: f(NEON.grid),
-    dock: f(NEON.dock), press: f(NEON.press), badge: f(NEON.badge),
-    stamina: f(NEON.stamina), ram: f(NEON.ram), netinfo: f(NEON.netinfo), cpu: f(NEON.cpu),
-    notifred: f(NEON.notifred), notifyel: f(NEON.notifyel), notifcyn: f(NEON.notifcyn), goldf: f(NEON.goldf), goldd: f(NEON.goldd), notifgrey: f(NEON.notifgrey), glyphcol: f(NEON.glyphcol), msggrey: f(NEON.msggrey), dimred: f(NEON.dimred), appsred: f(NEON.appsred), hudcyan: f(NEON.hudcyan), darkred: f(NEON.darkred), notifbadge: f(NEON.notifbadge), aurgreen: f(NEON.aurgreen), aurbrt: f(NEON.aurbrt), aurblack: f(NEON.aurblack), aurwht: f(NEON.aurwht), f25: f(NEON.f25), pure: f(NEON.pure), overlay: f(NEON.overlay), glassacc: f(NEON.glassacc),
+export const USER: Record<string, [number, number, number]> = {}
+for (const k of Object.keys(NEON)) USER[k] = f(NEON[k])
+
+export const USER_A: Record<string, number> = {
+    modalbg: 1, wheelbg: 1, maptile: 1, aurbg: 1, notifbg: 1, radiohdrbg: 1, radiotrkbg: 1,
+}
+
+const OVR: Record<string, boolean> = {}
+export const isOvr = (key: string) => OVR[key] === true
+
+type Mul = number | [number, number, number]
+
+const DERIVE: Record<string, [string, Mul]> = {
+    modalbg: ["dock", 0.12],
+    modalhov: ["hudcyan", 1],
+    wheelbg: ["dock", [0.16, 0.16, 0.2]],
+    wheelfg: ["dock", 1],
+    xpbar: ["badge", 1],
+    dockv: ["dock", 1],
+    dockh: ["dock", 1],
+    dockvh: ["press", 1],
+    dockhh: ["press", 1],
+    launchico: ["maptile", 1],
+    launchlbl: ["dock", 1],
+    auricon: ["red", 1],
+    notifphone: ["press", 1],
+    mapaccent: ["cyan", 1],
+    netchip: ["netinfo", 1],
+    netdown: ["red", 1],
+    netup: ["cyan", 1],
+    mktacc: ["netinfo", 1],
+    mkthov: ["amber", 1],
+    aurbg: ["aurblack", 1],
+    aurfg: ["aurwht", 1],
+    aurlbl: ["aurgreen", 1],
+    notifmail: ["notifcyn", 1],
+    notifheads: ["notifyel", 1],
+    notiftitle: ["notifcyn", 1],
+    notiffg: ["notifyel", 1],
+    notiflbl: ["notifcyn", 1],
+    notifbg: ["goldf", 1],
+    radiotitle: ["dock", 1],
+    radiohdrbg: ["red", 0.22],
+    radioacc: ["red", 1],
+    radiovol: ["dock", 1],
+    radiotrkfg: ["dock", 1],
+    radiotrkbg: ["dock", 1],
+    radioctl: ["dock", 1],
+}
+
+const resetAlpha = () => { for (const k of Object.keys(USER_A)) if (!OVR[k]) USER_A[k] = 1 }
+const applyDeriveTable = () => {
+    for (const k of Object.keys(DERIVE)) {
+        if (OVR[k]) continue
+        const [src, mul] = DERIVE[k]
+        const s = NEON[src]
+        if (!s) continue
+        const m: [number, number, number] = typeof mul === "number" ? [mul, mul, mul] : mul
+        setColor(k, [s[0] * m[0], s[1] * m[1], s[2] * m[2]] as RGB, false)
+    }
 }
 
 export const imgTint = { value: null as RGB | null, strength: 0 }
@@ -306,17 +398,20 @@ const IMG_TINT: Record<string, [RGB, number]> = {
 }
 const updateImgTint = (name: string) => {
     const e = IMG_TINT[name]
-    imgTint.value = e ? e[0] : null
-    imgTint.strength = e ? e[1] : 0
+    if (!OVR.maptile) setColor("maptile", e ? e[0] : [255, 255, 255], false)
+    const base = e ? e[1] : (OVR.maptile ? 1 : 0)
+    imgTint.value = (e || OVR.maptile) ? NEON.maptile : null
+    imgTint.strength = base * USER_A.maptile
 }
 
-export const tintSurface = (ctx: any, surf: any, w: number, h: number, a = 1, colorOverride: RGB | null = null) => {
+export const tintSurface = (ctx: any, surf: any, w: number, h: number, a = 1, colorOverride: RGB | null = null, strength = -1) => {
     const tc = colorOverride || imgTint.value
     if (!tc || !surf) return
+    const st = strength >= 0 ? strength : imgTint.strength
     try {
         ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
         ctx.setOperator(27)
-        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, imgTint.strength * a)
+        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, st * a)
         ctx.maskSurface(surf, 0, 0)
         ctx.setOperator(2)
     } catch {}
@@ -389,25 +484,31 @@ const MAP_ACCENT: Record<string, MapAccent> = {
     ARCTIC: { clock: [255, 255, 255], city: [130, 220, 255], forecast: null },
     SYNTHWAVE: { clock: [255, 60, 220], city: [100, 255, 170], forecast: [255, 60, 220] },
     JOHNNY: { clock: [255, 208, 60], city: [176, 255, 157], forecast: null },
-    GHOST: { clock: [0, 208, 60], city: [176, 255, 157], forecast: null },
 }
 export const mapAccent = { ...MAP_ACCENT_DEF }
 const updateMapAccent = (name: string) => {
     const e = MAP_ACCENT[name] ?? MAP_ACCENT_DEF
-    mapAccent.clock = e.clock; mapAccent.city = e.city; mapAccent.forecast = e.forecast
+    if (!OVR.mapclock) setColor("mapclock", e.clock, false)
+    if (!OVR.mapcity) setColor("mapcity", e.city, false)
+    if (!OVR.mapwx) setColor("mapwx", e.forecast ?? NEON.netinfo, false)
+    mapAccent.clock = NEON.mapclock
+    mapAccent.city = NEON.mapcity
+    mapAccent.forecast = NEON.mapwx
 }
 
 type RGB01 = [number, number, number]
 type HudSoft = { acc: RGB01; label: RGB01 }
-const HUD_SOFT_DEF: HudSoft = { acc: [1, 0.58, 0.55], label: [1, 0.64, 0.6] }
 const HUD_SOFT: Record<string, HudSoft> = {
     ARCTIC: { acc: [1, 1, 1], label: [1, 1, 1] },
     KITTY: { acc: [1, 0.2549, 0.7255], label: [1, 0.4118, 0.7843] },
 }
-export const hudSoft = { ...HUD_SOFT_DEF }
+export const hudSoft = { acc: [1, 1, 1] as RGB01, label: [1, 1, 1] as RGB01 }
 const updateHudSoft = (name: string) => {
-    const e = HUD_SOFT[name] ?? HUD_SOFT_DEF
-    hudSoft.acc = e.acc; hudSoft.label = e.label
+    const e = HUD_SOFT[name]
+    if (e) { hudSoft.acc = e.acc; hudSoft.label = e.label; return }
+    const g = USER.glassacc
+    hudSoft.acc = [g[0], g[1], g[2]]
+    hudSoft.label = [g[0] * 0.94 + 0.06, g[1] * 0.94 + 0.06, g[2] * 0.94 + 0.06]
 }
 
 const NEON_BTN: Record<string, boolean> = { DARK: true }
@@ -416,24 +517,46 @@ const updateNeonBtn = (name: string) => { neonBtn.value = NEON_BTN[name] ?? fals
 
 const CIRCLE_TINT: Record<string, RGB> = { DARK: [255, 20, 45] }
 export const circleTint = { value: null as RGB | null }
-const updateCircleTint = (name: string) => { circleTint.value = CIRCLE_TINT[name] ?? null }
+const updateCircleTint = (name: string) => {
+    const e = CIRCLE_TINT[name]
+    if (!OVR.auricon && e) setColor("auricon", e, false)
+    circleTint.value = (e || OVR.auricon) ? NEON.auricon : null
+}
 
 const LAUNCHER_TINT: Record<string, RGB> = { SYNTHWAVE: [45, 220, 210] }
 export const launcherTint = { value: null as RGB | null }
-const updateLauncherTint = (name: string) => { launcherTint.value = LAUNCHER_TINT[name] ?? null }
+const updateLauncherTint = (name: string) => {
+    const e = LAUNCHER_TINT[name]
+    if (!OVR.launchico && e) setColor("launchico", e, false)
+    launcherTint.value = (e || OVR.launchico) ? NEON.launchico : null
+}
 
 const LAUNCHER_LABEL_TINT: Record<string, RGB> = { JOHNNY: [255, 208, 60] }
 export const launcherLabelTint = { value: null as RGB | null }
-const updateLauncherLabelTint = (name: string) => { launcherLabelTint.value = LAUNCHER_LABEL_TINT[name] ?? null }
+const updateLauncherLabelTint = (name: string) => {
+    const e = LAUNCHER_LABEL_TINT[name]
+    if (!OVR.launchlbl && e) setColor("launchlbl", e, false)
+    launcherLabelTint.value = (e || OVR.launchlbl) ? NEON.launchlbl : null
+}
 
 type RadioBg = { color: RGB; alpha: number }
 const RADIO_BG: Record<string, RadioBg> = { JOHNNY: { color: [255, 208, 60], alpha: 0.16 } }
 export const radioBg = { value: null as RadioBg | null }
-const updateRadioBg = (name: string) => { radioBg.value = RADIO_BG[name] ?? null }
+const updateRadioBg = (name: string) => {
+    const e = RADIO_BG[name]
+    if (!OVR.radiohdrbg && e) setColor("radiohdrbg", e.color, false)
+    radioBg.value = (e || OVR.radiohdrbg)
+        ? { color: NEON.radiohdrbg, alpha: (e ? e.alpha : 0.16) * USER_A.radiohdrbg }
+        : null
+}
 
 const NOTIF_BUBBLE: Record<string, RGB> = { NETWATCH: [94, 244, 248] }
 export const notifBubble = { value: NOTIF_BUBBLE.NETWATCH as RGB | null }
-const updateNotifBubble = (name: string) => { notifBubble.value = NOTIF_BUBBLE[name] ?? null }
+const updateNotifBubble = (name: string) => {
+    const e = NOTIF_BUBBLE[name]
+    if (!OVR.notifphone && e) setColor("notifphone", e, false)
+    notifBubble.value = (e || OVR.notifphone) ? NEON.notifphone : null
+}
 
 const changeBus: Array<() => void> = []
 export const onColorChange = (cb: () => void): (() => void) => { changeBus.push(cb); return () => { const i = changeBus.indexOf(cb); if (i >= 0) changeBus.splice(i, 1) } }
@@ -443,6 +566,7 @@ const setColor = (key: string, [r, g, b]: RGB, notify = true) => {
     const ne = NEON[key], us = USER[key]
     if (ne) { ne[0] = r; ne[1] = g; ne[2] = b }
     if (us) { us[0] = r / 255; us[1] = g / 255; us[2] = b / 255 }
+    if (key === "glassacc") updateHudSoft(curPalette)
     if (notify) notifyColorChange()
 }
 
@@ -463,12 +587,14 @@ const applyRioStyle = (name: string) => {
     execAsync([`${CYBER_DIR}/scripts/rio-style`, RIO_STYLES[name] ?? "cybercore"]).catch(() => "")
 }
 
-export const applyPalette = (name: string) => {
-    const p = PALETTES[name]
-    if (!p) return
-    for (const k of Object.keys(p)) setColor(k, p[k] as RGB)
-    updateGlassAlpha(name)
+let curPalette = "NETWATCH"
+
+const applyDerived = (name: string) => {
+    curPalette = name
+    resetAlpha()
     updateImgTint(name)
+    applyDeriveTable()
+    updateGlassAlpha(name)
     updateMenuBg(name)
     updateMapAccent(name)
     updateHudSoft(name)
@@ -479,7 +605,16 @@ export const applyPalette = (name: string) => {
     updateLauncherLabelTint(name)
     updateRadioBg(name)
     updateNotifBubble(name)
+}
+
+export const applyPalette = (name: string) => {
+    const p = PALETTES[name]
+    if (!p) return
+    for (const k of Object.keys(OVR)) delete OVR[k]
+    for (const k of Object.keys(p)) setColor(k, p[k] as RGB, false)
+    applyDerived(name)
     applyRioStyle(name)
+    notifyColorChange()
 }
 
 export const getPaletteName = (): string => {
@@ -495,9 +630,26 @@ export const getPaletteName = (): string => {
     return "NETWATCH"
 }
 
-export const setUserColor = (key: string, rgb: RGB) => { setColor(key, rgb) }
+export const setUserColor = (key: string, rgb: RGB) => {
+    OVR[key] = true
+    setColor(key, rgb, false)
+    applyDerived(curPalette)
+    notifyColorChange()
+}
 
 export const getUserColor = (key: string): RGB => [NEON[key][0], NEON[key][1], NEON[key][2]] as RGB
+
+export const hasAlpha = (key: string) => USER_A[key] !== undefined
+
+export const getUserAlpha = (key: string): number => USER_A[key] ?? 1
+
+export const setUserAlpha = (key: string, a: number) => {
+    if (USER_A[key] === undefined) return
+    OVR[key] = true
+    USER_A[key] = Math.max(0, Math.min(1, a))
+    applyDerived(curPalette)
+    notifyColorChange()
+}
 
 const COLOR_KEYS = Object.keys(NEON)
 const USER_PATH = `${CYBER_DIR}/config/user_colors.lua`
@@ -507,33 +659,40 @@ export const loadUserColors = (): void => {
         const [ok, bytes] = GLib.file_get_contents(USER_PATH)
         if (!ok) return
         const src = new TextDecoder().decode(bytes)
-        for (const line of src.split("\n")) {
-            const m = /users\["(\w+)"\]\s*=\s*\{?\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(line)
-            if (m && COLOR_KEYS.includes(m[1])) setColor(m[1], [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])] as RGB)
+        const lines = src.split("\n")
+        let saved = ""
+        for (const k of Object.keys(OVR)) delete OVR[k]
+        for (const line of lines) {
+            const o = /over\["(\w+)"\]\s*=\s*true/.exec(line)
+            if (o) { OVR[o[1]] = true; continue }
+            const p = /palette\s*=\s*"([A-Z]+)"/.exec(line)
+            if (p && PALETTES[p[1]]) saved = p[1]
         }
-        updateGlassAlpha(getPaletteName())
-        updateImgTint(getPaletteName())
-        updateMenuBg(getPaletteName())
-        updateMapAccent(getPaletteName())
-        updateHudSoft(getPaletteName())
-        updateGlassMode(getPaletteName())
-        updateNeonBtn(getPaletteName())
-        updateCircleTint(getPaletteName())
-        updateLauncherTint(getPaletteName())
-        updateLauncherLabelTint(getPaletteName())
-        updateRadioBg(getPaletteName())
-        updateNotifBubble(getPaletteName())
-        applyRioStyle(getPaletteName())
+        for (const line of lines) {
+            const m = /users\["(\w+)"\]\s*=\s*\{?\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([0-9.]+))?/.exec(line)
+            if (!m || !COLOR_KEYS.includes(m[1])) continue
+            setColor(m[1], [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])] as RGB, false)
+            if (m[5] !== undefined && USER_A[m[1]] !== undefined) USER_A[m[1]] = Math.max(0, Math.min(1, parseFloat(m[5])))
+        }
+        const name = saved || getPaletteName()
+        applyDerived(name)
+        applyRioStyle(name)
+        notifyColorChange()
     } catch (e) { print("[color] load:", e) }
 }
 
 export const saveUserColors = (): void => {
     try {
-        let out = "local users = {}\n"
+        let out = "local users = {}\nlocal over = {}\n"
+        out += `local palette = "${curPalette}"\n`
         for (const k of COLOR_KEYS) {
             const c = NEON[k]
-            out += `users["${k}"] = { ${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])} }\n`
+            const a = USER_A[k]
+            out += a === undefined
+                ? `users["${k}"] = { ${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])} }\n`
+                : `users["${k}"] = { ${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])}, ${a.toFixed(3)} }\n`
         }
+        for (const k of Object.keys(OVR)) if (OVR[k]) out += `over["${k}"] = true\n`
         const dir = `${CYBER_DIR}/config`
         GLib.mkdir_with_parents(dir, 0o755)
         GLib.file_set_contents(USER_PATH, out)

@@ -17,6 +17,10 @@ const Cairo = (imports).cairo
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 const NETCOL: [number, number, number] = NEON.netinfo
+const MAPACC: [number, number, number] = NEON.mapaccent
+const NETCHIP: [number, number, number] = NEON.netchip
+const NETUP: [number, number, number] = NEON.netup
+const NETDN: [number, number, number] = NEON.netdown
 const W = 320, H = 530
 const MAP_DX = 100
 const minimapBase = makePlane({ w: W, h: H, yaw: 24, pitch: 3, roll: -1, focal: 1300, dist: 1300, pad: 0 })
@@ -237,7 +241,7 @@ const drawMapStatic = (ctx) => {
  strokePath(ctx, minimap, MAP_SHAPE, [81, 104, 111], 0.25, 1.4, true)
  strokePath(ctx, minimap, MAP_SHAPE, [81, 104, 111], 1, 0.9, true)
 
- tiltText(ctx, minimap, MX1 - 8, MY1 - 10, geoCoords, MONO, 8, geoOK ? NEON.cyan : NEON.red, 0.55, { align: "r" })
+ tiltText(ctx, minimap, MX1 - 8, MY1 - 10, geoCoords, MONO, 8, geoOK ? MAPACC : NEON.red, 0.55, { align: "r" })
 }
 
 
@@ -245,17 +249,17 @@ const drawCompassScan = (ctx) => {
  const px = 150, py = 216
  const legs = [[px - 6, py + 6], [px, py - 7], [px + 6, py + 6]]
  const bar = [[px - 3.3, py], [px, py + 3.5], [px + 3.3, py]]
- strokePath(ctx, minimap, legs, NEON.cyan, 0.3, 3.5)
- strokePath(ctx, minimap, bar, NEON.cyan, 0.3, 3.5)
- strokePath(ctx, minimap, legs, NEON.cyan, 0.95, 1.5)
- strokePath(ctx, minimap, bar, NEON.cyan, 0.9, 1.3)
+ strokePath(ctx, minimap, legs, MAPACC, 0.3, 3.5)
+ strokePath(ctx, minimap, bar, MAPACC, 0.3, 3.5)
+ strokePath(ctx, minimap, legs, MAPACC, 0.95, 1.5)
+ strokePath(ctx, minimap, bar, MAPACC, 0.9, 1.3)
 }
 const MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 const ordDay = (d) => { const j = d % 10, k = d % 100; return d + (j === 1 && k !== 11 ? "st" : j === 2 && k !== 12 ? "nd" : j === 3 && k !== 13 ? "rd" : "th") }
 const fmtDate = (now) => `${ordDay(now.getDate())} ${MON3[now.getMonth()]}, ${now.getFullYear()}`
 
 const drawOverlay = (ctx, now) => {
- tiltText(ctx, minimap, MX0 + 8, MY0 + 10, "55S.441.20", MONO, 7, NEON.cyan, 0.34)
+ tiltText(ctx, minimap, MX0 + 8, MY0 + 10, "55S.441.20", MONO, 7, MAPACC, 0.34)
  tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || "NIGHT CITY").slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
   const tstr = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
  const tcx = MX0 + 4, tcy = MY0 - 7
@@ -263,22 +267,22 @@ const drawOverlay = (ctx, now) => {
  const FORECOL = mapAccent.forecast || NETCOL
  tiltText(ctx, minimap, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, FORECOL, 0.95, { bold: true, glow: 0.3 })
  tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
- tiltText(ctx, minimap, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, NEON.cyan, 0.52, { bold: true })
+ tiltText(ctx, minimap, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, MAPACC, 0.52, { bold: true })
  tiltText(ctx, minimap, MX1, MY1 + 16, fmtDate(now), MONO, 9.5, FORECOL, 0.9, { bold: true, align: "r", glow: 0.38 })
  const fy = MY1 + 36
  fillQuad(ctx, minimap, MX0 - 2, fy - 8, MX1 + 2, fy + 70, [0, 0, 0], 0.012)
  strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.16, 5)
  strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.62, 1)
  tiltText(ctx, minimap, MX0, fy, "7-DAY FORECAST", TITLE, 9, FORECOL, 0.85, { bold: true, glow: 0.32 })
- tiltText(ctx, minimap, MX1, fy, "L-CLICK \u25B8 DETAILS \u00B7 R \u25B8 CITY", MONO, 7, NEON.cyan, 0.38, { align: "r" })
+ tiltText(ctx, minimap, MX1, fy, "L-CLICK \u25B8 DETAILS \u00B7 R \u25B8 CITY", MONO, 7, MAPACC, 0.38, { align: "r" })
  const span = (MX1 - MX0) / 7
  for (let i = 0; i < 7; i++) {
  const cx = MX0 + i * span + span / 2, d = forecast[i], today = i === 0
  if (today) fillQuad(ctx, minimap, MX0 + i * span + 1, fy + 8, MX0 + (i + 1) * span - 1, fy + 66, FORECOL, 0.1)
  tiltText(ctx, minimap, cx, fy + 20, d ? d.day : "--", TITLE, 9, today ? FORECOL : NEON.white, today ? 0.97 : 0.6, { align: "c", bold: true, glow: today ? 0.3 : 0 })
- tiltText(ctx, minimap, cx, fy + 37, d ? wxIcon(WMO[d.code] || "") : "", ICONF, 13, today ? FORECOL : NEON.cyan, 0.85, { align: "c" })
+ tiltText(ctx, minimap, cx, fy + 37, d ? wxIcon(WMO[d.code] || "") : "", ICONF, 13, today ? FORECOL : MAPACC, 0.85, { align: "c" })
  tiltText(ctx, minimap, cx, fy + 51, d ? d.hi : "--", MONO, 10, today ? FORECOL : NEON.white, 0.9, { align: "c", bold: true })
- tiltText(ctx, minimap, cx, fy + 63, d ? d.lo : "--", MONO, 8, NEON.cyan, 0.5, { align: "c" })
+ tiltText(ctx, minimap, cx, fy + 63, d ? d.lo : "--", MONO, 8, MAPACC, 0.5, { align: "c" })
  }
 
 
@@ -286,15 +290,15 @@ const drawOverlay = (ctx, now) => {
  const off = !netName || netName === "OFFLINE"
  const stxt = off ? "OFFLINE!" : netName
  tiltText(ctx, connPlane, MX0 - 16 + dx, ny, "NETWORK STATUS", TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
- alertChip(ctx, iconPlane, MX0 + 6 + dx, ny + 11, NETCOL, 0.8)
+ alertChip(ctx, iconPlane, MX0 + 6 + dx, ny + 11, NETCHIP, 0.8)
  tiltText(ctx, connPlane, MX0 + 26 + dx, ny + 22, stxt, TITLE, 14, NETCOL, 0.95, { bold: true, glow: off ? 0.22 : 0.1, bloom: 0.45, shadow: 1 })
 }
 const drawNetSpeed = (ctx) => {
  const fy = MY1 + 65, ny = fy + 91, ux = MX0 + 276
- tiltText(ctx, connPlane, ux - 70, ny - 1, "", ICONF, 9, NEON.cyan, 0.95, { bold: true, align: "r" })
- tiltText(ctx, connPlane, ux - 25, ny - 1, `${netUp} Mbps`, MONO, 8.5, NEON.cyan, 0.92, { bold: true, align: "r", glow: 0.3 })
- tiltText(ctx, connPlane, ux - 50, ny + 22, "", ICONF, 9, NEON.red, 0.95, { bold: true, align: "r" })
- tiltText(ctx, connPlane, ux - 8, ny + 22, `${netDown} Mbps`, MONO, 8.5, NEON.red, 0.92, { bold: true, align: "r", glow: 0.3 })
+ tiltText(ctx, connPlane, ux - 70, ny - 1, "", ICONF, 9, NETUP, 0.95, { bold: true, align: "r" })
+ tiltText(ctx, connPlane, ux - 25, ny - 1, `${netUp} Mbps`, MONO, 8.5, NETUP, 0.92, { bold: true, align: "r", glow: 0.3 })
+ tiltText(ctx, connPlane, ux - 50, ny + 22, "", ICONF, 9, NETDN, 0.95, { bold: true, align: "r" })
+ tiltText(ctx, connPlane, ux - 8, ny + 22, `${netDown} Mbps`, MONO, 8.5, NETDN, 0.92, { bold: true, align: "r", glow: 0.3 })
 }
 let cache = null, cacheKey = ""
 
@@ -404,9 +408,9 @@ let fcModal: any = null, fcSel = 0, fcTick = 0, fcOpenAt = 0, fcCityTap = 0
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
 const fcReveal = () => ease((Date.now() - fcOpenAt) / 620)
 
-const YEL: [number, number, number] = [252 / 255, 238 / 255, 10 / 255]
+const YEL: [number, number, number] = USER.amber
 const ARA: [number, number, number] = RACC
-const HOT: [number, number, number] = [255 / 255, 42 / 255, 58 / 255]
+const HOT: [number, number, number] = USER.red
 
 const chamfer = (ctx, x, y, w, h, c = 11) => {
  ctx.newPath()

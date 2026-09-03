@@ -212,7 +212,7 @@ void main()
     float _bx = ( _dst.x < 4.0 && _dst.y < 30.0 ) ? 1.0 : 0.0;
     float _by = ( _dst.y < 4.0 && _dst.x < 42.0 ) ? 1.0 : 0.0;
     float _frame = clamp( _l1 + _l2 + max( _bx, _by ), 0.0, 1.0 );
-    float _glow  = exp( -_e / 10.0 ) * 0.60;
+    float _glow  = exp( -_e / 5.0 ) * 0.60;
 
     col   = clamp( col + FRAME_COL * _glow * 0.40, vec3(0.0), vec3(1.0) );
     col   = mix( col, FRAME_COL, _frame * 0.94 );
