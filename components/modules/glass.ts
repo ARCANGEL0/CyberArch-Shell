@@ -117,9 +117,22 @@ export const segParam = (plane: Plane, u0, v0, u1, v1, px, py) => {
 
 const REVEAL_BANDS = 9
 const REVEAL_SLICES = 72
+const REST_SLICES = 240
+const fitCache = new WeakMap<Plane, any>()
 const planeFit = (plane: Plane, PW, PH) => {
+    const hit = fitCache.get(plane)
+    if (hit && hit.PW === PW && hit.PH === PH) return hit
     const o = plane.project(0, 0), e = plane.project(PW, PH)
-    return { ox: o[0], oy: o[1], fx: (e[0] - o[0]) / PW, fy: (e[1] - o[1]) / PH }
+    const fx = (e[0] - o[0]) / PW, fy = (e[1] - o[1]) / PH
+    let dev = 0
+    const probes = [[PW, 0], [0, PH], [PW * 0.5, PH * 0.5], [PW * 0.25, PH * 0.75], [PW * 0.75, PH * 0.25]]
+    for (const [u, v] of probes) {
+        const p = plane.project(u, v)
+        dev = Math.max(dev, Math.abs(p[0] - (o[0] + u * fx)), Math.abs(p[1] - (o[1] + v * fy)))
+    }
+    const rec = { PW, PH, ox: o[0], oy: o[1], fx, fy, affine: dev < 0.01 }
+    fitCache.set(plane, rec)
+    return rec
 }
 const revealState = (intro, seed, PH) => {
     const e = intro, full = e >= 0.999
@@ -131,8 +144,8 @@ const revealState = (intro, seed, PH) => {
     const shiftAt = (v) => full ? 0 : (nz(Math.floor(v / (PH / REVEAL_BANDS)) + 1) * 2 - 1) * 50 * dec * dec
     return { full, dec, slideX, shiftAt }
 }
-const revealSlice = (plane: Plane, PW, PH, state, i) => {
-    const v0 = i * PH / REVEAL_SLICES, v1 = (i + 1) * PH / REVEAL_SLICES
+const revealSlice = (plane: Plane, PW, PH, state, i, N) => {
+    const v0 = i * PH / N, v1 = (i + 1) * PH / N
     const tl = plane.project(0, v0), tr = plane.project(PW, v0), bl = plane.project(0, v1), br = plane.project(PW, v1)
     const ulen = Math.max(Math.hypot(tr[0] - tl[0], tr[1] - tl[1]), Math.hypot(br[0] - bl[0], br[1] - bl[1]))
     const vlen = Math.hypot(bl[0] - tl[0], bl[1] - tl[1])
@@ -145,22 +158,52 @@ const revealSlice = (plane: Plane, PW, PH, state, i) => {
         sx: ulen / PW, sy, bleed: 1.5 / Math.max(0.0001, sy),
     }
 }
+const REST_STATE = { full: true, dec: 0, slideX: 0, shiftAt: (_v: number) => 0 }
+const restCache = new WeakMap<Plane, any>()
+const restSlices = (plane: Plane, PW, PH) => {
+    const hit = restCache.get(plane)
+    if (hit && hit.PW === PW && hit.PH === PH) return hit.arr
+    const arr: any[] = []
+    for (let i = 0; i < REST_SLICES; i++) arr.push(revealSlice(plane, PW, PH, REST_STATE, i, REST_SLICES))
+    restCache.set(plane, { PW, PH, arr })
+    return arr
+}
+const paintSlice = (screenCtx, surf, b, PW, ss) => {
+    screenCtx.save()
+    screenCtx.translate(b.x, b.y); screenCtx.rotate(b.angle); screenCtx.scale(b.sx, b.sy)
+    screenCtx.rectangle(0, -0.4, PW, (b.v1 - b.v0) + 0.4 + b.bleed); screenCtx.clip()
+    if (ss !== 1) screenCtx.scale(1 / ss, 1 / ss)
+    screenCtx.setSourceSurface(surf, 0, -b.v0 * ss); screenCtx.paint()
+    screenCtx.restore()
+}
+const hitSlice = (b, px, py, PW, PH): [number, number] | null => {
+    const dx = px - b.x, dy = py - b.y
+    const u = (dx * b.cos + dy * b.sin) / b.sx
+    const lv = (-dx * b.sin + dy * b.cos) / b.sy
+    if (u >= 0 && u <= PW && lv >= -0.4 && lv <= b.v1 - b.v0 + 0.4 + b.bleed)
+        return [u, Math.max(0, Math.min(PH, b.v0 + lv))]
+    return null
+}
 
 export const unwarpRevealPoint = (px, py, plane: Plane, PW, PH, intro, seed): [number, number] | null => {
     const state = revealState(intro, seed, PH)
     if (state.full) {
-        const { ox, oy, fx, fy } = planeFit(plane, PW, PH)
-        const u = (px - ox) / fx, v = (py - oy) / fy
-        if (u < 0 || u > PW || v < -0.4 || v > PH + 1.9) return null
-        return [u, Math.max(0, Math.min(PH, v))]
+        const fit = planeFit(plane, PW, PH)
+        if (fit.affine) {
+            const u = (px - fit.ox) / fit.fx, v = (py - fit.oy) / fit.fy
+            if (u < 0 || u > PW || v < -0.4 || v > PH + 1.9) return null
+            return [u, Math.max(0, Math.min(PH, v))]
+        }
+        const arr = restSlices(plane, PW, PH)
+        for (let i = arr.length - 1; i >= 0; i--) {
+            const h = hitSlice(arr[i], px, py, PW, PH)
+            if (h) return h
+        }
+        return null
     }
     for (let i = REVEAL_SLICES - 1; i >= 0; i--) {
-        const b = revealSlice(plane, PW, PH, state, i)
-        const dx = px - b.x, dy = py - b.y
-        const u = (dx * b.cos + dy * b.sin) / b.sx
-        const lv = (-dx * b.sin + dy * b.cos) / b.sy
-        if (u >= 0 && u <= PW && lv >= -0.4 && lv <= b.v1 - b.v0 + 0.4 + b.bleed)
-            return [u, Math.max(0, Math.min(PH, b.v0 + lv))]
+        const h = hitSlice(revealSlice(plane, PW, PH, state, i, REVEAL_SLICES), px, py, PW, PH)
+        if (h) return h
     }
     return null
 }
@@ -168,23 +211,19 @@ export const unwarpRevealPoint = (px, py, plane: Plane, PW, PH, intro, seed): [n
 export const warpReveal = (screenCtx, surf, plane: Plane, PW, PH, intro, seed, ss = 1) => {
     const state = revealState(intro, seed, PH)
     if (state.full) {
-        const { ox, oy, fx, fy } = planeFit(plane, PW, PH)
-        screenCtx.save()
-        screenCtx.translate(ox, oy); screenCtx.scale(fx / ss, fy / ss)
-        screenCtx.setSourceSurface(surf, 0, 0); screenCtx.paint()
-        screenCtx.restore()
+        const fit = planeFit(plane, PW, PH)
+        if (fit.affine) {
+            screenCtx.save()
+            screenCtx.translate(fit.ox, fit.oy); screenCtx.scale(fit.fx / ss, fit.fy / ss)
+            screenCtx.setSourceSurface(surf, 0, 0); screenCtx.paint()
+            screenCtx.restore()
+            return
+        }
+        const arr = restSlices(plane, PW, PH)
+        for (let i = 0; i < arr.length; i++) paintSlice(screenCtx, surf, arr[i], PW, ss)
         return
     }
-    for (let i = 0; i < REVEAL_SLICES; i++) {
-        const b = revealSlice(plane, PW, PH, state, i)
-        const { v0, v1 } = b
-        screenCtx.save()
-        screenCtx.translate(b.x, b.y); screenCtx.rotate(b.angle); screenCtx.scale(b.sx, b.sy)
-        screenCtx.rectangle(0, -0.4, PW, (v1 - v0) + 0.4 + b.bleed); screenCtx.clip()
-        if (ss !== 1) screenCtx.scale(1 / ss, 1 / ss)
-        screenCtx.setSourceSurface(surf, 0, -v0 * ss); screenCtx.paint()
-        screenCtx.restore()
-    }
+    for (let i = 0; i < REVEAL_SLICES; i++) paintSlice(screenCtx, surf, revealSlice(plane, PW, PH, state, i, REVEAL_SLICES), PW, ss)
     const { dec, slideX } = state
     screenCtx.setOperator(12); screenCtx.setLineJoin(0)
     for (let b = 1; b < REVEAL_BANDS; b++) {
