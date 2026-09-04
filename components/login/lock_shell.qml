@@ -26,6 +26,7 @@ ShellRoot {
     }
 
     PamContext {
+        config: Quickshell.env("QS_PAM_CONFIG") || "login"
         id: pam
         property string pendingPassword: ""
 

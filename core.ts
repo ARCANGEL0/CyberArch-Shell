@@ -47,8 +47,10 @@ const CSS = `${COMPONENTS_DIR}/style/cyber.css`
 const compileCss = async () => {
  try {
  await execAsync(["sassc", SCSS, CSS])
+ } catch (e) {
+ print("[cyberpunk] sassc:", e)
+ }
  App.apply_css(CSS, true)
- } catch (e) { print("[cyberpunk] sassc:", e) }
 }
 
 const hudWins = []

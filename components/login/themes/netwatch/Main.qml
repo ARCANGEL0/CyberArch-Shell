@@ -53,7 +53,9 @@ Rectangle {
     property string cityFull: "UNKNOWN LOCATION"
     property real cityLat: 0
     property real cityLon: 0
-    Process { id: cityProc; command: ["sh","-c","cat ~/.config/cyberarch/city.json 2>/dev/null || cat ~/.config/hypr/themes/cyberpunk/config/city.json 2>/dev/null || echo '{}'"]; running: true
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
+    readonly property string cyberarchConfigDir: Quickshell.env("CYBERARCH_CONFIG_DIR") || (configHome + "/cyberarch")
+    Process { id: cityProc; command: ["cat", root.cyberarchConfigDir + "/city.json"]; running: true
         stdout: StdioCollector { onStreamFinished: {
             try {
                 var o = JSON.parse(this.text)
