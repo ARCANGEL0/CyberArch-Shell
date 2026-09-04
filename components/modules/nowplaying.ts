@@ -1,6 +1,6 @@
 import { Window, Box, DrawingArea, App } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
-import { interval } from "astal"
+import { interval, timeout } from "astal"
 import AstalMpris from "gi://AstalMpris"
 import { NEON, f, onColorChange } from "./colors.ts"
 import { makePlane, tiltText, strokePath, fillQuad } from "./proj.ts"
@@ -9,13 +9,13 @@ import { TITLE } from "./fonts.ts"
 const IW = 300, IH = 54
 const plane = makePlane({ w: IW, h: IH, yaw: 8, pitch: 2, roll: -1, focal: 3600, dist: 3600, pad: 12 })
 const BW = plane.width, BH = plane.height
-const TOTAL_MS = 7500, SCAN_MS = 2000, INTRO_MS = 620, OUTRO_MS = 500
+const TOTAL_MS = 7500, SCAN_MS = 2000, INTRO_MS = 620, OUTRO_MS = 500, SETTLE_MS = 140
 
 let areas: any[] = [], wins: any[] = []
 const redrawAll = () => areas.forEach(a => { try { a.queue_draw() } catch {} })
 const setShown = (v) => wins.forEach(w => { try { w.visible = v } catch {} })
 
-let curTitle = "", curArtist = "", curSrc = ""
+let curTitle = "", curArtist = "", curSrc = "", curId = ""
 let el = 0, animTimer: any = null, visible = false
 let eqBars = [0.4, 0.7, 0.45, 0.8], eqT = 0
 
@@ -86,8 +86,8 @@ const drawBanner = (ctx) => {
  }
 }
 
-const show = (t, a, src) => {
- curTitle = t; curArtist = a; curSrc = src
+const show = (t, a, src, id) => {
+ curTitle = t; curArtist = a; curSrc = src; curId = id
  el = 0; eqT = 0; visible = true; setShown(true)
  if (animTimer) animTimer.cancel()
  const start = Date.now()
@@ -105,17 +105,39 @@ const seen = new Map()
 const srcLabel = (pl) => { const s = (pl?.identity || pl?.busName || "").toString().split(".").pop() || ""; return s.toUpperCase().slice(0, 12) }
 const watch = (pl) => {
  const id = (pl?.busName || pl?.identity || Math.random()).toString()
- if (!seen.has(id)) seen.set(id, { was: false, last: "" })
+ if (!seen.has(id)) seen.set(id, { was: false, last: "", timer: null })
  const check = () => {
      try {
          const playing = pl.playbackStatus === AstalMpris.PlaybackStatus.PLAYING
          const t = (pl.title || "").toString(), a = (pl.artist || "").toString()
          const st = seen.get(id)
-         if (t && playing && (!st.was || t !== st.last)) show(t, a, srcLabel(pl))
+         if (t && playing && (!st.was || t !== st.last)) show(t, a, srcLabel(pl), id)
          st.was = playing; st.last = t
      } catch {}
  }
- try { pl.connect("notify::playback-status", check); pl.connect("notify::title", check) } catch {}
+ // FIXED!! the issue was that libastal splits the one mpris metadata dict into
+ // separate title/artist props and notifies them one at a time, so reading artist
+ // inside notify::title handed u the previous songs artist. only bit gapless players
+ // like spotify, thats why it never showed up on my end. dont inline this back
+ const settle = () => {
+     const st = seen.get(id)
+     if (st.timer) { try { st.timer.cancel() } catch {} }
+     st.timer = timeout(SETTLE_MS, () => { st.timer = null; check() })
+ }
+ const refresh = () => {
+     try {
+         if (!visible || id !== curId) return
+         if ((pl.title || "").toString() !== curTitle) return
+         const a = (pl.artist || "").toString()
+         if (a && a !== curArtist) { curArtist = a; redrawAll() }
+     } catch {}
+ }
+ try {
+     pl.connect("notify::playback-status", settle)
+     pl.connect("notify::title", settle)
+     pl.connect("notify::artist", refresh)
+     pl.connect("notify::metadata", refresh)
+ } catch {}
  check()
 }
 const initMpris = () => {
