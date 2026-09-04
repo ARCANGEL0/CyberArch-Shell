@@ -5,6 +5,7 @@ import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"
 import { showToast } from "./toast.ts"
+import { animOn, animMaster } from "./config.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
@@ -373,6 +374,7 @@ const startWsAnim = (st: WsState) => {
 }
 
 export const triggerWsSwitch = (target) => {
+ if (!animOn("animGlitch")) return
  for (const st of wsStates) {
      st.seed = (Date.now() * 9301 + 49297 + st.x + st.y) % 233280
      recache(st)
@@ -391,6 +393,7 @@ export const BannerWindow = () => {
  return bnWin
 }
 export const triggerBanner = (title, sub, flash = 0, payload = "") => {
+ if (!animMaster()) return
  bnTitle = title; bnSub = sub; bnFlash = flash; genBreach()
  if (bnTimer) bnTimer.cancel()
  bnProg = 0; try { bnWin.gdkmonitor = geomMonitor(parseGeom(payload)) } catch {} bnWin.visible = true

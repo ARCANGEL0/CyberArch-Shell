@@ -6,15 +6,21 @@ import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { NEON, USER, USER_A, f, onColorChange, menuBg, glassMode } from "./colors.ts"
+import { sndOn, sndFile, animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
 
 
 const AUDIO = `${CYBER_DIR}/assets/audio`
-const playSnd = (file) => execAsync(["sh", "-c",
- `pw-play --volume=1.5 "${AUDIO}/${file}" 2>/dev/null || play -q -v 1.5 "${AUDIO}/${file}" 2>/dev/null || mpv --no-config --no-terminal --really-quiet --volume=150 "${AUDIO}/${file}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet -volume 150 "${AUDIO}/${file}" 2>/dev/null`]).catch(() => {})
+const sndAt = (key: string, file: string) => sndFile(key, `${AUDIO}/${file}`)
+const pkillPat = (path: string) => {
+    const b = path.slice(path.lastIndexOf("/") + 1), d = b.lastIndexOf(".")
+    return d > 0 ? `${b.slice(0, d)}[.]${b.slice(d + 1)}` : b
+}
+const playSnd = (path) => execAsync(["sh", "-c",
+ `pw-play --volume=1.5 "${path}" 2>/dev/null || play -q -v 1.5 "${path}" 2>/dev/null || mpv --no-config --no-terminal --really-quiet --volume=150 "${path}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet -volume 150 "${path}" 2>/dev/null`]).catch(() => {})
 let lastBeep = 0
-const beep = () => { const t = Date.now(); if (t - lastBeep < 35) return; lastBeep = t; playSnd("kiroshi_beep.ogg") }
+const beep = () => { if (!sndOn("sndWheel")) return; const t = Date.now(); if (t - lastBeep < 35) return; lastBeep = t; playSnd(`${AUDIO}/kiroshi_beep.ogg`) }
 
 
 
@@ -22,13 +28,23 @@ const beep = () => { const t = Date.now(); if (t - lastBeep < 35) return; lastBe
 
 
 const MENU_LOCK = "/tmp/kiroshi_menu.lock"
-const startMenuLoop = () => execAsync(["sh", "-c",
- `touch '${MENU_LOCK}'; while [ -e '${MENU_LOCK}' ]; do ` +
- `pw-play --volume=2.0 "${AUDIO}/kiroshi_menu.ogg" 2>/dev/null || play -q -v 2.0 "${AUDIO}/kiroshi_menu.ogg" 2>/dev/null || { mpv --no-config --no-terminal --really-quiet --no-video --volume=200 "${AUDIO}/kiroshi_menu.ogg" 2>/dev/null || break; }; done`]).catch(() => {})
+const startMenuLoop = () => {
+    if (!sndOn("sndWheel")) return
+    const p = sndAt("sndWheelActive", "kiroshi_menu.ogg")
+    execAsync(["sh", "-c",
+        `touch '${MENU_LOCK}'; while [ -e '${MENU_LOCK}' ]; do ` +
+        `pw-play --volume=2.0 "${p}" 2>/dev/null || play -q -v 2.0 "${p}" 2>/dev/null || { mpv --no-config --no-terminal --really-quiet --no-video --volume=200 "${p}" 2>/dev/null || break; }; done`]).catch(() => {})
+}
 
- const stopMenuLoop = () => execAsync(["sh", "-c",
- `rm -f '${MENU_LOCK}'; pkill -f 'kiroshi_menu[.]ogg' 2>/dev/null; ` +
- `play -q -v 1.5 "${AUDIO}/kiroshi_off.ogg" 2>/dev/null || mpv --no-config --really-quiet --volume=150 "${AUDIO}/kiroshi_off.ogg" 2>/dev/null`]).catch(() => {})
+const stopMenuLoop = () => {
+    const act = sndAt("sndWheelActive", "kiroshi_menu.ogg")
+    const off = sndAt("sndWheelEnd", "kiroshi_off.ogg")
+    const kill = `rm -f '${MENU_LOCK}'; pkill -f '${pkillPat(act)}' 2>/dev/null`
+    if (!sndOn("sndWheel")) { execAsync(["sh", "-c", `${kill}; true`]).catch(() => {}); return }
+    execAsync(["sh", "-c", `${kill}; ` +
+        `play -q -v 1.5 "${off}" 2>/dev/null || mpv --no-config --really-quiet --volume=150 "${off}" 2>/dev/null`]).catch(() => {})
+}
+
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 
@@ -61,7 +77,7 @@ const applyFilter = () => {
      .filter((p) => p[1].includes(q))
      .sort((a, b) => (a[1].indexOf(q) - b[1].indexOf(q)) || a[1].localeCompare(b[1]))
      .map((p) => p[0])
- scroll = 0; scrollTarget = 0; searchFlash = 1
+ scroll = 0; scrollTarget = 0; searchFlash = animOn("animWheel") ? 1 : 0
  animate()
 }
 
@@ -256,9 +272,10 @@ const stopAnim = () => { if (animT) { animT.cancel(); animT = null } }
 const animate = () => {
   if (animT) return
   animT = interval(16, () => {
-      scroll += (scrollTarget - scroll) * 0.28
-      if (searchFlash > 0) searchFlash = Math.max(0, searchFlash - 0.06)
-      intro += (introTarget - intro) * 0.4
+      const sm = animOn("animWheel")
+      scroll += (scrollTarget - scroll) * (sm ? 0.28 : 1)
+      if (searchFlash > 0) searchFlash = sm ? Math.max(0, searchFlash - 0.06) : 0
+      intro += (introTarget - intro) * (sm ? 0.4 : 1)
       if (introTarget === 0 && intro < 0.02) { intro = 0; if (menuWin) menuWin.visible = false }
       const settled = Math.abs(scrollTarget - scroll) < 0.002 && searchFlash <= 0 && Math.abs(introTarget - intro) < 0.004
       if (settled) { scroll = scrollTarget; intro = introTarget; stopAnim() }

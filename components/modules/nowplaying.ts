@@ -4,6 +4,7 @@ import { interval, timeout } from "astal"
 import AstalMpris from "gi://AstalMpris"
 import { NEON, f, onColorChange } from "./colors.ts"
 import { makePlane, tiltText, strokePath, fillQuad } from "./proj.ts"
+import { animOn } from "./config.ts"
 
 import { TITLE } from "./fonts.ts"
 const IW = 300, IH = 54
@@ -27,13 +28,14 @@ const drawBanner = (ctx) => {
  const [rr, rg, rb] = f(NEON.red)
 
  let reveal = 1, contentA = 1, barW = 1, barA = 0, barOnly = false
- if (e < INTRO_MS) {
+ const sm = animOn("animMusic")
+ if (sm && e < INTRO_MS) {
      const ip = e / INTRO_MS
      reveal = 0; contentA = 0; barA = 1; barOnly = ip < 0.6
      if (ip < 0.28) barW = Math.max(0.02, ip / 0.28)
      else if (ip < 0.6) { barW = 1; const bp = (ip - 0.28) / 0.32; barA = (Math.floor(bp * 4) % 2 === 0) ? 1 : 0.12 }
      else { reveal = (ip - 0.6) / 0.4; contentA = Math.max(0, (ip - 0.8) / 0.2) }
- } else if (e > TOTAL_MS - OUTRO_MS) {
+ } else if (sm && e > TOTAL_MS - OUTRO_MS) {
      const op = (e - (TOTAL_MS - OUTRO_MS)) / OUTRO_MS
      if (op < 0.45) { reveal = 1 - op / 0.45; contentA = Math.max(0, 1 - op / 0.28) }
      else { reveal = 0; contentA = 0; barOnly = true
@@ -94,6 +96,7 @@ const show = (t, a, src, id) => {
  animTimer = interval(33, () => {
      el = Date.now() - start
      if (el >= TOTAL_MS) { visible = false; el = 0; animTimer.cancel(); animTimer = null; setShown(false); return }
+     if (!animOn("animMusic")) return
      if (el - eqT > 95) { eqT = el; for (let i = 0; i < eqBars.length; i++) eqBars[i] = 0.18 + Math.random() * 0.82 }
      redrawAll()
  })

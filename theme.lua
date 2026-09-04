@@ -12,6 +12,16 @@ hl.exec_cmd("killall -9 waybar mako dunst swaync 2>/dev/null; systemctl --user s
 hl.exec_cmd("sh -c 'pgrep -x gjs >/dev/null 2>&1 || { " .. os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null; sleep 1; " .. cyberpunk .. "/scripts/launch-theme; }'")
 hl.exec_cmd(cyberpunk .. "/scripts/ws pin")
 local user_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/cyberarch"
+local ucfg = {}
+local cfgf = loadfile(user_dir .. "/user_config.lua")
+if cfgf then
+    local ok, res = pcall(cfgf)
+    if ok and type(res) == "table" then
+        ucfg = res
+    end
+end
+local anim_master = ucfg["anim"] ~= false
+local anim_workspace = anim_master and ucfg["animWorkspace"] == true
 local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
 local set_wallpaper = wallpapers_path .. "/lucy.png"
 local wf = loadfile(user_dir .. "/wallpaper.lua")
@@ -130,12 +140,12 @@ local opwin = "^(Rename.*|Create New Folder|Create Folder|Create Document|Bulk R
 hl.window_rule({ match = { title = opwin }, float = true })
 hl.window_rule({ match = { title = opwin }, center = true })
 
-hl.config({ animations = { enabled = true } })
+hl.config({ animations = { enabled = anim_master } })
 hl.curve("swiftOut", { type = "bezier", points = { {0.05, 0.7}, {0.1, 1.0} } })
 hl.animation({ leaf = "windows",     enabled = true, speed = 4, bezier = "swiftOut", style = "slide" })
 hl.animation({ leaf = "windowsIn",   enabled = true, speed = 4, bezier = "swiftOut", style = "slide left" })
 hl.animation({ leaf = "windowsOut",  enabled = true, speed = 3, bezier = "swiftOut", style = "slide right" })
 hl.animation({ leaf = "windowsMove", enabled = true, speed = 4, bezier = "swiftOut", style = "slide" })
 hl.animation({ leaf = "fade",        enabled = true, speed = 4, bezier = "swiftOut" })
-hl.animation({ leaf = "workspaces",  enabled = false })
+hl.animation({ leaf = "workspaces",  enabled = anim_workspace, speed = 4, bezier = "swiftOut", style = "slide" })
 hl.animation({ leaf = "layers",      enabled = true, speed = 3, bezier = "swiftOut", style = "fade" })

@@ -7,6 +7,7 @@ import { toggleNotifHud, isNotifHudOpen, onNotifHudChange, notifCount } from "./
 import { togglePlayer, isPlayerOpen, onPlayerChange, playPauseActive } from "./player.ts"
 import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
 import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./colors.ts"
+import { animOn } from "./config.ts"
 const NOTIF_RED: RGB = NEON.notifbadge
 import { CYBER_DIR } from "../../env.ts"
 
@@ -220,7 +221,7 @@ const VertDock = () => {
  stateRefresh()
  let mTick: any = null
  const eqPump = () => {
-     if (!musicPlaying) { if (mTick) { mTick.cancel(); mTick = null } return }
+     if (!musicPlaying || !animOn("animMusic")) { if (mTick) { mTick.cancel(); mTick = null } return }
      for (let i = 0; i < eqBars.length; i++) eqBars[i] = 0.12 + Math.random() * 0.88
      area.queue_draw()
      if (!mTick) mTick = interval(110, eqPump)

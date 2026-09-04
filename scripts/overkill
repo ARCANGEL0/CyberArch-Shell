@@ -2,16 +2,21 @@
 DIR=$(cd "$(dirname "$0")" && pwd)
 AUDIO="$DIR/../assets/audio"
 HUM_LOCK="/tmp/overkill_hum.lock"
+. "$DIR/cfg.sh"
 play_snd() {
-    setsid -f sh -c "play -q -v $2 \"$AUDIO/$1\" 2>/dev/null || mpv --no-video --really-quiet --volume=$3 \"$AUDIO/$1\" 2>/dev/null" >/dev/null 2>&1
+    snd_on sndOverlay || return 0
+    P=$(snd_path "$4" "$AUDIO/$1")
+    setsid -f sh -c "play -q -v $2 \"$P\" 2>/dev/null || mpv --no-video --really-quiet --volume=$3 \"$P\" 2>/dev/null" >/dev/null 2>&1
 }
 start_hum() { # loop the kiroshi_menu ambience at 200%, keeps going until the lockfile is removed
+    snd_on sndOverlay || return 0
+    P=$(snd_path sndWheelActive "$AUDIO/kiroshi_menu.ogg")
     touch "$HUM_LOCK"
-    setsid -f sh -c "while [ -e '$HUM_LOCK' ]; do play -q -v 2.0 \"$AUDIO/kiroshi_menu.ogg\" 2>/dev/null || { mpv --no-video --really-quiet --volume=200 \"$AUDIO/kiroshi_menu.ogg\" 2>/dev/null || break; }; done" >/dev/null 2>&1
+    setsid -f sh -c "while [ -e '$HUM_LOCK' ]; do play -q -v 2.0 \"$P\" 2>/dev/null || { mpv --no-video --really-quiet --volume=200 \"$P\" 2>/dev/null || break; }; done" >/dev/null 2>&1
 }
 stop_hum() {
     rm -f "$HUM_LOCK"
-    pkill -f 'kiroshi_menu[.]ogg' 2>/dev/null
+    pkill -f "$(snd_pat "$(snd_path sndWheelActive "$AUDIO/kiroshi_menu.ogg")")" 2>/dev/null
 }
 
 DAEMON_PID=/tmp/overkill-daemon.pid
@@ -434,7 +439,7 @@ case "${1:-enter}" in
     ensure_daemon || exit 1
     kill -USR2 "$(cat "$DAEMON_PID" 2>/dev/null)" 2>/dev/null   # instant: wake the resident overlay
     echo "KILL MODE ON"
-    play_snd kiroshi_on.ogg 1.5 150   # the "powering on" blip
+    play_snd kiroshi_on.ogg 1.5 150 sndWheelStart   # the "powering on" blip
     start_hum                          # kick off the looping menu ambience (200% vol)
     hyprctl dispatch "hl.dsp.submap('kill')"
     ;;
@@ -447,13 +452,13 @@ case "${1:-enter}" in
       Hyprland|hyprland|systemd|systemd-logind|login|Xorg|Xwayland|wayfire|river|emacs|ssh|sshd|sudo|su|dbus-daemon|dbus-broker|polkit*) exit 1 ;;
     esac
     kill -9 "$PID" 2>/dev/null
-    play_snd kill.ogg 1.5 150          # the "app killed" sound
+    play_snd kill.ogg 1.5 150 sndKillFile          # the "app killed" sound
     "$0" cleanup
     ;;
   exit|cleanup)
     echo "KILL MODE OFF"
     stop_hum                           # stop the looping menu ambience
-    play_snd kiroshi_off.ogg 1.5 150   # the power-down blip
+    play_snd kiroshi_off.ogg 1.5 150 sndWheelEnd   # the power-down blip
     daemon_alive && kill -USR1 "$(cat "$DAEMON_PID" 2>/dev/null)" 2>/dev/null   # play outro + hide (stays resident)
     hyprctl dispatch "hl.dsp.submap('reset')"
     ;;

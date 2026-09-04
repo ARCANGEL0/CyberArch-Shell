@@ -1,9 +1,13 @@
 import { execAsync, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
+import Gtk from "gi://Gtk?version=3.0"
+import GLib from "gi://GLib"
 import { Keymode } from "./widget.ts"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
-import { createModal, drawBtn, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
+import { createModal, drawBtn, drawToggle, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
+import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
+import { USER_DIR } from "../../env.ts"
 import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
@@ -42,7 +46,7 @@ export const ThemesCtrl = () => {
     ctrl = createModal({
         name: "themesettings", tabTitle: "THEME", ss: 2, W: 560, H: 860, yaw: 15, pitch: 0, roll: 0,
         anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
-        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
+        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; cfgOpen = null; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
         onClose: () => {
             closeWheel()
             releaseKeys()
@@ -55,9 +59,11 @@ export const ThemesCtrl = () => {
             kbConflict = null
             kbDeleteConfirm = null
             kbScroll = 0
+            cfgOpen = null
+            cfgExpand = {}
         },
         onKeyRaw: onKbKeyRaw,
-        onScroll: (d) => { kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw() },
+        onScroll: (d) => { cfgOpen = null; kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw() },
         onKey: (k: number) => {
             if (kbCaptureKind === "newuser" && kbAddStep === "command" && k !== Gdk.KEY_Escape) {
                 const name = Gdk.keyval_name(k) || ""
@@ -118,6 +124,7 @@ export const ThemesCtrl = () => {
             const x = panelX + 18, w = panelW - 36
             if (tab === "colors") drawColors(ctx, g, x, panelY + HEADER + 12, w)
             else if (tab === "keybinds") drawKeybinds(ctx, g, x, panelY + HEADER + 12, w)
+            else if (tab === "anim") drawConfig(ctx, g, x, panelY + HEADER + 12, w)
             else drawWip(ctx, g, x, panelY + HEADER + 12, w)
         },
     })
@@ -1055,4 +1062,207 @@ const drawWip = (ctx, g, x, y, w) => {
     const t2 = "COMING SOON :)"
     ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(11)
     txt(ctx, cx - ctx.textExtents(t2).width / 2, y + 98, t2, MONO, 11, g.col, 0.6)
+}
+
+type CfgKind = "tog" | "snd" | "sel" | "car"
+type CfgRow = { t: CfgKind; k: string; label: string; dep?: string; grp?: string; master?: boolean }
+
+const CFG_SECTIONS: [string, CfgRow[]][] = [
+    ["// ::animations", [
+        { t: "tog", k: "anim", label: "TOGGLE ANIMATIONS", master: true },
+        { t: "tog", k: "animWorkspace", label: "WORKSPACE-SWITCH ANIMATION" },
+        { t: "tog", k: "animGlitch", label: "WORKSPACE GLITCH OVERLAY" },
+        { t: "tog", k: "animModal", label: "MODAL / SYSTEM POPUP ANIMATIONS" },
+        { t: "tog", k: "animGauge", label: "MONITOR GAUGES ANIMATION" },
+        { t: "tog", k: "animNotif", label: "NOTIFICATION ANIMATIONS" },
+        { t: "tog", k: "animMusic", label: "MUSIC PLAYER ANIMATIONS" },
+        { t: "tog", k: "animWheel", label: "QUICKHACK WHEEL ANIMATIONS" },
+    ]],
+
+    ["// ::sound", [
+        { t: "tog", k: "snd", label: "THEME SOUNDS & NOTIFICATIONS", master: true },
+
+        { t: "tog", k: "sndNotif", label: "NOTIFICATION SOUNDS" },
+        { t: "snd", k: "sndNotifFile", label: "NOTIFY" },
+
+        { t: "tog", k: "sndWheel", label: "QUICKHACK WHEEL SOUNDS" },
+        { t: "car", k: "wheelGrp", label: "WHEEL SAMPLES", dep: "sndWheel" },
+            { t: "snd", k: "sndWheelStart", label: "START", grp: "wheelGrp" },
+            { t: "snd", k: "sndWheelActive", label: "ACTIVE", grp: "wheelGrp" },
+            { t: "snd", k: "sndWheelEnd", label: "END", grp: "wheelGrp" },
+
+        { t: "tog", k: "sndOverlay", label: "OVERLAY SOUNDS" },
+        { t: "car", k: "ovlGrp", label: "OVERLAY SAMPLES", dep: "sndOverlay" },
+            { t: "snd", k: "sndOverlayFile", label: "OVERLAY", grp: "ovlGrp" },
+            { t: "snd", k: "sndKillFile", label: "KILL_APP", grp: "ovlGrp" },
+    ]],
+
+    ["// ::gauge monitors", [
+        { t: "sel", k: "gaugeBadge", label: "BADGE" }, { t: "sel", k: "gaugeXp", label: "EXPERIENCE BAR" },
+        { t: "sel", k: "gaugeHealth", label: "HEALTH BAR" }, { t: "sel", k: "gaugeRam", label: "RAM BAR" },
+        { t: "sel", k: "gaugeStamina", label: "STAMINA BAR" },
+    ]],
+]
+
+const CFG_DEP: Record<string, string> = {
+    animWorkspace: "anim", animGlitch: "anim", animModal: "anim", animGauge: "anim", animNotif: "anim", animMusic: "anim", animWheel: "anim",
+    sndNotif: "snd", sndNotifFile: "sndNotif",
+    sndWheel: "snd", sndWheelStart: "sndWheel", sndWheelActive: "sndWheel", sndWheelEnd: "sndWheel",
+    sndOverlay: "snd", sndOverlayFile: "sndOverlay", sndKillFile: "sndOverlay",
+}
+const CFG_FALLBACK: Record<string, string> = {
+    sndNotifFile: "notif.mp3",
+    sndWheelStart: "kiroshi_on.ogg", sndWheelActive: "kiroshi_menu.ogg", sndWheelEnd: "kiroshi_off.ogg",
+    sndOverlayFile: "active.ogg", sndKillFile: "kill.ogg",
+}
+
+let cfgOpen: string | null = null
+let cfgExpand: Record<string, boolean> = {}
+let extPicker = ""
+sh("for c in zenity kdialog yad; do command -v $c >/dev/null 2>&1 && { echo $c; break; }; done").then((o) => { extPicker = String(o || "").trim() })
+
+const GROW_H = 26, GSEC_H = 34
+const baseName = (p: string) => p.slice(p.lastIndexOf("/") + 1)
+const cfgLocked = (k: string): boolean => {
+    let p = CFG_DEP[k]
+    while (p) { if (!cfgBool(p)) return true; p = CFG_DEP[p] }
+    return false
+}
+
+const pickGtk = (key: string) => {
+    try {
+        const dlg = new Gtk.FileChooserDialog({ title: "SELECT AUDIO", action: Gtk.FileChooserAction.OPEN, modal: true })
+        dlg.add_button("CANCEL", Gtk.ResponseType.CANCEL); dlg.add_button("SELECT", Gtk.ResponseType.ACCEPT)
+        const flt = new Gtk.FileFilter(); flt.set_name("AUDIO")
+        for (const p of ["*.ogg", "*.oga", "*.mp3", "*.wav", "*.flac", "*.opus"]) flt.add_pattern(p)
+        dlg.add_filter(flt)
+        try { dlg.set_current_folder(GLib.get_home_dir()) } catch {}
+        const res = dlg.run(), file = res === Gtk.ResponseType.ACCEPT ? dlg.get_filename() : null
+        dlg.destroy()
+        if (file) { adoptSound(key, file); ctrl.requestDraw() }
+    } catch (e) { print("[cfg] pick:", e) }
+}
+const pickSound = (key: string) => {
+    if (!extPicker) { pickGtk(key); return }
+    const cmd = extPicker === "kdialog"
+        ? `kdialog --getopenfilename "$HOME" 'Audio (*.ogg *.oga *.mp3 *.wav *.flac *.opus)' 2>/dev/null`
+        : extPicker === "yad"
+            ? `yad --file --title="SELECT AUDIO" --file-filter='AUDIO | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
+            : `zenity --file-selection --title="SELECT AUDIO" --file-filter='AUDIO | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
+    sh(cmd).then((o) => {
+        const p = String(o || "").trim().split("\n")[0]
+        if (p) { adoptSound(key, p); ctrl.requestDraw() }
+    })
+}
+
+const fitTxt = (ctx, s: string, font: string, fs: number, maxW: number) => {
+    ctx.selectFontFace(font, 0, 0); ctx.setFontSize(fs)
+    if (ctx.textExtents(s).width <= maxW) return s
+    let out = s
+    while (out.length > 1 && ctx.textExtents(out + "…").width > maxW) out = out.slice(0, -1)
+    return out + "…"
+}
+
+const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
+    const push = hit ? g.push : noPush
+    const dis = cfgLocked(r.k) || (r.dep ? (!cfgBool(r.dep) || cfgLocked(r.dep)) : false)
+    const lx = r.master ? x : r.grp ? x + 30 : x + 16, la = dis ? 0.38 : r.master ? 1 : 0.9, lcol = r.master ? g.accent : g.col
+
+    if (r.t === "car") {
+        const open = cfgExpand[r.k] === true
+        drawBtn(ctx, push, x + 16, ry + 4, 200, 18, `${open ? "▾" : "▸"}  ${r.label}`, () => { cfgExpand[r.k] = !open; cfgOpen = null; ctrl.requestDraw() }, open, dis ? [0.5, 0.54, 0.58] : g.col, "", 9)
+        return
+    }
+
+    txt(ctx, lx, ry + 16, r.label, TITLE, r.master ? 10 : 9, lcol, la, 1, r.master ? 0.3 : 0)
+
+    if (r.t === "tog") {
+        drawToggle(ctx, push, x + w - 44, ry + 4, cfgBool(r.k), () => { toggleCfg(r.k); cfgOpen = null; ctrl.requestDraw() }, dis, g.col)
+        return
+    }
+
+    if (r.t === "snd") {
+        const cur = cfgStr(r.k)
+        const shown = cur ? baseName(cur) : `DEFAULT :: ${CFG_FALLBACK[r.k] ?? ""}`
+        const tx = lx + 92
+        txt(ctx, tx, ry + 16, fitTxt(ctx, shown, MONO, 8, x + w - 100 - tx), MONO, 8, cur ? g.accent : g.col, dis ? 0.32 : cur ? 0.85 : 0.55)
+        drawBtn(ctx, push, x + w - 90, ry + 4, 58, 18, "PICK", () => pickSound(r.k), false, dis ? [0.5, 0.54, 0.58] : g.col, "", 9)
+        if (cur) drawBtn(ctx, push, x + w - 26, ry + 4, 24, 18, "×", () => { clearSound(r.k); ctrl.requestDraw() }, false, dis ? [0.5, 0.54, 0.58] : [1, 0.4, 0.44], "", 10)
+        return
+    }
+
+    const cur = cfgStr(r.k), open = cfgOpen === r.k
+    drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${METRIC_LABEL[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
+}
+
+const drawConfig = (ctx, g, x, y, w) => {
+    const gate = cfgOpen ? noPush : g.push
+    const bh = 28, half = (w - 10) / 2
+    drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col)
+    drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col)
+
+    const visTop = y + bh + 16, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
+
+    const layout: { y: number; kind: "sec" | "row"; label: string; row?: CfgRow; keys?: string[] }[] = []
+    let yAcc = 0
+    for (const [title, rows] of CFG_SECTIONS) {
+        layout.push({ y: yAcc, kind: "sec", label: title, keys: rows.filter((r) => r.t !== "car").map((r) => r.k) })
+        yAcc += GSEC_H
+        for (const r of rows) {
+            if (r.grp && !cfgExpand[r.grp]) continue
+            layout.push({ y: yAcc, kind: "row", label: r.label, row: r }); yAcc += GROW_H
+        }
+        yAcc += 10
+    }
+
+    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    kbMaxScroll = maxScroll
+    if (kbScroll > maxScroll) kbScroll = maxScroll
+    if (kbScroll < 0) kbScroll = 0
+
+    let pop: { key: string; bx: number; by: number; bw: number } | null = null
+
+    ctx.save()
+    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
+    ctx.clip()
+    for (const it of layout) {
+        const ry = visTop + it.y - kbScroll
+        if (it.kind === "sec") {
+            if (ry + GSEC_H < visTop || ry > visBottom) continue
+            sectionHeader(ctx, g, x, ry + 12, it.label, w - 66)
+            const shown = ry >= visTop - 1 && ry + 18 <= visBottom + 1
+            drawBtn(ctx, shown ? gate : noPush, x + w - 62, ry + 1, 62, 16, "DEFAULTS", () => { resetCfg(it.keys ?? []); cfgOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 8)
+            continue
+        }
+        if (ry + GROW_H < visTop || ry > visBottom) continue
+        const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
+        const r = it.row!
+        if (r.t === "sel" && cfgOpen === r.k) pop = { key: r.k, bx: x + w - 266, by: ry + 23, bw: 264 }
+        drawCfgRow(ctx, g, x, ry, w, r, hit && !cfgOpen)
+    }
+    ctx.restore()
+
+    if (maxScroll > 0) {
+        const fillH = visHeight * (kbScroll / maxScroll)
+        const barH = Math.max(20, visHeight - fillH)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
+    }
+
+    if (pop) {
+        const opts = GAUGE_OPTS[pop.key] ?? []
+        const ih = 20, listH = opts.length * ih + 6
+        let ly = pop.by + 2
+        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 25 - listH)
+        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(pop.bx, ly, pop.bw, listH); ctx.fill()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
+        ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
+        const cur = cfgStr(pop.key)
+        opts.forEach((o, i) => {
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, METRIC_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, g.col, "", 9)
+        })
+        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
+    }
 }

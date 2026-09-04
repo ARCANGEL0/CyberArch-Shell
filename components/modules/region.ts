@@ -8,6 +8,7 @@ import { MONO } from "./fonts.ts"
 import { CYBER_DIR } from "../../env.ts"
 import { setRecording, isRecording } from "./anim.ts"
 import { showToast, hideToast } from "./toast.ts"
+import { sndOn, sndFile } from "./config.ts"
 import GdkPixbuf from "gi://GdkPixbuf"
 
 const Cairo: any = (imports as any).cairo
@@ -355,12 +356,15 @@ const finish = () => {
  const rx = Math.round(x), ry = Math.round(y), rw = Math.round(w), rh = Math.round(h)
  const geom = `${monX + rx},${monY + ry} ${rw}x${rh}`
  if (recordMode) {
-     const AUDIO = `${CYBER_DIR}/assets/audio`
+     const ovl = sndFile("sndOverlayFile", `${CYBER_DIR}/assets/audio/active.ogg`)
+     const cue = sndOn("sndOverlay")
+         ? `setsid -f sh -c 'play -q -v 1.5 "${ovl}" 2>/dev/null || mpv --no-video --really-quiet --volume=150 "${ovl}" 2>/dev/null' >/dev/null 2>&1`
+         : "true"
      timeout(60, () => {
          execAsync(["sh", "-c",
              `D="$HOME/Videos/Recordings"; mkdir -p "$D"; F="$D/$(date +%Y-%m-%d_%H-%M-%S).mp4"; ` +
              `setsid wf-recorder -g "${geom}" -f "$F" -p preset=ultrafast -p crf=28 >/dev/null 2>&1 & ` +
-             `setsid -f sh -c 'play -q -v 1.5 "${AUDIO}/active.ogg" 2>/dev/null || mpv --no-video --really-quiet --volume=150 "${AUDIO}/active.ogg" 2>/dev/null' >/dev/null 2>&1`])
+             cue])
          .catch(print)
          try { setRecording(true, `${monX} ${monY} ${W} ${H}`, { x: rx, y: ry, w: rw, h: rh }) } catch (e) { print(e) }
      })

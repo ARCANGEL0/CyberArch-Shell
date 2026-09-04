@@ -6,6 +6,7 @@ import GdkPixbuf from "gi://GdkPixbuf"
 import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
 import { USER, USER_A, isOvr, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
+import { animOn } from "./config.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
@@ -318,9 +319,10 @@ const startTimers = () => {
  if (!animT) animT = interval(33, () => {
      tick++
      const playing = status === "Playing"
+     const sm = animOn("animMusic")
      let redraw = false
      if (intro !== introTarget) {
-         const sp = introTarget > intro ? 0.16 : 0.2
+         const sp = !sm ? 1 : introTarget > intro ? 0.16 : 0.2
          if (Math.abs(introTarget - intro) <= sp) intro = introTarget
          else intro += Math.sign(introTarget - intro) * sp
          redraw = true
@@ -328,11 +330,11 @@ const startTimers = () => {
      if (introTarget === 0 && intro <= 0.001) { intro = 0; if (pWin) pWin.visible = false; stopTimers(); return }
      if (playing) {
          if (length > 0) { const np = Math.min(length, position + 33000); if (fmt(np) !== fmt(position)) { panelDirty = true; redraw = true }; position = np }
-         if (tick % 3 === 0) { for (let i = 0; i < plBars.length; i++) plBars[i] = 0.18 + Math.random() * 0.82; redraw = true }
-         if (Date.now() - playStart < 450) redraw = true
+         if (sm && tick % 3 === 0) { for (let i = 0; i < plBars.length; i++) plBars[i] = 0.18 + Math.random() * 0.82; redraw = true }
+         if (sm && Date.now() - playStart < 450) redraw = true
      }
      const ht = hoverIdx >= 0 ? 1 : 0
-     if (Math.abs(ht - hoverA) > 0.015) { hoverA += (ht - hoverA) * 0.28; panelDirty = true; redraw = true }
+     if (Math.abs(ht - hoverA) > 0.015) { hoverA += (ht - hoverA) * (sm ? 0.28 : 1); panelDirty = true; redraw = true }
      else if (hoverA !== ht) { hoverA = ht; panelDirty = true; redraw = true }
      if (redraw) pArea && pArea.queue_draw()
  })

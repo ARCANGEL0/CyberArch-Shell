@@ -2,7 +2,12 @@
 SOCK="$XDG_RUNTIME_DIR/astal/cyberpunk.sock"
 AUDIO="$(cd "$(dirname "$0")/../assets/audio" && pwd)"
 MON_HELPER="$(cd "$(dirname "$0")" && pwd)/active-monitor"
-active_snd() { setsid -f sh -c "play -q -v 1.5 \"$AUDIO/active.ogg\" 2>/dev/null || mpv --no-video --really-quiet --volume=150 \"$AUDIO/active.ogg\" 2>/dev/null" >/dev/null 2>&1; }
+. "$(cd "$(dirname "$0")" && pwd)/cfg.sh"
+active_snd() {
+    snd_on sndOverlay || return 0
+    P=$(snd_path sndOverlayFile "$AUDIO/active.ogg")
+    setsid -f sh -c "play -q -v 1.5 \"$P\" 2>/dev/null || mpv --no-video --really-quiet --volume=150 \"$P\" 2>/dev/null" >/dev/null 2>&1
+}
 read -r MON MX MY MW MH < <("$MON_HELPER")
 
 if [ "$1" = "full" ]; then

@@ -7,6 +7,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import { CYBER_DIR } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
 import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
+import { sndOn, sndFile, animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -28,7 +29,7 @@ const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const ICON_3D = `${CYBER_DIR}/assets/icons/file.png`
 let phoneIcon: any = null
 
-const play = () => execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${SND}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${SND}" 2>/dev/null || paplay "${SND}" 2>/dev/null || play -q "${SND}" 2>/dev/null`]).catch(() => {})
+const play = () => { if (!sndOn("sndNotif")) return; const p = sndFile("sndNotifFile", SND); execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${p}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${p}" 2>/dev/null || paplay "${p}" 2>/dev/null || play -q "${p}" 2>/dev/null`]).catch(() => {}) }
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 
 const ICONW = 64
@@ -717,17 +718,18 @@ const kick = () => {
     if (loop) return
     loop = interval(16, () => {
         const active = hudVisible
-        if (active && panelIntro < 1) panelIntro = Math.min(1, panelIntro + 0.04)
-        if (!active && panelIntro > 0) panelIntro = Math.max(0, panelIntro - 0.06)
-        if (active && animProg < 1) animProg = Math.min(1, animProg + 0.02)
-        if (!active) animProg = Math.max(0, animProg - 0.06)
+        const sm = animOn("animNotif")
+        if (active && panelIntro < 1) panelIntro = sm ? Math.min(1, panelIntro + 0.04) : 1
+        if (!active && panelIntro > 0) panelIntro = sm ? Math.max(0, panelIntro - 0.06) : 0
+        if (active && animProg < 1) animProg = sm ? Math.min(1, animProg + 0.02) : 1
+        if (!active) animProg = sm ? Math.max(0, animProg - 0.06) : 0
 
         if (clickPulse > 0) clickPulse = Math.max(0, clickPulse - 0.05)
         if (rowPulse > 0) rowPulse = Math.max(0, rowPulse - 0.06)
 
         glitchTimer++
         glitchPhase += 0.3
-        if (glitchTimer > 120 + Math.random() * 300 && msgs.length > 0) {
+        if (sm && glitchTimer > 120 + Math.random() * 300 && msgs.length > 0) {
             glitchTimer = 0
             const r = Math.random()
 

@@ -9,6 +9,7 @@ import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn } from "./colors.ts"
+import { animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
 
@@ -81,7 +82,7 @@ const NEXT: any = { circle: "line", line: "bar", bar: "shown", outbar: "outline"
 const kick = () => {
     if (loop) return
     loop = interval(16, () => {
-        const p = clamp((Date.now() - phaseStart) / (DUR[phase] || 1))
+        const p = animOn("animNotif") ? clamp((Date.now() - phaseStart) / (DUR[phase] || 1)) : 1
         if (p >= 1 && NEXT[phase]) {
             phase = NEXT[phase]; phaseStart = Date.now()
             if (phase === "shown" || phase === "hidden") {

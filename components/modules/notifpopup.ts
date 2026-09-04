@@ -9,6 +9,7 @@ import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
 import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr } from "./colors.ts"
+import { sndOn, sndFile, animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -25,7 +26,7 @@ const GLYPH_COL: [number, number, number] = NEON.glyphcol
 const WHT: [number, number, number] = NEON.pure
 
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
-const play = () => execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${SND}" 2>/dev/null || play -q "${SND}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${SND}" 2>/dev/null`]).catch(() => { })
+const play = () => { if (!sndOn("sndNotif")) return; const p = sndFile("sndNotifFile", SND); execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${p}" 2>/dev/null || play -q "${p}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${p}" 2>/dev/null`]).catch(() => { }) }
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 const easeOut = (t: number) => 1 - (1 - clamp(t)) * (1 - clamp(t))
 const seg = (v: number, a: number, b: number) => clamp((v - a) / (b - a))
@@ -191,22 +192,24 @@ const kick = () => {
     if (loop) return
     loop = interval(16, () => {
         const now = Date.now()
+        const sm = animOn("animNotif")
         if (!closing) {
-            if (intro < 0.5) intro = Math.min(0.5, intro + 0.045)
+            if (!sm) { intro = 1; holdUntil = now }
+            else if (intro < 0.5) intro = Math.min(0.5, intro + 0.045)
             else if (holdUntil === 0) holdUntil = now + 700
             else if (now >= holdUntil && intro < 1) intro = Math.min(1, intro + 0.045)
         } else if (intro > 0) {
-            intro = Math.max(0, intro - 0.05)
+            intro = sm ? Math.max(0, intro - 0.05) : 0
             if (intro <= 0.0001) { msgs = []; closing = false; holdUntil = 0; try { win.visible = false } catch {} }
         }
         msgs.forEach((m, i) => {
             const target = i * STEP
             if (m.y === undefined) m.y = target
-            m.y += (target - m.y) * 0.25
-            if (!closing && intro > 0.7 && !m.out && m.prog < 1) m.prog = Math.min(1, m.prog + 0.06)
+            m.y += (target - m.y) * (sm ? 0.25 : 1)
+            if (!closing && intro > 0.7 && !m.out && m.prog < 1) m.prog = sm ? Math.min(1, m.prog + 0.06) : 1
         })
         const before = msgs.length
-        msgs = msgs.filter((m) => !(m.out && now - m.out > 240))
+        msgs = msgs.filter((m) => !(m.out && now - m.out > (sm ? 240 : -1)))
         if (msgs.length !== before && msgs.length === 0 && !closing) closing = true
         area?.queue_draw()
         const animating = closing || intro < 1 || msgs.some((m) => m.prog < 1 || m.out || Math.abs(m.y - msgs.indexOf(m) * STEP) > 0.5)

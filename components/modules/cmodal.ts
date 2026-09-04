@@ -19,6 +19,7 @@ import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar } from "./
 import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
+import { sndOn, sndFile, animOn } from "./config.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -95,6 +96,31 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, by + bh / 2 + 4); ctx.showText(icon) }
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
+}
+
+export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = CYAN) => {
+    const bw = 42, bh = 16, key = `tg|${bx}|${by}`
+    const hovered = !dis && push.hoverKey === key
+    const base = dis ? [0.5, 0.54, 0.58] : hovered ? HL : (neonBtn.value ? USER.press : col)
+    const c = val && !dis ? base : [base[0] * 0.62, base[1] * 0.62, base[2] * 0.62]
+    const a = dis ? 0.45 : 1
+    btnPath(ctx, bx, by, bw, bh)
+    ctx.setSourceRGBA(c[0] * 0.2, c[1] * 0.2, c[2] * 0.22, (val ? 0.55 : 0.3) * a); ctx.fill()
+    if (val && !dis) {
+        ctx.setOperator(12)
+        btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 0.42 : 0.26); ctx.setLineWidth(2.4); ctx.stroke()
+        ctx.setOperator(2)
+    }
+    btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], (hovered ? 1 : 0.8) * a); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
+    const kw = 17, kx = val ? bx + bw - kw - 2 : bx + 2
+    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5, kw, bh - 5); ctx.fill()
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(8)
+    const lbl = val ? "ON" : "OFF"
+    const tw = ctx.textExtents(lbl).width
+    const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
+    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
+    ctx.moveTo(cx - tw / 2, by + bh / 2 + 3); ctx.showText(lbl)
+    if (!dis) push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
 const TAU = Math.PI * 2
@@ -185,7 +211,7 @@ export const createModal = (spec) => {
     const startTimers = () => {
         if (!animT) animT = interval(60, () => {
             seed += 0.05; spec.onFrame?.()
-            const sp = introTarget > intro ? 0.2 : 0.26
+            const sp = animOn("animModal") ? (introTarget > intro ? 0.2 : 0.26) : 1
             if (Math.abs(introTarget - intro) <= sp) intro = introTarget; else intro += Math.sign(introTarget - intro) * sp
             if (introTarget === 0 && intro <= 0.001) { intro = 0; if (win) win.visible = false; stopTimers() }
             const idleMs = spec.idleFrameMs ?? 0
@@ -216,8 +242,8 @@ export const createModal = (spec) => {
             gw.input_shape_combine_region(reg, 0, 0)
         } catch (e) { print("[cyber] modal input shape:", e) }
     }
-    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; try { win.gdkmonitor = activeMonitor() } catch {} spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
-    ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
+    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {} spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
+    ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; if (!animOn("animModal")) intro = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
     ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
@@ -1000,14 +1026,18 @@ const SYSC: [number, number, number] = USER.dock
 const SYSR: [number, number, number] = USER.overlay
 const SYS_LOCK = "/tmp/cyber-sysmon.lock"
 const SYS_AUDIO = `${CYBER_DIR}/assets/audio`
-const sysPlay = (f, vol, mvol) => sh(`setsid -f sh -c "play -q -v ${vol} '${SYS_AUDIO}/${f}' 2>/dev/null || mpv --no-video --really-quiet --volume=${mvol} '${SYS_AUDIO}/${f}' 2>/dev/null" >/dev/null 2>&1`)
+const sysAt = (key, file) => sndFile(key, `${SYS_AUDIO}/${file}`)
+const sysPlay = (p, vol, mvol) => sh(`setsid -f sh -c "play -q -v ${vol} '${p}' 2>/dev/null || mpv --no-video --really-quiet --volume=${mvol} '${p}' 2>/dev/null" >/dev/null 2>&1`)
 const sysSndOn = () => {
-    sysPlay("kiroshi_on.ogg", "1.2", "120")
-    sh(`touch ${SYS_LOCK}; setsid -f sh -c "while [ -e '${SYS_LOCK}' ]; do play -q -v 0.9 '${SYS_AUDIO}/kiroshi_menu.ogg' 2>/dev/null || { mpv --no-video --really-quiet --volume=90 '${SYS_AUDIO}/kiroshi_menu.ogg' 2>/dev/null || break; }; done" >/dev/null 2>&1`)
+    if (!sndOn("sndWheel")) return
+    const loop = sysAt("sndWheelActive", "kiroshi_menu.ogg")
+    sysPlay(sysAt("sndWheelStart", "kiroshi_on.ogg"), "1.2", "120")
+    sh(`touch ${SYS_LOCK}; setsid -f sh -c "while [ -e '${SYS_LOCK}' ]; do play -q -v 0.9 '${loop}' 2>/dev/null || { mpv --no-video --really-quiet --volume=90 '${loop}' 2>/dev/null || break; }; done" >/dev/null 2>&1`)
 }
 const sysSndOff = () => {
     sh(`rm -f ${SYS_LOCK}`)
-    sysPlay("kiroshi_off.ogg", "1.2", "120")
+    if (!sndOn("sndWheel")) return
+    sysPlay(sysAt("sndWheelEnd", "kiroshi_off.ogg"), "1.2", "120")
 }
 const bevel = (ctx, x, y, w, h, c = 10) => {
     ctx.newPath()

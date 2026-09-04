@@ -7,6 +7,7 @@ import { CYBER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, f, onColorChange, imgTint, tintSurface, neonBtn, launcherTint, launcherLabelTint } from "./colors.ts"
 import { openAppsMenu } from "./appsmenu.ts"
+import { animOn } from "./config.ts"
 
 import { TITLE } from "./fonts.ts"
 const W = 180, H = 180
@@ -64,7 +65,7 @@ export const LauncherWindow = (mon?) => {
 
  let flickT: any = null
  const flip = () => {
-     if (!hover) {
+     if (!hover || !animOn("animWheel")) {
          if (flick !== 1) { flick = 1; area.queue_draw() }
          if (flickT) { flickT.cancel(); flickT = null }
          return

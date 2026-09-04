@@ -12,6 +12,7 @@ import { interval, Variable } from "astal"
 import { buildStats } from "./sys.ts"
 import { makePlane, fillQuad, tiltText } from "./proj.ts"
 import { RGB, f, NEON, onColorChange, isOvr } from "./colors.ts"
+import { cfgStr, animOn, onConfigChange, METRIC_LABEL } from "./config.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk"
 import Gio from "gi://Gio"
@@ -55,7 +56,7 @@ const readDisk = () => { try {
 } catch {} }
 readDisk(); let batteryV = readBat()
 const poke = Variable(0)
-interval(8000, () => { readDisk(); batteryV = readBat(); readBatStatus(); poke.set(poke.get() + 1) })
+interval(8000, () => { readDisk(); batteryV = readBat(); readBatStatus(); sampleMetrics(); poke.set(poke.get() + 1) })
 
 let badgeVal = "1"
 export const setWorkspaceBadge = (v: any) => {
@@ -64,6 +65,133 @@ export const setWorkspaceBadge = (v: any) => {
     badgeVal = s
     poke.set(poke.get() + 1)
 }
+
+const readNum = (p: string) => parseInt(read(p).trim()) || 0
+const exists = (p: string) => GLib.file_test(p, GLib.FileTest.EXISTS)
+const meminfo = (k: string) => {
+    const l = read("/proc/meminfo").split("\n").find((x) => x.startsWith(k + ":"))
+    return l ? parseInt(l.split(/\s+/)[1]) : 0
+}
+const gib = (kb: number) => (kb / 1048576).toFixed(1)
+const NCPU = Math.max(1, GLib.get_num_processors())
+
+const tempInput = ((): string | null => {
+    const want = ["k10temp", "zenpower", "coretemp", "acpitz"]
+    try {
+        const d = GLib.Dir.open("/sys/class/hwmon", 0)
+        const found: Record<string, string> = {}
+        let n: string | null
+        while ((n = d.read_name())) {
+            const base = `/sys/class/hwmon/${n}`
+            const nm = read(`${base}/name`).trim()
+            if (want.includes(nm) && exists(`${base}/temp1_input`)) found[nm] = `${base}/temp1_input`
+        }
+        for (const w of want) if (found[w]) return found[w]
+    } catch {}
+    return null
+})()
+
+const gpuBusy = ((): string | null => {
+    for (let i = 0; i < 4; i++) {
+        const p = `/sys/class/drm/card${i}/device/gpu_busy_percent`
+        if (exists(p)) return p
+    }
+    return null
+})()
+
+const vramDir = ((): string | null => {
+    for (let i = 0; i < 4; i++) {
+        const p = `/sys/class/drm/card${i}/device`
+        if (exists(`${p}/mem_info_vram_total`) && readNum(`${p}/mem_info_vram_total`) > 0) return p
+    }
+    return null
+})()
+
+const NET_CAP = 2_000_000
+const netIface = () => {
+    for (const l of read("/proc/net/route").split("\n").slice(1)) {
+        const p = l.split(/\s+/)
+        if (p[1] === "00000000" && p[0]) return p[0]
+    }
+    return "lo"
+}
+const netBytes = (i: string): [number, number] => {
+    const l = read("/proc/net/dev").split("\n").find((x) => x.trim().startsWith(i + ":"))
+    if (!l) return [0, 0]
+    const p = l.split(":")[1].trim().split(/\s+/).map(Number)
+    return [p[0], p[8]]
+}
+let netIf = netIface()
+let netPrev = netBytes(netIf), netStamp = GLib.get_monotonic_time()
+const netRate = (): [number, string] => {
+    const cur = netIface()
+    if (cur !== netIf) { netIf = cur; netPrev = netBytes(netIf) }
+    const now = GLib.get_monotonic_time()
+    const dt = Math.max(1e-6, (now - netStamp) / 1e6)
+    netStamp = now
+    const [r, t] = netBytes(netIf)
+    const dr = Math.max(0, (r - netPrev[0]) / dt), dt2 = Math.max(0, (t - netPrev[1]) / dt)
+    netPrev = [r, t]
+    const tot = dr + dt2
+    const fmt = tot > 1048576 ? `${(tot / 1048576).toFixed(1)}M` : `${Math.round(tot / 1024)}K`
+    return [Math.min(1, tot / NET_CAP), fmt]
+}
+
+const readMetric = (k: string): [number, string] => {
+    switch (k) {
+        case "workspace": return [0, badgeVal]
+        case "cpu": return [clamp(cpu.frac.get()), cpu.percent.get()]
+        case "cputemp": {
+            if (!tempInput) return [0, "N/A"]
+            const t = readNum(tempInput) / 1000
+            return [clamp(t / 100), `${Math.round(t)}°`]
+        }
+        case "ram": {
+            const used = ram.substat.get().replace(/\s*GB/i, ""), tot = ram.sublabel.replace(/\s*GB/i, "")
+            return [clamp(ram.frac.get()), `${used}/${tot}G`]
+        }
+        case "ramfree": {
+            const total = meminfo("MemTotal"), avail = meminfo("MemAvailable")
+            return [total ? clamp(avail / total) : 0, `${gib(avail)}G`]
+        }
+        case "swap": {
+            const total = meminfo("SwapTotal")
+            if (!total) return [0, "OFF"]
+            const used = total - meminfo("SwapFree")
+            return [clamp(used / total), `${gib(used)}G`]
+        }
+        case "disk": return [clamp(diskFrac), `${diskUsedG}/${diskTotG}G`]
+        case "battery": return [clamp(batteryV), HAS_BAT ? `${Math.round(batteryV * 100)}%` : "AC"]
+        case "gpu": {
+            if (!gpuBusy) return [0, "N/A"]
+            const p = readNum(gpuBusy)
+            return [clamp(p / 100), `${p}%`]
+        }
+        case "vram": {
+            if (!vramDir) return [0, "N/A"]
+            const tot = readNum(`${vramDir}/mem_info_vram_total`), used = readNum(`${vramDir}/mem_info_vram_used`)
+            return [tot ? clamp(used / tot) : 0, `${(used / 1073741824).toFixed(1)}G`]
+        }
+        case "load": {
+            const l1 = parseFloat(read("/proc/loadavg").trim().split(" ")[0]) || 0
+            return [clamp(l1 / NCPU), l1.toFixed(2)]
+        }
+        case "net": return netRate()
+    }
+    return [0, ""]
+}
+
+const SLOT_CFG: Record<string, string> = { badge: "gaugeBadge", sto: "gaugeXp", cpu: "gaugeHealth", ram: "gaugeRam", bat: "gaugeStamina" }
+const mv: Record<string, [number, string]> = {}
+const slotKey = (slot: string) => cfgStr(SLOT_CFG[slot])
+const sampleMetrics = () => {
+    for (const slot of Object.keys(SLOT_CFG)) {
+        const k = slotKey(slot)
+        if (k) mv[k] = readMetric(k)
+    }
+}
+const mFrac = (slot: string) => mv[slotKey(slot)]?.[0] ?? 0
+const mText = (slot: string) => mv[slotKey(slot)]?.[1] ?? ""
 
 const W = 500, H = 96
 const X0 = 62, MAIN = W - 78, RAMX = X0 + (MAIN - X0) * 0.42, BATX = W - 46
@@ -106,6 +234,7 @@ export const Monitors = () => {
     const area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
     onColorChange(() => area.queue_draw())
     const d = { sto: 0, cpu: 0, ram: 0, bat: 0 }
+    const bar = (k: "sto" | "cpu" | "ram" | "bat") => animOn("animGauge") ? clamp(d[k]) : 1
 
     let mx = -1, my = -1, hovered: string | null = null
     const hitTest = (x: number, y: number): string | null => {
@@ -133,13 +262,7 @@ export const Monitors = () => {
         if (y >= mid3 && y < bat_t + 10 && x >= ram_l - 6 && x <= ram_r + 6) return "ram"
         return null
     }
-    const tooltipLabels: Record<string, string> = {
-        bat: "BATTERY LEVEL",
-        sto: "STORAGE INFO",
-        cpu: "CPU USAGE",
-        ram: "RAM USAGE",
-        badge: "ACTIVE WORKSPACE",
-    }
+    const tooltipLabel = (slot: string) => METRIC_LABEL[slotKey(slot)] ?? ""
 
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
@@ -156,18 +279,19 @@ export const Monitors = () => {
         mx = -1; my = -1; hovered = null; area.queue_draw(); return false
     })
     area.connect("draw", (_w: any, ctx: any) => {
-        const bcol = batColor(batteryV * 100)
+        const isBat = slotKey("bat") === "battery"
+        const bcol = batColor(mFrac("bat") * 100)
         const bx = 18, by = 14, S = 40
         const P = (px: number, py: number): [number, number] => [bx + px / 45 * S, by + py / 45 * S]
         const badge: [number, number][] = [P(1, 1), P(44, 1), P(44, 44), P(14.6, 44), P(1, 27.4)]
         poly(ctx, badge, [4, 15, 19] as any, 0.55)
         glowShape(ctx, badge, BADGECOL, 3, 0.8)
         poly(ctx, badge, BADGECOL, 0.96, false, 1.4)
-        const num = badgeVal.replace("°", ""), nw = num.length * 11
-        tiltText(ctx, plane, bx + 20, by + 24, num, TITLE, 15, BADGECOL, 0.95, { align: "c", bold: true, glow: 0.8 })
+        const num = mText("badge").replace("°", ""), nw = num.length * 11
+        tiltText(ctx, plane, bx + 20, by + 24, num, TITLE, num.length > 3 ? 11 : 15, BADGECOL, 0.95, { align: "c", bold: true, glow: 0.8 })
 
         {
-            const y = 15, h = 4, end = X0 + (MAIN - X0) * clamp(d.sto)
+            const y = 15, h = 4, end = X0 + (MAIN - X0) * bar("sto")
             fillQuad(ctx, plane, X0, y, MAIN, y + h, GRAY, 0.10)
             bloom(ctx, X0, y, end, y + h, STOCOL, 7, 1.2)
             holoFill(ctx, X0, end, y, h, STOCOL, 0.9)
@@ -175,7 +299,7 @@ export const Monitors = () => {
         {
             const y = 22, h = 18, ch = (MAIN - X0) * 0.05
             poly(ctx, [[X0, y], [MAIN, y], [MAIN, y + h * 0.5], [MAIN - ch, y + h], [X0, y + h]], isOvr("cpu") ? darken(NEON.cpu, 0.55) : NEON.darkred, 0.42)
-            const end = X0 + (MAIN - X0) * clamp(d.cpu)
+            const end = X0 + (MAIN - X0) * bar("cpu")
             const fillPts: [number, number][] = end <= MAIN - ch
                 ? [[X0, y], [end, y], [end, y + h], [X0, y + h]]
                 : [[X0, y], [end, y], [end, y + h / 2 + (h / 2) * (MAIN - end) / ch], [MAIN - ch, y + h], [X0, y + h]]
@@ -186,7 +310,7 @@ export const Monitors = () => {
         {
             const y = 44, h = 18, tw = 8, gap = 1.6
             const n = Math.max(1, Math.floor((RAMX - X0 + gap) / (tw + gap)))
-            const lit = Math.round(clamp(d.ram) * n)
+            const lit = Math.round(bar("ram") * n)
             const RAMP: [number, number][] = [[11.29, 0], [18, 0], [18, 52.09], [11.29, 60], [4.58, 60], [4.58, 30], [0, 30], [0, 0]]
             for (let i = 0; i < n; i++) {
                 const sx = X0 + i * (tw + gap)
@@ -197,7 +321,7 @@ export const Monitors = () => {
         }
         {
             const bat0 = 22, y = 78, h = 7, bv = 3
-            const end = bat0 + (BATX - bat0) * clamp(d.bat)
+            const end = bat0 + (BATX - bat0) * bar("bat")
             const barShape: [number, number][] = [[bat0, y], [BATX, y], [BATX + bv, y + h], [bat0 + bv, y + h]]
             const fillPts: [number, number][] = end <= bat0 + bv
                 ? [[bat0, y], [end, y], [end + bv, y + h], [bat0 + bv, y + h]]
@@ -209,13 +333,12 @@ export const Monitors = () => {
             poly(ctx, barShape, bcol, 0.96, false, 1.2)
                     }
 
-        tiltText(ctx, plane, W, 11, `${diskUsedG}/${diskTotG}G`, MONO, 8, STOCOL, 0.85, { align: "r", bold: true })
-        tiltText(ctx, plane, W, 46, cpu.percent.get(), TITLE, 24, LIGHTRED, 1, { align: "r", bold: true, glow: 0.42 })
-        const ramUsed = ram.substat.get().replace(/\s*GB/i, ""), ramTot = ram.sublabel.replace(/\s*GB/i, "")
-        tiltText(ctx, plane, W - 216, 59, `${ramUsed} / ${ramTot} GB`, MONO, 10.5, RAMCOL, 0.95, { align: "r", bold: true, glow: 0.3 })
-        const charging = isCharging()
+        tiltText(ctx, plane, W, 11, mText("sto"), MONO, 8, STOCOL, 0.85, { align: "r", bold: true })
+        tiltText(ctx, plane, W, 46, mText("cpu"), TITLE, 24, LIGHTRED, 1, { align: "r", bold: true, glow: 0.42 })
+        tiltText(ctx, plane, W - 216, 59, mText("ram"), MONO, 10.5, RAMCOL, 0.95, { align: "r", bold: true, glow: 0.3 })
+        const charging = isBat && isCharging()
         tiltText(ctx, plane, 6, 84, "\uf0e7", ICONF, 10, charging ? YELB : bcol, 0.95)
-        if (charging) {
+        if (charging && animOn("animGauge")) {
             const ph = Date.now() / 520
             for (let i = 0; i < 3; i++) {
                 const t = (ph + i / 3) % 1
@@ -225,11 +348,11 @@ export const Monitors = () => {
                 fillQuad(ctx, plane, 6.2, yy - 2.1, 10.4, yy - 0.6, YELB, a * 0.5)
             }
         }
-        if (HAS_BAT) tiltText(ctx, plane, W, 85, `${Math.round(batteryV * 100)}%`, TITLE, 10, charging ? YELB : bcol, 0.92, { align: "r", bold: true })
+        if (!isBat || HAS_BAT) tiltText(ctx, plane, W, 85, mText("bat"), TITLE, 10, charging ? YELB : bcol, 0.92, { align: "r", bold: true })
         else tiltText(ctx, plane, W, 85, "Power connected", TITLE, 9, bcol, 0.92, { align: "r", bold: true })
 
         if (hovered && mx >= 0) {
-            const label = tooltipLabels[hovered]
+            const label = tooltipLabel(hovered)
             if (label) {
                 const fs = 9, pad = 8, notch = 7
                 ctx.save()
@@ -309,27 +432,32 @@ export const Monitors = () => {
 
         return false
     })
-    const tgt = () => ({ sto: diskFrac, cpu: clamp(cpu.frac.get()), ram: clamp(ram.frac.get()), bat: batteryV })
+    const tgt = () => ({ sto: mFrac("sto"), cpu: mFrac("cpu"), ram: mFrac("ram"), bat: mFrac("bat") })
     let last = "", lastDraw = 0, t: any = null
     const pump = () => {
+        sampleMetrics()
         let busy = false, changed = false
         const g = tgt()
+        const smooth = animOn("animGauge")
         for (const k of ["sto", "cpu", "ram", "bat"] as const) {
             const di = g[k] - (d as any)[k]
+            if (!smooth) { if (di !== 0) { (d as any)[k] = g[k]; changed = true } continue }
             if (Math.abs(di) > 0.04) { (d as any)[k] += di * 0.22; busy = true }
             else if (di !== 0) (d as any)[k] = g[k]
         }
-        const sig = `${cpu.percent.get()}|${ram.substat.get()}|${diskUsedG}|${Math.round(batteryV * 100)}|${badgeVal}|${batStatus}`
+        const sig = `${mText("badge")}|${mText("sto")}|${mText("cpu")}|${mText("ram")}|${mText("bat")}|${batStatus}`
         if (sig !== last) { last = sig; changed = true }
         const now = Date.now()
         if (busy || (changed && now - lastDraw > 320)) { lastDraw = now; area.queue_draw() }
         if (busy && !t) t = interval(110, pump)
         else if (!busy && t) { t.cancel(); t = null }
     }
+    sampleMetrics()
     cpu.frac.subscribe(pump); ram.frac.subscribe(pump); poke.subscribe(pump)
+    onConfigChange(() => { sampleMetrics(); pump(); area.queue_draw() })
     let chargeT: any = null
     const chargePump = interval(1000, () => {
-        if (isCharging()) { if (!chargeT) chargeT = interval(90, () => area.queue_draw()) }
+        if (animOn("animGauge") && slotKey("bat") === "battery" && isCharging()) { if (!chargeT) chargeT = interval(90, () => area.queue_draw()) }
         else if (chargeT) { chargeT.cancel(); chargeT = null }
     })
     area.connect("destroy", () => { if (t) t.cancel(); if (chargeT) chargeT.cancel(); chargePump.cancel() })
