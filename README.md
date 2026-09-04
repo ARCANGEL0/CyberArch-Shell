@@ -153,8 +153,8 @@ This is my attempt to recreate Cyberpunk 2077 UI entirely on **Hyprland**, using
 ## ⌁ Install
 
 ```bash
-git clone https://github.com/ARCANGEL0/CyberArch-Dotfiles.git 
-cd CyberArch-Dotfiles 
+git clone https://github.com/ARCANGEL0/CyberArch-Shell.git 
+cd CyberArch-Shell 
 chmod +x install.sh
 ./install.sh
 ```
