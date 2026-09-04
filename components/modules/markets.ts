@@ -2,7 +2,7 @@ import { Box, DrawingArea, EventBox } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
-import { CONFIG_DIR, CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
@@ -18,7 +18,7 @@ const DOWN_RGB: [number, number, number] = [255, 70, 84]
 const YEL = (): [number, number, number] => USER.amber
 const DIMC = (): [number, number, number] => USER.dim
 
-const STORE = `${CONFIG_DIR}/markets.json`
+const STORE = `${USER_DIR}/markets.json`
 const MAXPIN = 5
 const BROWSE_CHUNK = 20
 const NEWS_CHUNK = 10
@@ -205,16 +205,18 @@ const sameDay = (a: number, b = Date.now()) => {
 }
 
 const readCity = () => {
-    try {
-        const [ok, data] = GLib.file_get_contents(`${CONFIG_DIR}/city.json`)
-        if (ok) {
-            const o = JSON.parse(new TextDecoder().decode(data))
-            return {
-                name: String(o.name || "LOCAL").trim(),
-                full: String(o.full || o.name || "LOCAL").trim(),
+    for (const p of [`${USER_DIR}/city.json`, `${CYBER_DIR}/config/city.json`]) {
+        try {
+            const [ok, data] = GLib.file_get_contents(p)
+            if (ok) {
+                const o = JSON.parse(new TextDecoder().decode(data))
+                return {
+                    name: String(o.name || "LOCAL").trim(),
+                    full: String(o.full || o.name || "LOCAL").trim(),
+                }
             }
-        }
-    } catch { }
+        } catch { }
+    }
     return { name: "LOCAL", full: "LOCAL" }
 }
 

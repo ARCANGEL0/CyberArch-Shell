@@ -6,7 +6,7 @@ import { Box, DrawingArea, EventBox, Keymode } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
-import { CONFIG_DIR, CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
@@ -115,7 +115,14 @@ const setMapPoint = (rerandom) => {
 }
 
 
-const WX_STORE = `${CONFIG_DIR}/city.json`
+const WX_STORE = `${USER_DIR}/city.json`
+const WX_DEFAULT = `${CYBER_DIR}/config/city.json`
+const readWxStore = (): Uint8Array | null => {
+ for (const p of [WX_STORE, WX_DEFAULT]) {
+  try { const [ok, data] = GLib.file_get_contents(p); if (ok) return data } catch {}
+ }
+ return null
+}
 const saveWxLocation = () => {
  try {
   GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath }, null, 2) + "\n"))

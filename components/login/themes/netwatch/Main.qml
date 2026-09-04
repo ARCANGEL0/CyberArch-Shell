@@ -55,7 +55,8 @@ Rectangle {
     property real cityLon: 0
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string cyberarchConfigDir: Quickshell.env("CYBERARCH_CONFIG_DIR") || (configHome + "/cyberarch")
-    Process { id: cityProc; command: ["cat", root.cyberarchConfigDir + "/city.json"]; running: true
+    readonly property string cyberarchThemeDir: Quickshell.env("CYBERARCH_THEME_DIR") || (Quickshell.shellDir + "/../..")
+    Process { id: cityProc; command: ["sh","-c","cat \"" + root.cyberarchConfigDir + "/city.json\" 2>/dev/null || cat \"" + root.cyberarchThemeDir + "/config/city.json\" 2>/dev/null || echo '{}'"]; running: true
         stdout: StdioCollector { onStreamFinished: {
             try {
                 var o = JSON.parse(this.text)
