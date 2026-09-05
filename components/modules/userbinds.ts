@@ -151,6 +151,7 @@ const THEME_ACTIONS: ThemeAction[] = [
     { id: "hud.brt",      label: "BRIGHTNESS",          group: "deck", mod: "@themeMod", key: "I" },
     { id: "hud.aur",      label: "UPDATES",             group: "deck", mod: "@themeMod", key: "U" },
     { id: "hud.aurdis",   label: "DISMISS UPDATES",     group: "deck", mod: "@themeMod", key: "J" },
+    { id: "hud.update",   label: "CYBERARCH UPDATE",    group: "deck", mod: "@themeMod", key: "Q" },
     { id: "hud.notif",    label: "NOTIFICATIONS",       group: "deck", mod: "@themeMod", key: "M" },
     { id: "hud.player",   label: "MUSIC PLAYER",        group: "deck", mod: "@themeMod", key: "O" },
     { id: "hud.wifi",     label: "NETWORKS",            group: "deck", mod: "@themeMod", key: "N" },

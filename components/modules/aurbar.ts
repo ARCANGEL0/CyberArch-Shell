@@ -4,7 +4,9 @@
 import { Window, DrawingArea } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
-import { CYBER_DIR } from "../../env.ts"
+import GLib from "gi://GLib"
+import Gio from "gi://Gio"
+import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
@@ -49,9 +51,11 @@ let area: any = null, win: any = null, loop: any = null
 let dismissed = false, count = 0
 let lastList: string[] = []
 let phase = "hidden", phaseStart = 0
-let recheck: any = null
+let recheck: any = null, tRecheck: any = null
 let mode = "update", autoT: any = null
 let cTitle = "AUR UPDATE AVAILABLE!", cLabel = "NEW GIGS AVAILABLE:", cValue = "", cShowU = true
+let cUKey = "U", cULbl = "UPGRADE"
+let tVer = "", tLocal = "", tBody: string[] = [], tDismissed = false, aurPending = false
 
 
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
@@ -75,6 +79,24 @@ export const cachedAurUpdates = () => ({ count, list: lastList })
 export const startUpgrade = () => execAsync(["sh", "-c", `'${CYBER_DIR}/scripts/aur' upgrade`]).catch(() => { })
 
 
+const UPDATER = `${CYBER_DIR}/updater.sh`
+
+export const getThemeUpdate = () =>
+    execAsync(["sh", "-c", `'${UPDATER}' check`]).then((out: string) => {
+        const lines = out.split("\n")
+        const avail = (lines[0] || "").trim() === "1"
+        tLocal = (lines[1] || "").trim()
+        tVer = avail ? (lines[2] || "").trim() : ""
+        tBody = avail ? lines.slice(3).map((s) => s.replace(/\s+$/, "")) : []
+        while (tBody.length && !tBody[tBody.length - 1]) tBody.pop()
+        return { avail: avail && !!tVer, local: tLocal, remote: tVer, body: tBody }
+    }).catch(() => ({ avail: false, local: tLocal, remote: "", body: [] as string[] }))
+
+export const cachedThemeUpdate = () => ({ avail: !!tVer, local: tLocal, remote: tVer, body: tBody })
+
+export const startThemeUpdate = () => execAsync(["sh", "-c", `'${UPDATER}' --spawn`]).catch(() => { })
+
+
 const DUR: any = { circle: 820, line: 720, bar: 460, outbar: 340, outline: 240, outcircle: 300 }
 const NEXT: any = { circle: "line", line: "bar", bar: "shown", outbar: "outline", outline: "outcircle", outcircle: "hidden" }
 
@@ -88,7 +110,9 @@ const kick = () => {
             if (phase === "shown" || phase === "hidden") {
                 if (phase === "hidden") {
                     if (win) win.visible = false
-                    if (mode === "installed" && !dismissed && count > 0) timeout(500, showAurBar)
+                    if (mode === "theme" && aurPending) { aurPending = false; timeout(2000, showAurBar) }
+                    else if (mode === "installed" && !tDismissed && tVer) { aurPending = !dismissed && count > 0; timeout(500, showThemeBar) }
+                    else if (mode === "installed" && !dismissed && count > 0) timeout(500, showAurBar)
                 }
                 area?.queue_draw(); loop.cancel(); loop = null; return
             }
@@ -108,6 +132,15 @@ const startOut = () => {
 export const showAurBar = () => {
     if (dismissed || count <= 0 || phase !== "hidden") return
     mode = "update"; cTitle = "AUR UPDATE AVAILABLE!"; cLabel = "NEW GIGS AVAILABLE:"; cValue = `${count}`; cShowU = true
+    cUKey = "U"; cULbl = "UPGRADE"
+    if (win) win.visible = true
+    phase = "circle"; phaseStart = Date.now(); kick()
+}
+
+export const showThemeBar = () => {
+    if (tDismissed || !tVer || phase !== "hidden") return
+    mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
+    cUKey = "Q"; cULbl = "UPDATE NOW"
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
 }
@@ -124,6 +157,14 @@ export const dismissAurBar = () => {
     if (phase === "hidden") return
     if (autoT) { autoT.cancel(); autoT = null }
     if (mode === "update") dismissed = true
+    if (mode === "theme") tDismissed = true
+    startOut()
+}
+
+export const dismissThemeBar = () => {
+    if (mode !== "theme" || phase === "hidden") return
+    if (autoT) { autoT.cancel(); autoT = null }
+    tDismissed = true
     startOut()
 }
 
@@ -248,14 +289,38 @@ const draw = (ctx: any) => {
 
         const w2 = 26 + uwidth(ctx, TITLE, 11, "DISMISS")
         if (cShowU) {
-            const w1 = 26 + uwidth(ctx, TITLE, 11, "UPGRADE"), gap = 18
+            const w1 = 26 + uwidth(ctx, TITLE, 11, cULbl), gap = 18
             let tx = BARX + BW - (w1 + gap + w2)
-            tx += ptip(ctx, tx, TIPY, "U", "UPGRADE", A) + gap
+            tx += ptip(ctx, tx, TIPY, cUKey, cULbl, A) + gap
             ptip(ctx, tx, TIPY, "J", "DISMISS", A)
         } else {
             ptip(ctx, BARX + BW - w2, TIPY, "J", "DISMISS", A)
         }
     }
+}
+
+const STAMP = `${USER_DIR}/update-done`
+
+const takeStamp = () => {
+    try {
+        if (!GLib.file_test(STAMP, GLib.FileTest.EXISTS)) return ""
+        const [ok, bytes] = GLib.file_get_contents(STAMP)
+        try { Gio.File.new_for_path(STAMP).delete(null) } catch { }
+        return ok ? new TextDecoder().decode(bytes).trim() : ""
+    } catch { return "" }
+}
+
+const bootCheck = () => {
+    const applied = takeStamp()
+    if (applied) {
+        getAurUpdates()
+        timeout(2500, () => showInstalled("CYBERARCH UPDATED!", `NOW ON V${applied}`))
+        return
+    }
+    Promise.all([getThemeUpdate(), getAurUpdates()]).then(([t, r]) => {
+        if (t.avail) { aurPending = r.count > 0; showThemeBar() }
+        else if (r.count > 0) showAurBar()
+    })
 }
 
 export const AurBarWindow = () => {
@@ -268,7 +333,8 @@ export const AurBarWindow = () => {
         margin_left: 14, visible: false, child: area,
     })
     passthrough(win)
-    timeout(3500, () => { getAurUpdates().then((r) => { if (r.count > 0) showAurBar() }) })
+    timeout(3500, bootCheck)
     recheck = interval(1800000, () => { if (!dismissed) getAurUpdates().then((r) => { if (r.count > 0) showAurBar() }) })
+    tRecheck = interval(21600000, () => { if (!tDismissed) getThemeUpdate().then((t) => { if (t.avail) showThemeBar() }) })
     return win
 }

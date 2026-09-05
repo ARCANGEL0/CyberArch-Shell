@@ -163,6 +163,24 @@ The installer will download any required dependencies, install the theme, quicks
 
 ---
 
+## ⌁ Updating
+
+```bash
+cd ~/.config/hypr/themes/cyberpunk
+./updater.sh
+```
+
+The HUD checks for a new release a few seconds after boot and offers the update itself: a
+`NEW VERSION VX.Y.Z AVAILABLE` banner slides in with **`SUPER + SHIFT + Q`** to open the changelog and
+`J` to dismiss it until the next login. The modal lists what changed and its `UPDATE NOW` button runs the
+same `updater.sh` in a terminal so you can watch the whole flow.
+
+`updater.sh` fast-forwards your clone to the latest release tag. Local edits are stashed first (with the
+stash ref printed) and untracked files are left alone; if `install.sh` changed in the release it asks
+before re-running it, then restarts the HUD.
+
+---
+
 ## ⌁ Keybinds
 
 The theme modifier is **`$themeMod = SUPER + SHIFT`**. You can change it on Theme Settings > Keybinds (or change it at the top of `config/keybinds.lua`). 
@@ -182,6 +200,7 @@ Open the full cheat-sheet with all keybinds anytime with **`SUPER+SHIFT+H`**.
 | `SUPER + SHIFT + G` | Netterminal: See Stocks, Crypto or News |
 | `SUPER + SHIFT + X` | Dismiss Notifications |
 | `SUPER + SHIFT + U` | System Upgrade modal |
+| `SUPER + SHIFT + Q` | CyberArch update: version + changelog |
 | `SUPER + SHIFT + B` | Bluetooth modal |
 | `SUPER + SHIFT + P` | Power menu |
 | `SUPER + SHIFT + W` | 7-day weather forecast (double-click the city to change location) |

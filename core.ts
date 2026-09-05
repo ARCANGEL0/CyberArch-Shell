@@ -35,7 +35,7 @@ import { RegionWindow, triggerRegion, triggerRecordRegion } from "./components/m
 import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
 import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
-import { AurBarWindow, dismissAurBar, showInstalled } from "./components/modules/aurbar.ts"
+import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
@@ -287,6 +287,9 @@ App.start({
  reply("ok")
  } else if (request === "aur-dismiss") {
  try { dismissAurBar() } catch (e) { print(e) }
+ reply("ok")
+ } else if (request === "cyber-update") {
+ try { dismissThemeBar(); toggleModal("update") } catch (e) { print(e) }
  reply("ok")
  } else if (request.startsWith("pkg-installed ")) {
  try { const d = request.slice(14); const i = d.indexOf("|"); showInstalled(i < 0 ? d : d.slice(0, i), i < 0 ? "" : d.slice(i + 1)) } catch (e) { print(e) }

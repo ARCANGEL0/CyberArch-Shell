@@ -8,5 +8,5 @@ RIO="${XDG_CONFIG_HOME:-$HOME/.config}/rio"
 SRC="$RIO/styles/$STYLE.toml"
 [ -f "$SRC" ] || exit 0
 [ -f "$RIO/config.toml" ] && [ "$(cat "$RIO/.rio-style" 2>/dev/null)" = "$STYLE" ] && exit 0
-cp "$SRC" "$RIO/config.toml"
+sed "s|__RIO_SHADERS__|$RIO/shaders|g" "$SRC" > "$RIO/config.toml"
 printf '%s\n' "$STYLE" > "$RIO/.rio-style"

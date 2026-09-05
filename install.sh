@@ -10,6 +10,19 @@ step()  { printf "${CYAN}▸${R} %s\n" "$1"; }
 ok()    { printf "  ${GRN}✓${R} %s\n" "$1"; }
 warn()  { printf "  ${YEL}⚠${R} %s\n" "$1"; }
 err()   { printf "  ${RED}✗${R} %s\n" "$1"; }
+fatal() {
+  printf "\n${RED}${B}"
+  cat <<'EOF'
+  ╔═══════════════════════════════════════════════════════════╗
+  ║   ▓▒░  I N S T A L L   A B O R T E D  ░▒▓                 ║
+  ╚═══════════════════════════════════════════════════════════╝
+EOF
+  printf "${R}\n  ${RED}${B}✗ %s${R}\n\n" "$1"; shift
+  for l in "$@"; do printf "  ${CYAN}→${R} %s\n" "$l"; done
+  printf "\n  ${YEL}Nothing further was changed. Fix the above, then re-run ./install.sh${R}\n"
+  line
+  exit 1
+}
 banner() {
   printf "${RED}${B}"
   cat <<'EOF'
@@ -18,6 +31,78 @@ banner() {
 EOF
   printf "${R}${CYAN}   ░▒▓ NIGHT CITY RICE · Installer ▓▒░${R}\nMade by: @arcxlo\n"
   line
+}
+SUDO_KEEP=""
+sudo_cleanup() { [ -n "$SUDO_KEEP" ] && kill "$SUDO_KEEP" 2>/dev/null; return 0; }
+sudo_prime() {
+  if sudo -n true 2>/dev/null; then
+    ok "root ticket already cached"
+  else
+    printf "\n${CYAN}${B}▓▒░ ROOT ACCESS ░▒▓${R}\n"
+    printf "  ${DIM}This deck writes to /etc and /usr/share and flips systemd units.${R}\n"
+    printf "  ${DIM}Drop your sudo password once — it stays cached for the whole run.${R}\n"
+    local n
+    for n in 1 2 3; do
+      sudo -v </dev/tty && break
+      warn "auth rejected |::| attempt $n of 3"
+      if [ "$n" = 3 ]; then
+        fatal "sudo authentication failed three times — no root, no install." \
+          "Every step past this point writes outside your home dir." \
+          "Check you are in the wheel group:  groups | grep wheel" \
+          "Then re-run:  ./install.sh"
+      fi
+    done
+    ok "root ticket acquired"
+  fi
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || exit 0; sleep 45; done ) &
+  SUDO_KEEP=$!
+  trap 'sudo_cleanup' EXIT
+}
+pac_install() {
+  local label="$1"; shift
+  [ "$#" -eq 0 ] && return 0
+  if sudo pacman -S --needed "$@"; then ok "$label installed"; return 0; fi
+  warn "batch transaction flatlined |::| retrying $label one chip at a time"
+  local failed=() p
+  for p in "$@"; do
+    sudo pacman -S --needed --noconfirm "$p" >/dev/null 2>&1 || failed+=("$p")
+  done
+  if [ "${#failed[@]}" -eq 0 ]; then ok "$label installed (one at a time)"; return 0; fi
+  fatal "$label — pacman flatlined on ${#failed[@]} package(s)." \
+    "Dead chips: ${failed[*]}" \
+    "Run it raw so you can read what pacman actually screams:" \
+    "  sudo pacman -Syu && sudo pacman -S --needed ${failed[*]}" \
+    "'target not found' means the chip drifted to the AUR:  paru -S ${failed[*]}" \
+    "Choking on a lib32-* chip? Uncomment [multilib] in /etc/pacman.conf, then pacman -Syu." \
+    "One bad name kills the whole transaction, which is why the rest went dark too."
+}
+aur_install() {
+  local label="$1"; shift
+  local helper; helper="$(command -v paru || command -v yay || true)"
+  if [ -z "$helper" ]; then
+    fatal "$label needs an AUR helper and this deck has none." \
+      "paru or yay has to build:  $*" \
+      "Bootstrap it:  sudo pacman -S --needed base-devel git && git clone https://aur.archlinux.org/paru.git && cd paru && makepkg -si" \
+      "Then re-run:  ./install.sh"
+  fi
+  if "$helper" -S --needed "$@"; then ok "$label installed"; return 0; fi
+  local failed=() p
+  for p in "$@"; do pacman -Qq "$p" >/dev/null 2>&1 || failed+=("$p"); done
+  if [ "${#failed[@]}" -eq 0 ]; then ok "$label installed"; return 0; fi
+  fatal "$label — the AUR build flatlined on: ${failed[*]}" \
+    "Build it by hand so the compiler can tell you why:" \
+    "  $(basename "$helper") -S ${failed[*]}" \
+    "Most AUR flatlines are a half-synced system — run sudo pacman -Syu first, then reboot." \
+    "Then re-run:  ./install.sh"
+}
+dm_current() {
+  local l u
+  l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+  if [ -n "$l" ] && [ -e "$l" ]; then basename "$l" .service; return 0; fi
+  for u in sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
+    if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
+  done
+  printf ''
 }
 MESA_PKGS="mesa mesa-utils libdrm lib32-libdrm lib32-mesa"
 HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire xdg-desktop-portal-hyprland lua lua54 gcc gcc-libs hyprlang ffmpeg ffmpeg4.4 chromaprint"
@@ -28,7 +113,7 @@ REPO=(
   base-devel pkgconf cmake cpio gcc lib32-libelf lib32-glibc glibc
   python python-pillow imagemagick $MESA_PKGS
   pipewire pipewire-audio pipewire-pulse libpulse mpv ffmpeg sox
-  ttf-jetbrains-mono ttf-firacode-nerd ttf-nerd-fonts-symbols
+  ttf-jetbrains-mono ttf-firacode-nerd ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono
   lib32-gnutls dnsmasq pipewire-alsa ffmpeg4.4 gst-plugin-pipewire lib32-nettle
   openconnect pipewire-jack pipewire-v4l2 pipewire-x11-bell pipewire-zeroconf
 )
@@ -43,11 +128,25 @@ clear; banner
 command -v pacman >/dev/null || { err "pacman not found |::| this installer targets Arch Linux."; exit 1; }
 command -v hyprctl >/dev/null || warn "Hyprland not detected on PATH |::| install/run Hyprland for the rice to work."
 
+DRYRUN=0
+if [ "${1:-}" = "--dry-run" ] || [ -n "${AUG_DRYRUN:-}" ]; then DRYRUN=1; fi
+[ "$DRYRUN" = 1 ] || sudo_prime
+
 hdr "SYSTEM UPGRADE"
 printf "[!] Run a full system upgrade before installing theme? (y/N) "
 read -r ans </dev/tty
 if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-  sudo pacman -Syu || warn "upgrade failed |::| continuing anyway."
+  if sudo pacman -Syu; then
+    ok "system upgraded"
+  else
+    fatal "the full system upgrade flatlined halfway." \
+      "A half-synced deck is the #1 cause of qt6, quickshell and astal breaking later." \
+      "Finish it by hand and read the error:" \
+      "  sudo pacman -Syu" \
+      "If pacman talks about keys:  sudo pacman -Sy archlinux-keyring && sudo pacman -Syu" \
+      "If it talks about a file conflict, delete the file it names, then re-run the upgrade." \
+      "Reboot after it lands, then re-run:  ./install.sh"
+  fi
 else
   ok "skipped |::| continuing to the installer."
 fi
@@ -58,19 +157,15 @@ CUR="$(pacman -Q hyprland 2>/dev/null | cut -d' ' -f2)"
 AVAIL="$(pacman -Si hyprland 2>/dev/null | sed -n 's/^Version[[:space:]]*:[[:space:]]*//p')"
 if [ -z "$CUR" ]; then
   step "install latest Hyprland + lua tooling"
-  if sudo pacman -S --needed $HYP_PKGS; then ok "Hyprland (latest) installed"
-  else warn "Hyprland install failed |::| run: sudo pacman -S $HYP_PKGS"; fi
+  pac_install "Hyprland core" $HYP_PKGS
 elif [ -z "$AVAIL" ] || [ "$AVAIL" != "$CUR" ]; then
   step "Hyprland is currently $CUR${AVAIL:+ — latest is $AVAIL}"
   printf "[!] Update Hyprland + lua tooling to the latest version? (y/N) "
   read -r ans </dev/tty
   if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-    if sudo pacman -S --needed $HYP_PKGS; then
-      VER="$(hyprctl version 2>/dev/null | head -1)"
-      if [ -n "$VER" ]; then ok "Hyprland updated |::| $VER"; else ok "Hyprland updated"; fi
-    else
-      warn "Hyprland update failed |::| run: sudo pacman -S $HYP_PKGS"
-    fi
+    pac_install "Hyprland core" $HYP_PKGS
+    VER="$(hyprctl version 2>/dev/null | head -1)"
+    [ -n "$VER" ] && ok "Hyprland now |::| $VER"
   else
     warn "skipped |::| keeping Hyprland $CUR."
   fi
@@ -116,12 +211,7 @@ if [ ${#miss_repo[@]} -gt 0 ] || [ ${#miss_aur[@]} -gt 0 ]; then
     printf "[!] Install missing repo deps? (y/N) "
     read -r ans </dev/tty
     if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-      if sudo pacman -S --needed lib32-libelf "${miss_repo[@]}"; then
-        ok "repo packages installed"
-      else
-        err "pacman install failed. Manual intervention required for lib32-libelf."
-        exit 1
-      fi
+      pac_install "repo packages" lib32-libelf "${miss_repo[@]}"
     else warn "skipped repo deps — the rice may not work fully."
     fi
   fi
@@ -134,11 +224,7 @@ if [ ${#miss_repo[@]} -gt 0 ] || [ ${#miss_aur[@]} -gt 0 ]; then
       printf "[!] Install missing AUR deps via %s? (y/N) " "$(basename "$helper")"
       read -r ans </dev/tty
       if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-        if "$helper" -S --needed "${miss_aur[@]}"; then
-          ok "AUR packages installed"
-        else
-          err "AUR install failed."
-        fi
+        aur_install "AUR packages" "${miss_aur[@]}"
       else
         warn "skipped AUR deps."
       fi
@@ -153,18 +239,26 @@ mkdir -p "$HOME/.local/bin"
 if [ ! -x "$HOME/.local/bin/ags" ] && command -v ags >/dev/null 2>&1; then
   ln -sfn "$(command -v ags)" "$HOME/.local/bin/ags"; ok "linked ~/.local/bin/ags → $(command -v ags)"
 elif [ -x "$HOME/.local/bin/ags" ]; then ok "~/.local/bin/ags present"
-else warn "ags not found |::| install it, then re-run."
+else fatal "ags not found — the CyberArch HUD has no runtime to run on." \
+  "AGS v2 (aylurs-gtk-shell) is the process that draws the entire shell." \
+  "Install it:  paru -S aylurs-gtk-shell   (or yay -S aylurs-gtk-shell)" \
+  "Then re-run this installer."
 fi
 NM="$THEME/node_modules"; mkdir -p "$NM"
 link_first() { local name="$1"; shift; for c in "$@"; do [ -d "$c" ] && { ln -sfn "$c" "$NM/$name"; return 0; }; done; return 1; }
-link_first ags   /usr/share/ags/js                                              || warn "ags js lib not found"
+link_first ags   /usr/share/ags/js || fatal "ags js library not found at /usr/share/ags/js" \
+  "core.ts imports this on every start; without it the shell cannot load." \
+  "Your AGS install is incomplete or is AGS v1, not v2." \
+  "Reinstall:  paru -S aylurs-gtk-shell"
 link_first astal /usr/share/astal/gjs /usr/share/astal-io/gjs /usr/lib/astal/gjs || true
 link_first gnim  /usr/share/ags/js/node_modules/gnim /usr/share/astal/gjs/node_modules/gnim || warn "gnim not found"
 if [ -d "$NM/astal" ]; then
   ok "astal imports resolved ($NM/astal → $(readlink "$NM/astal"))"
 else
-  err "astal NOT resolved |::| the astal GJS lib (/usr/share/astal/gjs) is missing."
-  err "install it: ${B}$( (command -v paru||command -v yay) >/dev/null && basename "$(command -v paru||command -v yay)" || echo paru ) -S libastal-gjs-git${R}  then re-run install.sh."
+  fatal "astal NOT resolved — the astal GJS library is missing." \
+    "24 modules under components/ import astal directly; nothing will start." \
+    "Looked in: /usr/share/astal/gjs, /usr/share/astal-io/gjs, /usr/lib/astal/gjs" \
+    "Install:  paru -S libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git"
 fi
 
 hdr "UI FONTS"
@@ -182,6 +276,29 @@ if [ "${#FONTFILES[@]}" -gt 0 ]; then
   fc-cache -f "$FONTDST" >/dev/null 2>&1 && ok "font cache refreshed (systemwide cyberpunk fonts)" || warn "fc-cache not run (install fontconfig)"
 else
   warn "bundled fonts missing at $FONTSRC |::| theme text will fall back to sans-serif."
+fi
+
+hdr "GREETER CHECK"
+LOCK_STACK=1
+DM_OLD=""
+CUR_DM="$(dm_current)"
+if [ -z "$CUR_DM" ]; then
+  ok "no display manager enabled |::| sddm + theme lock are clear to land"
+elif [ "$CUR_DM" = "sddm" ]; then
+  ok "sddm is already your greeter |::| it just gets re-skinned"
+else
+  warn "$CUR_DM is currently driving your login screen"
+  printf "  ${DIM}Taking the CyberArch lock stack means:${R}\n"
+  printf "  ${CYAN}→${R} sddm becomes the greeter and %s gets switched off\n" "$CUR_DM"
+  printf "  ${CYAN}→${R} quickshell + the netwatch shell take over hypridle's lock_cmd\n"
+  printf "  ${CYAN}→${R} if any piece of it flatlines the installer aborts instead of leaving you locked out\n"
+  printf "  ${YEL}Answer N to keep %s untouched — sddm setup and the lock binding get skipped whole.${R}\n" "$CUR_DM"
+  printf "[!] Replace %s with SDDM + CyberArch Theme Lock? (y/N) " "$CUR_DM"
+  read -r ans </dev/tty
+  case "$ans" in
+    [yY]*) DM_OLD="$CUR_DM"; ok "greeter swap authorized |::| $CUR_DM → sddm" ;;
+    *) LOCK_STACK=0; warn "keeping $CUR_DM |::| no sddm config, no lock binding, no lockout risk" ;;
+  esac
 fi
 
 hdr "LOGIN SCREEN"
@@ -234,35 +351,35 @@ else
   ok "wallpaper.lua kept → $USER_DIR/wallpaper.lua"
 fi
 chmod +x "$LOGINDST/lock.sh" 2>/dev/null
-mkdir -p "$HOME/.config/qylock"
-echo "netwatch" > "$HOME/.config/qylock/theme"
 IDLECONF="$HOME/.config/hypr/hypridle.conf"
-if [ -f "$IDLECONF" ]; then
-  if grep -q "lock_cmd" "$IDLECONF"; then
-    sed -i "s#^\( *\)lock_cmd = .*#\1lock_cmd = $LOGINDST/lock.sh#" "$IDLECONF"
-  else
-    sed -i "/^general {/a\\  lock_cmd = $LOGINDST/lock.sh" "$IDLECONF"
-  fi
-  ok "hypridle lock_cmd → $LOGINDST/lock.sh"
+if [ "$LOCK_STACK" != 1 ]; then
+  warn "hypridle lock_cmd left alone |::| $CUR_DM keeps owning the lock"
 else
-  mkdir -p "$(dirname "$IDLECONF")"
-  printf 'general {\n  lock_cmd = %s/lock.sh\n  before_sleep_cmd = loginctl lock-session\n}\n' "$LOGINDST" > "$IDLECONF"
-  ok "created $IDLECONF with lock_cmd → $LOGINDST/lock.sh"
+  mkdir -p "$HOME/.config/qylock"
+  echo "netwatch" > "$HOME/.config/qylock/theme"
+  if [ -f "$IDLECONF" ]; then
+    if grep -q "lock_cmd" "$IDLECONF"; then
+      sed -i "s#^\( *\)lock_cmd = .*#\1lock_cmd = $LOGINDST/lock.sh#" "$IDLECONF"
+    else
+      sed -i "/^general {/a\\  lock_cmd = $LOGINDST/lock.sh" "$IDLECONF"
+    fi
+    ok "hypridle lock_cmd → $LOGINDST/lock.sh"
+  else
+    mkdir -p "$(dirname "$IDLECONF")"
+    printf 'general {\n  lock_cmd = %s/lock.sh\n  before_sleep_cmd = loginctl lock-session\n}\n' "$LOGINDST" > "$IDLECONF"
+    ok "created $IDLECONF with lock_cmd → $LOGINDST/lock.sh"
+  fi
 fi
-command -v quickshell >/dev/null || warn "quickshell binary missing |::| session lock will not launch"
 
 hdr "SDDM · display manager"
-if ! command -v sddm >/dev/null 2>&1 && ! pgrep -x sddm >/dev/null 2>&1; then
+if [ "$LOCK_STACK" != 1 ]; then
+  warn "sddm setup skipped by your call |::| $CUR_DM stays your greeter"
+elif ! command -v sddm >/dev/null 2>&1 && ! pgrep -x sddm >/dev/null 2>&1; then
   step "installing sddm…"
-  if ! sudo pacman -S --needed sddm; then
-    echo "Error: SDDM installation failed. Exiting script." >&2
-    echo "Could not install SDDM. Please run manually:" >&2
-    echo "  sudo pacman -S --needed sddm" >&2
-    exit 1
-  fi
+  pac_install "sddm" sddm
 fi
 
-if command -v sddm >/dev/null 2>&1; then
+if [ "$LOCK_STACK" = 1 ] && command -v sddm >/dev/null 2>&1; then
   ok "sddm installed"
   SDDM_CONF="/etc/sddm.conf"
   step "configuring sddm → netwatch theme…"
@@ -298,16 +415,44 @@ SDDMCNF
   if sudo install -d -m 755 "$SDDM_THEME_DIR" && sudo cp -rf "$LOGINSRC/sddm-theme"/. "$SDDM_THEME_DIR"/; then
     ok "sddm theme deployed → $SDDM_THEME_DIR"
   else
-    warn "could not deploy SDDM theme |::| run: sudo cp -rf '$LOGINSRC/sddm-theme'/.' '$SDDM_THEME_DIR'/"
+    fatal "the netwatch sddm theme could not be deployed." \
+      "sddm.conf now points Current=netwatch at a theme dir that is not there." \
+      "Booting that combo gives you a black greeter, so this stops here." \
+      "Deploy it by hand:" \
+      "  sudo install -d -m 755 $SDDM_THEME_DIR" \
+      "  sudo cp -rf '$LOGINSRC/sddm-theme'/. $SDDM_THEME_DIR/" \
+      "Your greeter was NOT switched yet, so nothing about your login changed."
   fi
-  if ! systemctl is-enabled --quiet sddm 2>/dev/null; then
-    step "enabling sddm as default display manager…"
-    sudo systemctl enable sddm 2>/dev/null && ok "sddm enabled on boot" || warn "could not enable sddm |::| run: sudo systemctl enable sddm"
-  else
-    ok "sddm already enabled"
-  fi
+  DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+  case "$DMLINK" in
+    */sddm.service) ok "sddm is already the default display manager" ;;
+    *)
+      if [ -n "$DM_OLD" ]; then
+        step "switching off $DM_OLD…"
+        DM_ERR="$(sudo systemctl disable "$DM_OLD.service" 2>&1)" \
+          && ok "$DM_OLD disabled" \
+          || warn "could not disable $DM_OLD |::| ${DM_ERR:-no output} |::| enable --force below overrides the alias anyway"
+      fi
+      step "enabling sddm as default display manager…"
+      SDDM_ERR="$(sudo systemctl enable --force sddm 2>&1)"
+      DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+      case "$DMLINK" in
+        */sddm.service) ok "sddm enabled on boot |::| display-manager.service → sddm" ;;
+        *)
+          fatal "sddm could not be made the default display manager." \
+            "systemd said: ${SDDM_ERR:-nothing at all}" \
+            "sddm.service carries Alias=display-manager.service, so plain 'enable' bails out when another greeter already owns that name." \
+            "Do it raw:" \
+            "  sudo systemctl disable ${DM_OLD:-<your-current-greeter>}.service" \
+            "  sudo systemctl enable --force sddm" \
+            "Then verify:  systemctl status display-manager.service" \
+            "Your existing greeter is still enabled, so you are not locked out."
+          ;;
+      esac
+      ;;
+  esac
 else
-  warn "sddm not found |::| skipping display manager setup"
+  warn "sddm step skipped |::| no greeter or theme lock changes were made"
 fi
 
 step "installing news cache cron for sddm ticker…"
@@ -337,98 +482,122 @@ else
 fi
 
 hdr "QUICKSHELL · login"
-QT6="glibc lib32-glibc qt6-multimedia-ffmpeg qt6-base qt6-declarative qt6-svg qt6-wayland qt6-5compat"
-sudo pacman -S --needed $QT6 || warn "qt6 install failed |::| run: sudo pacman -S $QT6"
 QS_LOGIN_OK=1
 qs_ok() { command -v qs >/dev/null 2>&1 && qs --version >/dev/null 2>&1; }
-if ! qs_ok; then
-  step "installing quickshell"
-  sudo pacman -S --needed quickshell || warn "quickshell repo install failed."
-fi
-if ! qs_ok; then
-  step "repo quickshell/vendor qt6 mismatch |::| you must sync qt6 first"
-  ok "Qt6 is having issues for installation! Quickshell will fail with this theme."
-  warn "run: sudo pacman -Syu   then re-run this installer |::| (won't do it for you)"
-fi
-if ! qs_ok; then
-  helper="$(command -v paru || command -v yay || true)"
-  if [ -n "$helper" ]; then
-    step "trying quickshell-git (may fail if qt6 is misaligned)"
-    "$helper" -S --needed quickshell-git || warn "quickshell-git build failed."
-  else
-    warn "no AUR helper (paru/yay) |::| cannot build quickshell-git"
+lock_proto_state() {
+  if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wayland-info >/dev/null 2>&1; then
+    if wayland-info 2>/dev/null | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; return 0; fi
+    if wayland-info >/dev/null 2>&1; then printf 'no'; return 0; fi
   fi
-fi
-if qs_ok; then
-  ok "quickshell ready ($(qs --version 2>/dev/null | head -1 | cut -d' ' -f1-2))"
-else
-  err "quickshell could NOT be installed |::| run: sudo pacman -Syu && paru -S quickshell-git, then re-run."
+  if command -v hyprctl >/dev/null 2>&1; then
+    local hv maj min
+    hv="$(hyprctl version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
+    if [ -n "$hv" ]; then
+      maj="$((10#${hv%%.*}))"; min="$((10#${hv#*.}))"
+      if [ "$maj" -gt 0 ] || [ "$min" -ge 35 ]; then printf 'yes'; else printf 'no'; fi
+      return 0
+    fi
+  fi
+  printf 'unknown'
+}
+if [ "$LOCK_STACK" != 1 ]; then
   QS_LOGIN_OK=0
-fi
-
-PAMFILE="/etc/pam.d/qs-lock"
-if [ -f "$PAMFILE" ]; then
-  ok "PAM service present ($PAMFILE)"
+  warn "theme lock skipped |::| no quickshell, no PAM rewrite, $CUR_DM untouched"
 else
-  step "creating $PAMFILE (auth → system-auth)…"
-  if sudo tee "$PAMFILE" >/dev/null <<'PAMEOF'
+  QT6="glibc lib32-glibc qt6-multimedia-ffmpeg qt6-base qt6-declarative qt6-svg qt6-wayland qt6-5compat"
+  pac_install "qt6 runtime" $QT6
+  if ! qs_ok; then
+    step "installing quickshell"
+    sudo pacman -S --needed quickshell || warn "repo quickshell flatlined |::| dropping to the AUR build"
+  fi
+  if ! qs_ok; then
+    helper="$(command -v paru || command -v yay || true)"
+    if [ -n "$helper" ]; then
+      step "trying quickshell-git (may fail if qt6 is misaligned)"
+      "$helper" -S --needed quickshell-git || warn "quickshell-git build failed."
+    else
+      warn "no AUR helper (paru/yay) |::| cannot build quickshell-git"
+    fi
+  fi
+  if qs_ok; then
+    ok "quickshell ready ($(qs --version 2>/dev/null | head -1 | cut -d' ' -f1-2))"
+  else
+    fatal "quickshell could NOT be installed — the lock screen has no runtime." \
+      "Every path was tried: repo quickshell, then quickshell-git from the AUR." \
+      "That combo only fails on a half-synced deck where qt6 versions disagree." \
+      "Sync the whole system first:  sudo pacman -Syu   then reboot" \
+      "Then build it:  paru -S quickshell-git" \
+      "Your greeter and lock config were left alone, so nothing is broken yet." \
+      "Re-run ./install.sh when qs --version answers."
+  fi
+
+  PAMFILE="/etc/pam.d/qs-lock"
+  if [ -f "$PAMFILE" ]; then
+    ok "PAM service present ($PAMFILE)"
+  else
+    step "creating $PAMFILE (auth → system-auth)…"
+    if sudo tee "$PAMFILE" >/dev/null <<'PAMEOF'
 auth      include   system-auth
 account   include   system-auth
 password  include   system-auth
 session   include   system-auth
 PAMEOF
-  then ok "lockscreen auth wired (qs-lock → system-auth)"
-  else warn "couldn't write $PAMFILE |::| create it manually or the lockscreen will reject every password."
-  fi
-fi
-
-if command -v wayland-info >/dev/null 2>&1; then
-  if wayland-info 2>/dev/null | grep -q "ext_session_lock_manager_v1"; then
-    ok "compositor supports ext-session-lock-v1"
-  else
-    warn "ext-session-lock-v1 not found |::| lock screen could show black"
-    QS_LOGIN_OK=0
-  fi
-elif command -v hyprctl >/dev/null 2>&1; then
-  HVER="$(hyprctl version 2>/dev/null | head -1 | grep -oP 'v\K[0-9]+\.[0-9]+')"
-  if [ -n "$HVER" ]; then
-    HMAJ="${HVER%%.*}"; HMIN="${HVER#*.}"
-    if [ "$HMAJ" -gt 0 ] || { [ "$HMAJ" -eq 0 ] && [ "$HMIN" -ge 52 ]; }; then
-      ok "Hyprland $HVER supports ext-session-lock-v1"
+    then ok "lockscreen auth wired (qs-lock → system-auth)"
     else
-      warn "Hyprland $HVER < 0.52 |::| ext-session-lock-v1 may not be supported"
-      QS_LOGIN_OK=0
+      fatal "could not write $PAMFILE — the lock screen would reject your own password." \
+        "No PAM stack means every unlock attempt fails and you get stuck on the lock surface." \
+        "Write it yourself:" \
+        "  printf 'auth      include   system-auth\\naccount   include   system-auth\\npassword  include   system-auth\\nsession   include   system-auth\\n' | sudo tee $PAMFILE" \
+        "Then re-run:  ./install.sh"
     fi
   fi
-else
-  warn "cannot verify ext-session-lock-v1 support |::| ensure your compositor supports it"
-fi
 
-if command -v qs >/dev/null 2>&1 && qs --version >/dev/null 2>&1; then
-  # fixed issue of hyprlock crashes cus qs lock grabs a WlSessionLocks which crashes hyprland
-  if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "$DISPLAY" ]; then
-    step "smoke testing quickshell login…"
-    QS_LOG=$(mktemp)
-    QS_LOGIN_DIR="$LOGINDST"
-    timeout 4 env QS_TESTING=1 QS_THEME="netwatch" QS_THEME_PATH="$QS_LOGIN_DIR/themes/netwatch" QT_MEDIA_BACKEND=ffmpeg qs -p "$QS_LOGIN_DIR/lock_shell.qml" >"$QS_LOG" 2>&1 &
-    QS_PID=$!
-    sleep 3
-    kill "$QS_PID" 2>/dev/null; wait "$QS_PID" 2>/dev/null
-    QS_ERRORS=$(grep -iE "error|cannot|missing|not found|module.*not" "$QS_LOG" 2>/dev/null || true)
-    rm -f "$QS_LOG"
-    if [ -n "$QS_ERRORS" ]; then
-      QS_LOGIN_OK=0
-      err "quickshell login failed smoke test"
-      printf "%s\n" "$QS_ERRORS" | head -5 | while IFS= read -r ln; do printf "  ${RED}✗${R} %s\n" "$ln"; done
+  case "$(lock_proto_state)" in
+    yes) ok "compositor exposes ext-session-lock-v1" ;;
+    no)
+      if [ -f "$IDLECONF" ] && grep -q "lock.sh" "$IDLECONF"; then
+        sed -i "\#lock_cmd = $LOGINDST/lock.sh#d" "$IDLECONF"
+        warn "pulled the theme lock_cmd back out of $IDLECONF so idle cannot black your screen"
+      fi
+      fatal "your compositor does not expose ext-session-lock-v1 — the lock would come up black." \
+        "quickshell grabs that protocol to paint the lock surface. Without it you get a dead screen you cannot type into." \
+        "On Hyprland:  sudo pacman -S hyprland   (0.35+ carries it), then log out and back in." \
+        "On any other compositor: keep its own locker and answer N at the greeter prompt next run." \
+        "The theme lock_cmd was already removed above, so your idle behaviour is back to stock."
+      ;;
+    *) warn "could not ask the compositor about ext-session-lock-v1 |::| check inside Hyprland with: wayland-info | grep ext_session_lock" ;;
+  esac
+
+  if qs_ok; then
+    # fixed issue of hyprlock crashes cus qs lock grabs a WlSessionLocks which crashes hyprland
+    if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+      step "smoke testing quickshell login…"
+      QS_LOG=$(mktemp)
+      QS_LOGIN_DIR="$LOGINDST"
+      timeout 4 env QS_TESTING=1 QS_THEME="netwatch" QS_THEME_PATH="$QS_LOGIN_DIR/themes/netwatch" QT_MEDIA_BACKEND=ffmpeg qs -p "$QS_LOGIN_DIR/lock_shell.qml" >"$QS_LOG" 2>&1 &
+      QS_PID=$!
+      sleep 3
+      kill "$QS_PID" 2>/dev/null; wait "$QS_PID" 2>/dev/null
+      QS_ERRORS=$(grep -iE "error|cannot|missing|not found|module.*not" "$QS_LOG" 2>/dev/null || true)
+      rm -f "$QS_LOG"
+      if [ -n "$QS_ERRORS" ]; then
+        mapfile -t QS_ERRLINES < <(printf "%s\n" "$QS_ERRORS" | head -5)
+        fatal "quickshell login shell failed its smoke test — the lock screen would crash." \
+          "Shell: $QS_LOGIN_DIR/lock_shell.qml   theme: netwatch" \
+          "${QS_ERRLINES[@]}" \
+          "A lock screen that errors out can wedge the session, so this is a hard stop."
+      else
+        ok "quickshell login verified"
+      fi
     else
-      ok "quickshell login verified"
+      ok "quickshell present |::| skipping live QML smoke test (inside a running compositor)"
     fi
-  else
-    ok "quickshell present |::| skipping live QML smoke test (inside a running compositor)"
   fi
 fi
 
-if [ "$QS_LOGIN_OK" -eq 0 ]; then
+if [ "$LOCK_STACK" != 1 ]; then
+  warn "login screen untouched |::| $CUR_DM and its own locker stay in charge"
+elif [ "$QS_LOGIN_OK" -eq 0 ]; then
   err "login screen may not work |::| check the errors above"
 else
   ok "login screen ready"
@@ -693,6 +862,21 @@ hl.define_submap("kill", function()
     hl.bind("escape",    app("scripts/overkill exit"))
 end)
 
+if type(hl.gesture) == "function" then
+    hl.gesture({ fingers = 3, direction = "left", action = function()
+        hl.exec_cmd(cyberpunk .. "/scripts/ws -1")
+    end })
+    hl.gesture({ fingers = 3, direction = "right", action = function()
+        hl.exec_cmd(cyberpunk .. "/scripts/ws +1")
+    end })
+    hl.gesture({ fingers = 3, direction = "up", action = function()
+        hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/zoom-step in")
+    end })
+    hl.gesture({ fingers = 3, direction = "down", action = function()
+        hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/zoom-step out")
+    end })
+end
+
 USEREOF
     ok "created user.lua template at $USERLUA"
     warn "edit $USERLUA to add your own hl.bind, CD.rebind, or CD.add calls."
@@ -735,6 +919,7 @@ hl = {
   on = function() end, env = function() end, config = function() end,
   curve = function() end, animation = function() end,
   window_rule = function() end, layer_rule = function() end, plugin = node(),
+  gesture = function() end, workspace_rule = function() end, submap = function() end,
   bind = function(mods)
     local d = ""
     local info = debug.getinfo(2, "Sl")
@@ -961,7 +1146,7 @@ kb_size() {
 kb_picker() {
   local total="${#CF_FILE[@]}" cur=0 top=0 i vis avail mark ptr txt loc locp any n_on out row applied
   if [ "$total" -eq 0 ]; then ok "no theme keybind conflicts found."; return 0; fi
-  trap 'kb_restore' EXIT INT TERM
+  trap 'kb_restore; sudo_cleanup' EXIT INT TERM
   printf '\033[?1049h\033[?25l'
   while :; do
     kb_size
@@ -999,10 +1184,10 @@ kb_picker() {
       all)   any=0; for ((i=0;i<total;i++)); do [ "${CF_MARK[i]}" -eq 0 ] && any=1; done
              for ((i=0;i<total;i++)); do CF_MARK[i]=$any; done ;;
       enter) break ;;
-      quit)  kb_restore; trap - EXIT INT TERM; warn "skipped |::| no keybinds changed."; return 0 ;;
+      quit)  kb_restore; trap 'sudo_cleanup' EXIT; trap - INT TERM; warn "skipped |::| no keybinds changed."; return 0 ;;
     esac
   done
-  kb_restore; trap - EXIT INT TERM
+  kb_restore; trap 'sudo_cleanup' EXIT; trap - INT TERM
   applied=0
   for ((i=0;i<total;i++)); do
     [ "${CF_MARK[i]}" -eq 1 ] || continue
@@ -1074,13 +1259,45 @@ gt_has_gpu() { command -v strings >/dev/null 2>&1 || return 1; [ -x "$1" ] && st
 gt_runs() { [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
 gt_rust_ok() { command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1 && rustc -vV >/dev/null 2>&1 && cargo -V >/dev/null 2>&1; }
 gt_rust_err() { rustc -vV 2>&1 | grep -v '^$' | head -1; }
+gt_icd_present() { ls /usr/share/vulkan/icd.d/*.json >/dev/null 2>&1; }
+gt_vendor_icd() {
+  local d cls ven out=""
+  for d in /sys/bus/pci/devices/*; do
+    [ -r "$d/class" ] && [ -r "$d/vendor" ] || continue
+    read -r cls < "$d/class"; read -r ven < "$d/vendor"
+    case "$cls" in 0x03*) ;; *) continue ;; esac
+    case "$ven" in
+      0x1002) case " $out " in *" vulkan-radeon "*) ;; *) out="$out vulkan-radeon" ;; esac ;;
+      0x8086) case " $out " in *" vulkan-intel "*) ;; *) out="$out vulkan-intel" ;; esac ;;
+    esac
+  done
+  printf '%s' "$out"
+}
 if [ ! -d "$GTSRC" ]; then
   warn "GPU Terminal assets missing. |::| Skipping..."
 else
     GT_OK=0
     GT_DEPS="rust llvm-libs cmake pkgconf binutils fontconfig freetype2 libxkbcommon wayland vulkan-icd-loader mesa glibc lib32-glibc"
     step "installing rust toolchain + build dependencies..."
-    sudo pacman -S --needed --noconfirm $GT_DEPS || warn "some build dependencies failed to install"
+    pac_install "rio build dependencies" $GT_DEPS
+    if gt_icd_present; then
+      ok "vulkan driver present |::| $(ls /usr/share/vulkan/icd.d/*.json 2>/dev/null | xargs -n1 basename 2>/dev/null | tr '\n' ' ')"
+    else
+      step "no vulkan driver on this deck |::| resolving one..."
+      GT_VK="$(gt_vendor_icd)"
+      [ -n "$GT_VK" ] && pac_install "vulkan driver" $GT_VK
+      gt_icd_present || pac_install "vulkan software fallback" vulkan-swrast
+      if ! gt_icd_present; then
+        fatal "no Vulkan driver could be installed — rio renders through WebGPU and needs one." \
+          "Without an ICD in /usr/share/vulkan/icd.d the terminal loads its palette and silently drops every shader." \
+          "That is exactly the 'colours change but the CRT frame never shows up' bug." \
+          "NVIDIA card?  sudo pacman -S nvidia-utils        (or nvidia-open + nvidia-utils)" \
+          "AMD card?     sudo pacman -S vulkan-radeon" \
+          "Intel chip?   sudo pacman -S vulkan-intel" \
+          "In a VM?      sudo pacman -S vulkan-swrast" \
+          "Confirm with:  vulkaninfo --summary   then re-run ./install.sh"
+      fi
+    fi
     if ! gt_rust_ok; then
       warn "rust present but not runnable |::| $(gt_rust_err)"
       step "repairing rust + llvm-libs..."
@@ -1092,19 +1309,39 @@ else
       rustup default stable || true
     fi
     if ! gt_rust_ok; then
-      err "rust toolchain unusable |::| $(gt_rust_err)"
-      warn "GPU Terminal not installed. |::| Skipping..."
+      fatal "the rust toolchain on this deck is unusable — rio cannot be built." \
+        "rustc said: $(gt_rust_err)" \
+        "rio is the theme's terminal, bound to $GTKEY, so this is not optional chrome." \
+        "Repair it:  sudo pacman -S rust llvm-libs" \
+        "Or switch to rustup:  sudo pacman -S rustup && rustup default stable" \
+        "Then re-run:  ./install.sh"
     else
       gt_runs "$GTBIN" && step "rebuilding GPU Terminal to match this theme..." || step "building GPU Terminal with GPU shader support..."
       cargo install rioterm --version "$GTVER" --force --locked --features wgpu || warn "cargo reported a build failure |::| checking for a usable binary anyway"
-      gt_runs "$GTBIN" || GTBIN="$(command -v rio 2>/dev/null || printf '%s' "$GTBIN")"
-      if gt_runs "$GTBIN"; then
-        GT_OK=1
-        if gt_has_gpu "$GTBIN"; then ok "librashader present |::| CRT shader will run"
-        else warn "shader symbols not detected, but the build used --features wgpu |::| deploying the CRT config anyway"; fi
+      GT_ALT="$(command -v rio 2>/dev/null || true)"
+      GT_PICK=""
+      if gt_runs "$GTBIN" && gt_has_gpu "$GTBIN"; then GT_PICK="$GTBIN"
+      elif [ -n "$GT_ALT" ] && gt_runs "$GT_ALT" && gt_has_gpu "$GT_ALT"; then GT_PICK="$GT_ALT"
+      fi
+      if [ -n "$GT_PICK" ]; then
+        GTBIN="$GT_PICK"; GT_OK=1
+        ok "librashader linked into $GTBIN |::| the CRT shader chain will run"
+      elif gt_runs "$GTBIN" || { [ -n "$GT_ALT" ] && gt_runs "$GT_ALT"; }; then
+        gt_runs "$GTBIN" || GTBIN="$GT_ALT"
+        fatal "the rio on this deck has no librashader — it would load the palette and silently drop every shader." \
+          "Binary: $GTBIN" \
+          "That is the 'theme switches colours but the CRT frame never appears' bug, so it stops here." \
+          "The cargo build with shader support is the fix:" \
+          "  cargo install rioterm --version $GTVER --force --locked --features wgpu" \
+          "If cargo just failed, read its last error — it is nearly always a missing cmake, binutils or llvm-libs." \
+          "A distro-packaged rio is built without the filter feature, so it can never run the chain." \
+          "Then re-run:  ./install.sh"
       else
-        err "no runnable rio binary at $GTBIN"
-        warn "GPU Terminal not installed. |::| Skipping..."
+        fatal "no runnable rio binary was produced at $GTBIN." \
+          "cargo finished but nothing executable came out, so the terminal bound to $GTKEY does not exist." \
+          "Build it by hand and read the error:" \
+          "  cargo install rioterm --version $GTVER --force --locked --features wgpu" \
+          "Check your PATH picks up ~/.cargo/bin, then re-run ./install.sh"
       fi
     fi
     if [ "$GT_OK" = 1 ]; then

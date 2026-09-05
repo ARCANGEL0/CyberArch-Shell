@@ -15,7 +15,7 @@ import {
 } from "./glass.ts"
 import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
-import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar } from "./aurbar.ts"
+import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar, getThemeUpdate, cachedThemeUpdate, startThemeUpdate, dismissThemeBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
@@ -152,7 +152,8 @@ const drawHudFrame = (ctx, x, y, w, h, title) => {
 
     const hx = px + 12, hy = y + 9
     txt(ctx, hx, hy + 13, title, TITLE, 11, HUDRED, 0.95, 1)
-    let bxx = hx + 92
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11)
+    let bxx = hx + Math.max(92, ctx.textExtents(title).width + 12)
     for (let i = 0; bxx < px + pw - 10; i++) { const bw = 1 + (i * 37 % 3); ctx.setSourceRGBA(hr, hg, hb, 0.3 + 0.5 * ((i * 53 % 3) / 2)); ctx.rectangle(bxx, hy + 2, bw, 13); ctx.fill(); bxx += bw + 2 }
     ctx.setSourceRGBA(hr, hg, hb, 0.5); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(px + 10, y + hd); ctx.lineTo(px + pw - 10, y + hd); ctx.stroke()
 
@@ -1556,7 +1557,7 @@ fi`).then(() => timeout(200, fetchInitApps))
 }
 const KEYBINDS = [
     ["SUPER + TAB", "APP LAUNCHER"], ["H", "HELP MENU"], ["Z", "HUD OVERLAY"], ["V", "VOLUME"],
-    ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["M", "MICROPHONE"],["G", "MARKETS"], ["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
+    ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["Q", "CYBERARCH UPDATE"], ["M", "MICROPHONE"],["G", "MARKETS"], ["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
     ["B", "BLUETOOTH"], ["W", "FORECAST"], ["P", "POWER MENU"], ["Y", "BATTERY"],
     ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
     ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
@@ -1687,6 +1688,103 @@ const AurCtrl = () => {
     return ctrl
 }
 
+const wrapBody = (ctx, lines, font, fs, maxW) => {
+    ctx.selectFontFace(font, 0, 0); ctx.setFontSize(fs)
+    const out: string[] = []
+    for (const raw of lines) {
+        const line = (raw || "").replace(/\t/g, "  ").replace(/[*#`]/g, "")
+        if (!line.trim()) { if (out.length) out.push(""); continue }
+        const pad = " ".repeat(Math.min(6, (line.match(/^\s*/) || [""])[0].length))
+        let cur = ""
+        for (const wd of line.trim().split(/\s+/)) {
+            const cand = cur ? `${cur} ${wd}` : wd
+            if (!cur || ctx.textExtents(pad + cand).width <= maxW) cur = cand
+            else { out.push(pad + cur); cur = wd }
+        }
+        if (cur) out.push(pad + cur)
+    }
+    while (out.length && !out[out.length - 1]) out.pop()
+    return out
+}
+
+const drawUpdBody = (ctx, g, st, x, cy, w, btnH, BR, close) => {
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(40)
+    const big = `V${st.ver}`, bw = ctx.textExtents(big).width
+    ctx.setSourceRGBA(BR[0], BR[1], BR[2], 0.98); ctx.moveTo(x, cy + 30); ctx.showText(big)
+    txt(ctx, x + bw + 14, cy + 14, "NEW RELEASE", TITLE, 14, g.accent, 0.95, 1)
+    txt(ctx, x + bw + 14, cy + 33, `// what changed since v${st.local || "?"}`, MONO, 9, g.col, 0.7)
+    const fy = cy + 52, fh = Math.max(70, g.Y + g.h - 44 - btnH - 16 - fy)
+    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.06); ctx.rectangle(x, fy, w, fh); ctx.fill()
+    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.22); ctx.setLineWidth(0.8); ctx.rectangle(x, fy, w, fh); ctx.stroke()
+    const pad = 12, lh = 14
+    const lines = wrapBody(ctx, st.body, MONO, 9.5, w - pad * 2 - 6)
+    if (!lines.length) lines.push("no release notes for this version")
+    const vis = Math.max(1, Math.floor((fh - pad) / lh))
+    st.maxScroll = Math.max(0, lines.length - vis)
+    if (st.scroll > st.maxScroll) st.scroll = st.maxScroll
+    ctx.save(); ctx.rectangle(x + 1, fy + 1, w - 2, fh - 2); ctx.clip()
+    for (let i = 0; i < vis; i++) {
+        const l = lines[st.scroll + i]
+        if (l === undefined) break
+        if (!l) continue
+        const bul = /^\s*[-•›]/.test(l)
+        const s = bul ? l.replace(/^(\s*)[-•›]\s*/, "$1› ") : l
+        txt(ctx, x + pad, fy + pad + 8 + i * lh, s, MONO, 9.5, bul ? BR : g.col, bul ? 0.95 : 0.8)
+    }
+    ctx.restore()
+    if (lines.length > vis) {
+        const sbh = fh * vis / lines.length, sby = fy + (fh - sbh) * (st.maxScroll ? st.scroll / st.maxScroll : 0)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.rectangle(x + w + 4, sby, 3, sbh); ctx.fill()
+    }
+    const by = g.Y + g.h - 44 - btnH
+    drawBtn(ctx, g.push, x, by, w, btnH, "UPDATE NOW", () => { startThemeUpdate(); dismissThemeBar(); close() }, true, GRN, ch(0xf021))
+}
+
+const UpdCtrl = () => {
+    const st: any = { avail: false, ver: "", local: "", body: [] as string[], scroll: 0, maxScroll: 0, loading: true }
+    let ctrl
+    const take = (r: any) => {
+        st.avail = r.avail; st.ver = r.remote; st.local = r.local; st.body = r.body
+        st.loading = false; st.scroll = 0; ctrl.requestDraw()
+    }
+    const load = () => {
+        const c = cachedThemeUpdate()
+        if (c.remote) { st.avail = c.avail; st.ver = c.remote; st.local = c.local; st.body = c.body; st.loading = false }
+        else st.loading = true
+        ctrl.requestDraw()
+        getThemeUpdate().then(take)
+    }
+    const recheck = () => { st.loading = true; ctrl.requestDraw(); getThemeUpdate().then(take) }
+    ctrl = createModal({
+        name: "update", tabTitle: "CYBERARCH UPDATE", W: 470, H: 512, hud: true,
+        onOpen: () => { st.scroll = 0; load() },
+        onScroll: (d) => { st.scroll = Math.max(0, Math.min(st.maxScroll, st.scroll + d)); ctrl.requestDraw() },
+        draw: (ctx, g) => {
+            const x = g.X + 22, w = g.w - 44, BR = rcAcc(), btnH = 36
+            let cy = g.Y + HEADER + 20
+            const gi = ch(0xf021)
+            ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(15)
+            const giw = ctx.textExtents(gi).width
+            ctx.setSourceRGBA(BR[0], BR[1], BR[2], 0.95); ctx.moveTo(x, cy + 6); ctx.showText(gi)
+            txt(ctx, x + giw + 9, cy + 6, "UPDATE CYBERARCH", TITLE, 14, g.accent, 0.96, 1)
+            drawBtn(ctx, g.push, x + w - 64, cy - 11, 64, 24, "CLOSE", () => ctrl.close(), false, g.col, "", 10)
+            ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.setLineWidth(1)
+            ctx.newPath(); ctx.moveTo(x, cy + 22); ctx.lineTo(x + w, cy + 22); ctx.stroke()
+            cy += 42
+            if (st.loading) { txt(ctx, x, cy + 8, "// CHECKING FOR A NEW RELEASE …", MONO, 11, g.col, 0.82); return }
+            if (!st.avail) {
+                ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(24)
+                ctx.setSourceRGBA(GRN[0], GRN[1], GRN[2], 0.96); ctx.moveTo(x, cy + 24); ctx.showText("CYBERARCH UP TO DATE")
+                txt(ctx, x, cy + 46, `// running v${st.local || "?"}`, MONO, 10, g.col, 0.7)
+                drawBtn(ctx, g.push, x, g.Y + g.h - 44 - btnH, w, btnH, "CHECK AGAIN", recheck, false, g.col, ch(0xf021))
+                return
+            }
+            drawUpdBody(ctx, g, st, x, cy, w, btnH, BR, () => ctrl.close())
+        },
+    })
+    return ctrl
+}
+
 let sysInst: any = null, sysKey = ""
 const sysDims = () => {
   try {
@@ -1704,7 +1802,7 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(ThemesCtrl())]
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemesCtrl())]
 
 
 export const toggleModal = (name) => {
