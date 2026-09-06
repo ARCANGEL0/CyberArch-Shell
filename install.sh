@@ -653,6 +653,66 @@ if [ -x "$CRT_BIN" ] && [ -f "$THEME/scripts/netrunner-terminal" ]; then
   bash "$THEME/scripts/netrunner-terminal" && ok "netrunner profile installed" || warn "netrunner-terminal failed |::| run cool-retro-term once, then: scripts/netrunner-terminal"
 fi
 
+hdr "CYBERSPACE · net client"
+CS_SRC="$THEME/components/apps/CyberSpace"
+CS_BIN="$HOME/.local/bin/cyberspace"
+CS_DESKTOP="$HOME/.local/share/applications/cyberspace.desktop"
+CS_ICON="$HOME/.local/share/icons/hicolor/scalable/apps/cyberspace.svg"
+printf "${CYAN}${B}"
+cat <<'EOF'
+  ╔═══════════════════════════════════════════════════════════╗
+  ║   ▓▒░  C Y B E R S P A C E   C L I E N T  ░▒▓             ║
+  ╚═══════════════════════════════════════════════════════════╝
+EOF
+printf "${R}"
+printf "  ${DIM}A WPE WebKit deck that cold-boots straight into cyberspace.online.${R}\n"
+printf "  ${DIM}Lands in ~/.local/bin and shows up in your app launcher.${R}\n\n"
+printf "  ${CYAN}${B}[?]${R} Install CyberSpace Client and add to Desktop entries? (y/N) "
+read -r ans </dev/tty
+if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+  if [ ! -x "$CS_SRC/cyberspace" ]; then
+    warn "CyberSpace binary missing |::| expected $CS_SRC/cyberspace"
+  else
+    if ldd "$CS_SRC/cyberspace" 2>/dev/null | grep -q "not found"; then
+      pac_install "CyberSpace WPE runtime" wpewebkit
+    fi
+    mkdir -p "$HOME/.local/bin" "$(dirname "$CS_DESKTOP")" "$(dirname "$CS_ICON")"
+    if install -m 755 "$CS_SRC/cyberspace" "$CS_BIN"; then
+      ok "installed CyberSpace → $CS_BIN"
+    else
+      warn "could not copy the binary to $CS_BIN"
+    fi
+    if [ -f "$THEME/assets/gtk/iconpack/apps/48/internet-web-browser.svg" ]; then
+      cp -f "$THEME/assets/gtk/iconpack/apps/48/internet-web-browser.svg" "$CS_ICON" \
+        && ok "icon → $CS_ICON"
+    fi
+    cat > "$CS_DESKTOP" <<EOF
+[Desktop Entry]
+Type=Application
+Name=CyberSpace
+GenericName=Net Client
+Comment=Jack into cyberspace.online
+Exec=$CS_BIN
+Icon=cyberspace
+Categories=Network;WebBrowser;
+Terminal=false
+StartupWMClass=cyberspace
+EOF
+    ok "desktop entry → $CS_DESKTOP"
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+    case ":$PATH:" in
+      *":$HOME/.local/bin:"*) : ;;
+      *) warn "add ~/.local/bin to your PATH to run 'cyberspace' from a shell" ;;
+    esac
+    if ldd "$CS_BIN" 2>/dev/null | grep -q "not found"; then
+      warn "CyberSpace is installed but its WPE runtime is incomplete |::| sudo pacman -S --needed wpewebkit"
+    fi
+  fi
+else
+  warn "CyberSpace skipped |::| re-run ./install.sh to add it later"
+fi
+
 hdr "DEFAULT SHELL · fish"
 printf "[!] Set default shell to fish with custom themes? (y/N) "
 read -r ans </dev/tty
