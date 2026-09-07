@@ -1643,6 +1643,7 @@ const KeysCtrl = () => createModal({
 
 const cregistry: any = {}
 const register = (c) => { cregistry[c.name] = c; return c.win }
+export const registerCModal = (c) => { cregistry[c.name] = c }
 const chgCbs: any[] = []
 export const onModalChange = (cb) => { chgCbs.push(cb) }
 const fireChange = () => { for (const cb of chgCbs) cb() }

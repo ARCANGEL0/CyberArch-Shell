@@ -281,3 +281,10 @@ if f then pcall(f) end
 hl.define_submap("cyberdeck_capture", function()
     hl.bind("SUPER + CTRL + ALT + SHIFT + Escape", hl.dsp.submap("reset"))
 end)
+
+-- fresh hyprland installs ship an auto-generated hyprland.lua whose binds run
+-- before the theme loads, so both fire on the same combo. the theme scan above
+-- only covers user.lua; this sweeps the other files the compositor loads and,
+-- when anything collides, tells the HUD to raise the conflict modal instead of
+-- silently double-binding.
+hl.exec_cmd("sh -c '" .. cyberpunk .. "/scripts/kbconflicts notify 2>/dev/null' &")

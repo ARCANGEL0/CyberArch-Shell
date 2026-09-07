@@ -697,7 +697,7 @@ const USER_PATH = `${USER_DIR}/user_colors.lua`
 export const loadUserColors = (): void => {
     try {
         const [ok, bytes] = GLib.file_get_contents(USER_PATH)
-        if (!ok) return
+        if (!ok) { applyPalette("NETWATCH"); return }
         const src = new TextDecoder().decode(bytes)
         const lines = src.split("\n")
         let saved = ""
