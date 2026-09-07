@@ -5,7 +5,14 @@ R=$'\033[0m'; B=$'\033[1m'; DIM=$'\033[2m'
 RED=$'\033[38;2;255;45;61m'; CYAN=$'\033[38;2;119;226;242m'
 YEL=$'\033[38;2;255;214;31m'; GRN=$'\033[38;2;90;230;130m'; GREY=$'\033[38;2;120;120;130m'
 line()  { printf "${RED}%s${R}\n" "────────────────────────────────────────────────────────────"; }
-hdr()   { printf "\n${CYAN}${B}▓▒░ %s ░▒▓${R}\n" "$1"; }
+hdr()   {
+  local t="▓▒░  $1  ░▒▓"
+  local pad=$(( 61 - ${#t} ))
+  (( pad < 1 )) && pad=1
+  printf "\n${CYAN}${B}  ╔═══════════════════════════════════════════════════════════╗\n"
+  printf "  ║   %s%*s║\n" "$t" "$pad" ""
+  printf "  ╚═══════════════════════════════════════════════════════════╝${R}\n"
+}
 step()  { printf "${CYAN}▸${R} %s\n" "$1"; }
 ok()    { printf "  ${GRN}✓${R} %s\n" "$1"; }
 warn()  { printf "  ${YEL}⚠${R} %s\n" "$1"; }
@@ -13,9 +20,9 @@ err()   { printf "  ${RED}✗${R} %s\n" "$1"; }
 fatal() {
   printf "\n${RED}${B}"
   cat <<'EOF'
-  ╔═══════════════════════════════════════════════════════════╗
-  ║   ▓▒░  I N S T A L L   A B O R T E D  ░▒▓                 ║
-  ╚═══════════════════════════════════════════════════════════╝
+  ╔════════════════════════════════════════════════════════════════════╗
+  ║   ▓▒░  F L A T L I N E D  ░▒▓                                      ║
+  ╚════════════════════════════════════════════════════════════════════╝
 EOF
   printf "${R}\n  ${RED}${B}✗ %s${R}\n\n" "$1"; shift
   for l in "$@"; do printf "  ${CYAN}→${R} %s\n" "$l"; done
@@ -95,14 +102,14 @@ aur_install() {
     "Most AUR flatlines are a half-synced system — run sudo pacman -Syu first, then reboot." \
     "Then re-run:  ./install.sh"
 }
-dm_current() {
-  local l u
-  l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
-  if [ -n "$l" ] && [ -e "$l" ]; then basename "$l" .service; return 0; fi
-  for u in sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
-    if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
-  done
-  printf ''
+dm_current() { 
+local l u 
+l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null | true)"
+if [ -n "$1" ] && [ -e "$1" ]; then basename "$1" .service; return 0; fi
+for u in sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
+if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
+done
+printf ''
 }
 MESA_PKGS="mesa mesa-utils libdrm lib32-libdrm lib32-mesa"
 HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire xdg-desktop-portal-hyprland lua lua54 gcc gcc-libs hyprlang ffmpeg ffmpeg4.4 chromaprint"
@@ -467,26 +474,35 @@ else
 fi
 
 hdr "PACMAN HOOK"
-HOOKSRC="$THEME/assets/pacman/cyberpunk-pkg-notify.hook"
-HOOKDST="/etc/pacman.d/hooks/cyberpunk-pkg-notify.hook"
-if [ -f "$HOOKSRC" ]; then
-  printf "${CYAN}▸ Installing pacman hook :: sudo password required${R}\n"
-  printf "${DIM}  This will toggle the Streetcred reputation animation when installing packages or AUR updates available${R}\n"
-  if sed "s|__THEME__|$CANON|g" "$HOOKSRC" | sudo tee "$HOOKDST" >/dev/null; then
-    ok "install-notification hook → $HOOKDST"
+printf "${R}  ${DIM}Toggles the Streetcred reputation animation when installing${R}\n"
+printf "  ${DIM}packages, or when AUR updates are available.${R}\n\n"
+printf "  ${CYAN}${B}[?]${R} Add a pacman hook to show animations when AUR packages are installed/available to update? (y/N) "
+read -r ans </dev/tty
+if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+  HOOKSRC="$THEME/assets/pacman/cyberpunk-pkg-notify.hook"
+  HOOKDST="/etc/pacman.d/hooks/cyberpunk-pkg-notify.hook"
+  if [ -f "$HOOKSRC" ]; then
+    if sed "s|__THEME__|$CANON|g" "$HOOKSRC" | sudo tee "$HOOKDST" >/dev/null 2>&1; then
+      ok "install-notification hook → $HOOKDST"
+    else
+      warn "hook not installed (needs root) |::| run: sed \"s|__THEME__|$CANON|g\" \"$HOOKSRC\" | sudo tee \"$HOOKDST\""
+    fi
   else
-    warn "hook not installed (needs root) |::| run: sed \"s|__THEME__|$CANON|g\" \"$HOOKSRC\" | sudo tee \"$HOOKDST\""
+    warn "hook template missing at $HOOKSRC"
   fi
 else
-  warn "hook template missing at $HOOKSRC"
+  warn "pacman hook skipped |::| re-run ./install.sh to add it later"
 fi
 
 hdr "QUICKSHELL · login"
 QS_LOGIN_OK=1
 qs_ok() { command -v qs >/dev/null 2>&1 && qs --version >/dev/null 2>&1; }
+
+
 lock_proto_state() {
   if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wayland-info >/dev/null 2>&1; then
-    if wayland-info 2>/dev/null | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; return 0; fi
+    probe="$(wayland-info 2>/dev/null)"
+    if printf '%s' "$probe" | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; return 0; fi
     if wayland-info >/dev/null 2>&1; then printf 'no'; return 0; fi
   fi
   if command -v hyprctl >/dev/null 2>&1; then
@@ -500,6 +516,7 @@ lock_proto_state() {
   fi
   printf 'unknown'
 }
+
 if [ "$LOCK_STACK" != 1 ]; then
   QS_LOGIN_OK=0
   warn "theme lock skipped |::| no quickshell, no PAM rewrite, $CUR_DM untouched"
@@ -1315,7 +1332,7 @@ GTCFG="$HOME/.config/rio"
 GTBIN="${CARGO_HOME:-$HOME/.cargo}/bin/rio"
 GTVER="0.4.5"
 GTKEY="SUPER + T"
-gt_has_gpu() { command -v strings >/dev/null 2>&1 || return 1; [ -x "$1" ] && strings -n 8 "$1" 2>/dev/null | grep -qi librashader; }
+gt_has_gpu() { command -v strings >/dev/null 2>&1 || return 1; [ -x "$1" ] && strings -n 8 "$1" 2>/dev/null | grep -qi librashader >/dev/null; }
 gt_runs() { [ -x "$1" ] && "$1" --version >/dev/null 2>&1; }
 gt_rust_ok() { command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1 && rustc -vV >/dev/null 2>&1 && cargo -V >/dev/null 2>&1; }
 gt_rust_err() { rustc -vV 2>&1 | grep -v '^$' | head -1; }
@@ -1337,7 +1354,7 @@ if [ ! -d "$GTSRC" ]; then
   warn "GPU Terminal assets missing. |::| Skipping..."
 else
     GT_OK=0
-    GT_DEPS="rust llvm-libs cmake pkgconf binutils fontconfig freetype2 libxkbcommon wayland vulkan-icd-loader mesa glibc lib32-glibc"
+    GT_DEPS="rust llvm-libs cmake pkgconf librashader binutils fontconfig freetype2 libxkbcommon wayland vulkan-icd-loader mesa glibc lib32-glibc"
     step "installing rust toolchain + build dependencies..."
     pac_install "rio build dependencies" $GT_DEPS
     if gt_icd_present; then
@@ -1521,18 +1538,27 @@ else
 fi
 
 if dm_active; then
-  printf "[!] Restart Hyprland now? (y/N) "
-  read -r ans </dev/tty
+	printf "[!] Restart Hyprland now? (y/N) "
+	read -r ans </dev/tty
 else
-  warn "no display manager detected |::| killing Hyprland here drops you to a black TTY with nothing to log back in with."
-  printf "[!] Restart Hyprland anyway? (y/N) "
-  read -r ans </dev/tty
-fi
-if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-  printf "${CYAN}  ▸ restarting Hyprland…${R}\n"
-  sudo pkill sddm
-  pkill -x Hyprland 2>/dev/null || hyprctl dispatch exit >/dev/null 2>&1
-else
-  printf "${GREY}  Restart Hyprland yourself when ready (log out / back in, or: ${B}pkill Hyprland${R}${GREY}).${R}\n"
-fi
+   warn "no active greeter on this deck |::| If you delta the compositor right now, will drop you to a TTY space" 
+   printf "[:!:] Restart Hyprland anyway ? (y/N) "
+   read -r ans </dev/tty
+ fi
+ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+ 	printf "${CYAN} > restarting Hyprland.${R}\n"
+ 	pkill -x Hyprland 2>/dev/null || hyprctl dispatch exit >/dev/null 2>&1
+ 	 if [ -n "${DM_OLD:-}" ] && pgrep -x plasmalogin >/dev/null 2>&1; then
+ 	    sudo systemctl start sddm 2>/dev/null || true
+ 	    sudo systemctl stop plasmalogin.service 2>/dev/null || true
+ 	    ok 'greeter swapped plasmalogin -> sddm'
+ 	  fi
+ 	 if dm_active; then
+ 	   sleep 1
+ 	   sudo chvt 1 2>/dev/null || true
+ 	    ok "greeter screen is on tty1 |::| press CTRL+ALT+F1 if the login screen does not come up"
+ 	fi
+  else 
+    printf "${GREY} Restart Hyprland yourself when ready (logout / back in, or: ${B}pkill Hyprland${R}${GREY}).${R}\n"
+ fi
 line

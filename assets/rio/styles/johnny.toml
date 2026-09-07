@@ -26,8 +26,8 @@ blur = true
 decorations = "Enabled"
 
 [fonts]
-family = "FiraCode Nerd Font Mono"
-size = 14
+family = "JetBrains Mono"
+size = 15
 use-drawable-chars = true
 hinting = true
 features = ["calt", "liga"]
