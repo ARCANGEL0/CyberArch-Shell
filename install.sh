@@ -87,9 +87,25 @@ aur_install() {
   local label="$1"; shift
   local helper; helper="$(command -v paru || command -v yay || true)"
   if [ -z "$helper" ]; then
+    if [ -t 0 ]; then
+      hdr "BOOTSTRAPPING YAY"
+      step "building yay from the AUR (base-devel + git + makepkg)…"
+      sudo pacman -S --needed --noconfirm base-devel git >/dev/null 2>&1
+      local ytmp; ytmp="$(mktemp -d)"
+      if git clone --depth 1 https://aur.archlinux.org/yay.git "$ytmp/yay" 2>/dev/null; then
+        if (cd "$ytmp/yay" && makepkg -si --noconfirm --needed >/dev/null 2>&1); then
+          ok "yay installed"; helper="$(command -v yay || true)"
+        else err "yay build failed — will fall back to manual instructions."
+        fi
+      else err "could not clone the yay AUR repo — network or AUR down?"
+      fi
+      rm -rf "$ytmp"
+    fi
+  fi
+  if [ -z "$helper" ]; then
     fatal "$label needs an AUR helper and this deck has none." \
       "paru or yay has to build:  $*" \
-      "Bootstrap it:  sudo pacman -S --needed base-devel git && git clone https://aur.archlinux.org/paru.git && cd paru && makepkg -si" \
+      "Bootstrap it:  sudo pacman -S --needed base-devel git && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si" \
       "Then re-run:  ./install.sh"
   fi
   if "$helper" -S --needed "$@"; then ok "$label installed"; return 0; fi
@@ -125,6 +141,7 @@ REPO=(
   openconnect pipewire-jack pipewire-v4l2 pipewire-x11-bell pipewire-zeroconf
 )
 AUR=(
+  yay
   aylurs-gtk-shell
   libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git
   pamtester
@@ -226,7 +243,13 @@ if [ ${#miss_repo[@]} -gt 0 ] || [ ${#miss_aur[@]} -gt 0 ]; then
     helper="$(command -v paru || command -v yay || true)"
     printf "\n${CYAN}AUR PACKAGES REQUIRED:${R} ${B}%s${R}\n" "${miss_aur[*]}"
     if [ -z "$helper" ]; then
-      warn "no AUR helper (paru/yay) found. Install these manually."
+      printf "[!] No AUR helper found. Bootstrap yay now and install AUR deps? (y/N) "
+      read -r ans </dev/tty
+      if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        aur_install "AUR packages" "${miss_aur[@]}"
+      else
+        warn "no AUR helper (paru/yay) found. Install these manually."
+      fi
     else
       printf "[!] Install missing AUR deps via %s? (y/N) " "$(basename "$helper")"
       read -r ans </dev/tty
@@ -327,6 +350,10 @@ mkdir -p "$USER_DIR" "$WALLPAPERS_PATH"
 if [ -d "$HOME/.local/share/cyberdeck" ]; then
   for f in city.json markets.json user_colors.lua; do
     if [ -f "$HOME/.local/share/cyberdeck/$f" ] && [ ! -f "$USER_DIR/$f" ]; then
+      if [ "$f" = "user_colors.lua" ] && ! grep -q '^local palette = ' "$HOME/.local/share/cyberdeck/$f"; then
+        warn "skipping old-format user_colors.lua (pre-palette era) → defaults apply"
+        continue
+      fi
       cp -f "$HOME/.local/share/cyberdeck/$f" "$USER_DIR/$f"
       ok "migrated $f → $USER_DIR/$f"
     fi
@@ -521,7 +548,7 @@ if [ "$LOCK_STACK" != 1 ]; then
   QS_LOGIN_OK=0
   warn "theme lock skipped |::| no quickshell, no PAM rewrite, $CUR_DM untouched"
 else
-  QT6="glibc lib32-glibc qt6-multimedia-ffmpeg qt6-base qt6-declarative qt6-svg qt6-wayland qt6-5compat"
+  QT6="glibc lib32-glibc qt6-multimedia qt6-multimedia-ffmpeg qt6-base qt6-declarative qt6-svg qt6-wayland qt6-5compat"
   pac_install "qt6 runtime" $QT6
   if ! qs_ok; then
     step "installing quickshell"
@@ -978,52 +1005,6 @@ if [ -f "$HYDIR/hyprland.conf" ]; then
 fi
 
 hdr "KEYBIND CONFLICTS"
-LUA_BIN="$(command -v lua5.4 || command -v lua || true)"
-THEME_KEYS=""
-if [ -n "$LUA_BIN" ] && [ -f "$THEME/theme.lua" ]; then
-  THEME_KEYS="$("$LUA_BIN" - 2>/dev/null <<'LUAE'
-local combos = {}
-local node
-node = function()
-  return setmetatable({}, {
-    __index = function() return node() end,
-    __call  = function() return {} end,
-  })
-end
-hl = {
-  dsp = node(),
-  exec_cmd = function() end, exec = function() end, exec_once = function() end,
-  on = function() end, env = function() end, config = function() end,
-  curve = function() end, animation = function() end,
-  window_rule = function() end, layer_rule = function() end, plugin = node(),
-  gesture = function() end, workspace_rule = function() end, submap = function() end,
-  bind = function(mods)
-    local d = ""
-    local info = debug.getinfo(2, "Sl")
-    if info and info.short_src and info.currentline then
-      local fh = io.open(info.short_src, "r")
-      if fh then
-        local i = 0
-        for line in fh:lines() do
-          i = i + 1
-          if i == info.currentline then d = line break end
-        end
-        fh:close()
-      end
-    end
-    combos[#combos + 1] = tostring(mods) .. "\t" .. d
-  end,
-  define_submap = function(_, fn) if type(fn) == "function" then fn() end end,
-}
-local mod = os.getenv("HOME") .. "/.config/hypr/themes/cyberpunk"
-package.path = mod .. "/?.lua;" .. package.path
-local ok, err = pcall(require, "theme")
-if not ok then print("__ERROR__ " .. tostring(err)) end
-for i = 1, #combos do print(combos[i]) end
-LUAE
-)"
-fi
-mapfile -t THEME_RAW <<< "$THEME_KEYS"
 canon() {
   local combo="$1" t key="" n
   combo="$(printf '%s' "$combo" | tr '[:lower:]' '[:upper:]')"
@@ -1039,113 +1020,38 @@ canon() {
     printf '%s' "$key"
   fi
 }
-kb_pretty() {
-  case "$1" in
-    vol)            printf 'volume' ;;
-    brt)            printf 'brightness' ;;
-    pwr)            printf 'power menu' ;;
-    bt)             printf 'bluetooth' ;;
-    bat)            printf 'battery' ;;
-    sys)            printf 'system monitor' ;;
-    keys)           printf 'keybind help' ;;
-    aur)            printf 'system upgrade' ;;
-    wifi)           printf 'wifi' ;;
-    mic)            printf 'microphone' ;;
-    toggle-hud)     printf 'toggle HUD' ;;
-    player)         printf 'music player' ;;
-    forecast)       printf 'weather forecast' ;;
-    clock)          printf 'system time' ;;
-    weather)        printf 'city picker' ;;
-    aur-dismiss)    printf 'dismiss update bar' ;;
-    notif-hud)      printf 'notification center' ;;
-    notif-read)     printf 'open notification' ;;
-    notif-dismiss)  printf 'dismiss notification' ;;
-    overkill)       printf 'kill mode' ;;
-    screenrecord)   printf 'screen record' ;;
-    screenshot)     printf 'screenshot' ;;
-    launcher)       printf 'app launcher' ;;
-    terminal)       printf 'netrunner terminal' ;;
-    peek)           printf 'peek desktop' ;;
-    ws)             printf 'workspace switch' ;;
-    TERM)           printf 'terminal' ;;
-    *)              printf '%s' "${1//-/ }" ;;
-  esac
-}
-kb_desc() {
-  local l="$1" m
-  m="$(printf '%s' "$l" | sed -n 's/.*sock("\([^"]*\)").*/\1/p')"
-  if [ -n "$m" ]; then
-    case "$m" in
-      "modal "*) kb_pretty "${m#modal }" ;;
-      *)         kb_pretty "$m" ;;
-    esac
-    return 0
-  fi
-  m="$(printf '%s' "$l" | sed -n 's|.*/scripts/\([A-Za-z0-9_-]*\).*|\1|p')"
-  [ -n "$m" ] && { kb_pretty "$m"; return 0; }
-  m="$(printf '%s' "$l" | sed -n 's/.*exec_cmd(\([A-Za-z0-9_]*\)).*/\1/p')"
-  [ -n "$m" ] && { kb_pretty "$m"; return 0; }
-  m="$(printf '%s' "$l" | sed -n 's/.*hl\.dsp\.\([A-Za-z0-9_.]*\).*/\1/p')"
-  if [ -n "$m" ] && [ "$m" != "exec_cmd" ]; then printf '%s' "${m//./ }"; return 0; fi
-  printf 'theme bind'
-}
-declare -a THEME_COMBOS=()
-declare -A THEME_DESC=()
-for c in "${THEME_RAW[@]}"; do
-  [[ "$c" == __ERROR__* ]] && { warn "${c#__ERROR__ }"; continue; }
-  [ -z "$c" ] && continue
-  _combo="${c%%	*}"; _src="${c#*	}"
-  [ "$_src" = "$c" ] && _src=""
-  _cc="$(canon "$_combo")"
-  THEME_COMBOS+=("$_cc")
-  [ -n "$_src" ] && THEME_DESC["$_cc"]="$(kb_desc "$_src")"
-done
-THAS() {
-  local want="$1" t
-  for t in "${THEME_COMBOS[@]}"; do [ "$t" = "$want" ] && return 0; done
-  return 1
-}
-declare -a CF_FILE=() CF_LINE=() CF_TEXT=() CF_COMBO=() CF_DESC=() CF_MARK=()
+declare -a CF_FILE=() CF_LINE=() CF_TEXT=() CF_COMBO=() CF_DESC=() CF_MARK=() CF_TSRC=()
 cf_add() {
   CF_FILE+=("$1"); CF_LINE+=("$2"); CF_TEXT+=("$3"); CF_COMBO+=("$4")
-  CF_DESC+=("${THEME_DESC[$4]:-theme bind}"); CF_MARK+=(1)
+  CF_DESC+=("${5:-theme bind}"); CF_MARK+=(1)
 }
 cf_comment() {
   local f="$1" n="$2"
   if [[ "$f" == *.lua ]]; then sed -i "${n}s|^|-- |" "$f"; else sed -i "${n}s|^|#|" "$f"; fi
 }
-lua_loadvars() {
-  local f="$1" ln name val
-  [ -f "$f" ] || return 0
-  while IFS= read -r ln; do
-    [[ "$ln" =~ ^[[:space:]]*local[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*["'\''"]([^"'\''"]*)["'\''"] ]] || continue
-    val="${BASH_REMATCH[2]}"; val="$(printf '%s' "$val" | sed 's/[[:space:]]*$//')"
-    LVARS["${BASH_REMATCH[1]}"]="$val"
-  done < "$f"
+# the lua side of the scan lives in scripts/kbconflicts — same engine the theme
+# runs on load, so the installer and the runtime modal never disagree on what
+# counts as a conflict
+kbc_records() {
+  local kbc="$THEME/scripts/kbconflicts" rec f n combo tsrc text lbl
+  [ -f "$kbc" ] || { warn "scripts/kbconflicts missing |::| lua-side keybind scan skipped."; return 0; }
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    f="${rec%%|*}"; rec="${rec#*|}"
+    n="${rec%%|*}"; rec="${rec#*|}"
+    combo="${rec%%|*}"; rec="${rec#*|}"
+    tsrc="${rec%%|*}"; rec="${rec#*|}"
+    text="${rec%%|*}"; lbl="${rec#*|}"
+    cf_add "$f" "$n" "$text" "$combo" "theme: ${lbl:+$lbl @ }$tsrc"
+  done < <(bash "$kbc" check 2>/dev/null)
 }
-lua_arg() {
-  local s="$1" name pass
-  for pass in 1 2 3; do for name in "${!LVARS[@]}"; do s="${s//$name/${LVARS[$name]}}"; done; done
-  s="${s//\"/}"; s="${s//\'/}"; s="${s//../ }"
-  s="$(printf '%s' "$s" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
-  printf '%s' "$s"
+THAS() {
+  local want="$1" t
+  for t in "${THEME_KEYS_CANON[@]}"; do [ "$t" = "$want" ] && return 0; done
+  return 1
 }
-lua_scan() {
-  local f="$1" n=0 ln c raw
-  declare -A LVARS=()
-  [ -f "$f" ] || return 0
-  lua_loadvars "$f"
-  while IFS= read -r ln; do
-    n=$((n+1))
-    [[ "$ln" =~ ^[[:space:]]*-- ]] && continue
-    raw="$(printf '%s\n' "$ln" | sed -n 's/.*hl\.bind([[:space:]]*\([^,)]*\).*/\1/p')"
-    [ -n "$raw" ] || continue
-    c="$(canon "$(lua_arg "$raw")")"
-    THAS "$c" || continue
-    cf_add "$f" "$n" "$(printf '%s' "$ln" | sed 's/^[[:space:]]*//')" "$c"
-  done < "$f"
-  return 0
-}
+declare -a THEME_KEYS_CANON=()
+[ -f "$THEME/scripts/kbconflicts" ] && mapfile -t THEME_KEYS_CANON < <(bash "$THEME/scripts/kbconflicts" --theme 2>/dev/null)
 USERCONF="$HYDIR/user.conf"
 declare -A HVARS=()
 kb_loadvars() {
@@ -1279,10 +1185,8 @@ kb_picker() {
   else ok "$applied conflicting bind(s) commented out."; fi
   return 0
 }
+kbc_records
 kb_loadvars "$HYDIR/hyprland.conf"; kb_loadvars "$USERCONF"
-lua_scan "$HYLUA"
-lua_scan "$HYDIR/user.lua"
-for _lf in "$HYDIR"/land/*.lua; do [ -f "$_lf" ] && lua_scan "$_lf"; done
 kb_scan "$HYDIR/hyprland.conf"
 kb_scan "$USERCONF"
 kb_picker
@@ -1500,6 +1404,8 @@ fi
 hdr "MESA PACKAGES INSTALLATION"
 step "installing/refreshing $MESA_PKGS before restart…"
 sudo pacman -S --needed $MESA_PKGS
+step "re-asserting qt6-multimedia (quickshell lock screen needs it)…"
+sudo pacman -S --needed qt6-multimedia
 
 clear
 printf "${RED}${B}"

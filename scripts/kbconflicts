@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# keybind conflict engine: finds binds in the user's hypr lua files that collide
+# with the theme's, and (with --fix) comments them out. used by the installer
+# and by the runtime check in config/keybinds.lua.
+set -uo pipefail
+
+THEME_DIR="${CYBER_THEME_DIR:-$HOME/.config/hypr/themes/cyberpunk}"
+[ -f "$THEME_DIR/theme.lua" ] || THEME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HYDIR="$HOME/.config/hypr"
+HYLUA="$HYDIR/hyprland.lua"
+USERLUA="$HYDIR/user.lua"
+AUGSOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/astal/cyberpunk.sock"
+
+MODE="check"
+[ "${1:-}" = "--fix" ] && MODE="fix"
+[ "${1:-}" = "notify" ] && MODE="notify"
+[ "${1:-}" = "--theme" ] && MODE="theme"
+
+# ---- theme side: run the real theme load with hl.* stubbed and record every bind
+# with its file:line, so the "theme keybind" half of each conflict is exact.
+THEME_KEYS=""
+if LUA_BIN="$(command -v lua5.4 || command -v lua || true)"; then
+  THEME_KEYS="$(HOME="$HOME" "$LUA_BIN" - 2>/dev/null <<'LUAE'
+local binds = {}
+local node
+node = function() return setmetatable({}, { __index = function() return node() end, __call = function() return {} end }) end
+local noop = function() end
+hl = {
+  dsp = node(), exec_cmd = noop, exec = noop, exec_once = noop,
+  on = noop, env = noop, config = noop, curve = noop, animation = noop,
+  window_rule = noop, layer_rule = noop, plugin = node(),
+  gesture = noop, workspace_rule = noop, submap = noop,
+  bind = function(combo)
+    local info = debug.getinfo(3, "Sl")
+    if info and info.short_src and info.currentline then
+      binds[#binds + 1] = tostring(combo) .. "\t" .. info.short_src .. "\t" .. info.currentline
+    end
+  end,
+  define_submap = function(_, fn) if type(fn) == "function" then fn() end end,
+}
+local mod = os.getenv("HOME") .. "/.config/hypr/themes/cyberpunk"
+package.path = mod .. "/?.lua;" .. package.path
+if pcall(require, "theme") then
+  for i = 1, #binds do print(binds[i]) end
+  local function canonkey(c)
+    if not c then return nil end
+    local parts = {}
+    for p in string.gmatch(tostring(c), "[^%+]+") do
+      p = p:gsub("^%s+", ""):gsub("%s+$", ""):upper()
+      if p ~= "" then parts[#parts + 1] = p end
+    end
+    table.sort(parts)
+    return table.concat(parts, "+")
+  end
+  if CD and CD.reserved then
+    for _, r in ipairs(CD.reserved) do
+      local k = canonkey(r.combo)
+      if k then print(k .. "\tLABEL\t" .. tostring(r.label or "")) end
+    end
+  end
+end
+LUAE
+)"
+fi
+
+# canon: same normalisation the theme's normCombo uses — mods sorted, key last,
+# so SHIFT+SUPER+Z and SUPER+SHIFT+Z compare equal.
+canon() {
+  # sets CANON_OUT instead of printing — saves a fork per call
+  local combo="${1^^}" t key n i swapped
+  local -a parts=()
+  read -ra parts <<< "${combo//+/ }"
+  n="${#parts[@]}"; [ "$n" -eq 0 ] && return 1
+  key="${parts[n-1]}"
+  unset 'parts[n-1]'
+  local -a clean=()
+  for t in "${parts[@]:-}"; do t="${t// /}"; [ -n "$t" ] && clean+=("$t"); done
+  # insertion sort — at most 4 modifier tokens, cheaper than forking sort
+  for ((i = 1; i < ${#clean[@]}; i++)); do
+    t="${clean[i]}"; swapped=$((i - 1))
+    while ((swapped >= 0)) && [[ "${clean[swapped]}" > "$t" ]]; do
+      clean[swapped + 1]="${clean[swapped]}"; swapped=$((swapped - 1))
+    done
+    clean[swapped + 1]="$t"
+  done
+  local mods=""
+  for t in "${clean[@]:-}"; do mods+="$t+"; done
+  CANON_OUT="$mods$key"
+  return 0
+}
+
+# theme bind table: canon -> "src:line"
+declare -A THEME_BY_KEY=() THEME_SRC=() THEME_LABEL=()
+while IFS=$'\t' read -r combo src line; do
+  [ -n "${combo:-}" ] || continue
+  if [ "$src" = "LABEL" ]; then THEME_LABEL["$combo"]="$line"; continue; fi
+  canon "$combo" || continue
+  c="$CANON_OUT"
+  THEME_BY_KEY["$c"]=1
+  [ -n "${THEME_SRC[$c]:-}" ] || THEME_SRC["$c"]="$([ "${src##*/}" = "[C]" ] && printf 'keybinds.lua' || printf '%s:%s' "${src##*/}" "$line")"
+done <<< "$THEME_KEYS"
+
+# ---- user side: parse hl.bind( lines out of every lua file the compositor loads
+# besides the theme itself. local string vars get expanded, and for-loop bodies
+# like `hl.bind(mainMod .. " + " .. i, ...)` get expanded for i = 0..9 since the
+# theme's workspace binds live exactly there.
+declare -a CF_FILE=() CF_LINE=() CF_TEXT=() CF_COMBO=() CF_TSRC=() CF_TLBL=()
+
+scan_lua() {
+  local f="$1" n=0 ln raw c i exp
+  [ -f "$f" ] || return 0
+  local -A LVARS=()
+  while IFS= read -r ln; do
+    if [[ "$ln" =~ ^[[:space:]]*local[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*[\"\']([^\"\']*)[\"\'] ]]; then
+      LVARS["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+    fi
+  done < "$f"
+  while IFS= read -r ln; do
+    n=$((n+1))
+    [[ "$ln" =~ ^[[:space:]]*-- ]] && continue
+    raw="$(printf '%s\n' "$ln" | sed -n 's/.*hl\.bind([[:space:]]*\([^,)]*\).*/\1/p')"
+    [ -n "$raw" ] || continue
+    # expand known string vars
+    for i in "${!LVARS[@]}"; do raw="${raw//$i/${LVARS[$i]}}"; done
+    raw="${raw//\"/}"; raw="${raw//\'/}"; raw="${raw//../ }"
+    raw="$(printf '%s' "$raw" | tr -s ' ' | sed 's/^ *//;s/ *$//')"
+    # loop vars: try i/key/j/k = 0..9 when the expression still mentions one
+    local -a cands=("$raw")
+    if [[ "$raw" =~ (^|[^A-Za-z0-9_])(i|key|j|k)([^A-Za-z0-9_]|$) ]]; then
+      cands=()
+      local vname="${BASH_REMATCH[2]}"
+      local marked="${raw//${vname}/@@KB@@}"
+      for exp in 0 1 2 3 4 5 6 7 8 9; do
+        cands+=("${marked//@@KB@@/${exp}}")
+      done
+    fi
+    for exp in "${cands[@]}"; do
+      canon "$exp" || continue
+      c="$CANON_OUT"
+      if [ -n "${THEME_BY_KEY[$c]:-}" ]; then
+        CF_FILE+=("$f"); CF_LINE+=("$n")
+        CF_TEXT+=("$(printf '%s' "$ln" | sed 's/^[[:space:]]*//' | cut -c1-90)")
+        CF_COMBO+=("$c"); CF_TSRC+=("${THEME_SRC[$c]}"); CF_TLBL+=("${THEME_LABEL[$c]:-}")
+        break
+      fi
+    done
+  done < "$f"
+}
+
+# user.lua is deliberately scanned by the theme itself (its binds win on
+# purpose), so it never counts as a conflict source. same for files that
+# aren't actually required by hyprland.lua — scanning dead configs just cries
+# wolf. land/ only counts when the live hyprland.lua pulls it in.
+scan_lua "$HYLUA"
+if [ -f "$HYLUA" ] && grep -qE '^\s*(require|dofile)\(\s*"land\.' "$HYLUA"; then
+  for _lf in "$HYDIR"/land/*.lua; do [ -f "$_lf" ] && scan_lua "$_lf"; done
+fi
+
+if [ "$MODE" = "theme" ]; then
+  for k in "${!THEME_BY_KEY[@]}"; do printf '%s\n' "$k"; done
+  exit 0
+fi
+
+total="${#CF_FILE[@]}"
+if [ "$total" -eq 0 ]; then
+  [ "$MODE" = "check" ] && echo "OK"
+  exit 0
+fi
+
+emit() {
+  # file|line|combo|theme_src|line_text — one record per conflict
+  printf '%s|%s|%s|%s|%s|%s\n' "${CF_FILE[$1]}" "${CF_LINE[$1]}" "${CF_COMBO[$1]}" "${CF_TSRC[$1]}" "${CF_TEXT[$1]}" "${CF_TLBL[$1]}"
+}
+
+if [ "$MODE" = "check" ]; then
+  for ((i = 0; i < total; i++)); do emit "$i"; done
+  exit 0
+fi
+
+# notify: one line to the HUD socket — "kbconflicts <n> <combo> <file:line> :: <src> :: <label> …"
+# (astal fires requestHandler once per line, so the payload must stay flat)
+if [ "$MODE" = "notify" ]; then
+  if command -v socat >/dev/null 2>&1; then
+    # at login the HUD starts in parallel with the compositor, so the socket may
+    # not exist yet — wait up to 30s for it instead of dropping the conflicts.
+    for _ in $(seq 1 100); do [ -S "$AUGSOCK" ] && break; sleep 0.3; done
+    [ -S "$AUGSOCK" ] || exit 0
+    payload="kbconflicts $total"
+    for ((i = 0; i < total; i++)); do
+      payload+=";${CF_COMBO[$i]} $(basename "${CF_FILE[$i]}"):${CF_LINE[$i]} :: ${CF_TSRC[$i]} :: ${CF_TLBL[$i]:-}"
+    done
+    printf '%s\n' "$payload" | timeout 3 socat -t 1 - UNIX-CONNECT:"$AUGSOCK" >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+
+# --fix: comment the offending lines out (lua `--`), backing up each file once
+fixed=0
+declare -A BACKED=()
+for ((i = 0; i < total; i++)); do
+  f="${CF_FILE[$i]}"; n="${CF_LINE[$i]}"
+  if [ -z "${BACKED[$f]:-}" ]; then
+    cp -f "$f" "$f.bak.$(date +%s)" 2>/dev/null && BACKED[$f]=1
+  fi
+  if sed -i "${n}s/^[[:space:]]*/-- /" "$f"; then
+    printf '%s\n' "FIXED $(basename "$f"):$n ${CF_COMBO[$i]}"
+    fixed=$((fixed + 1))
+  fi
+done
+echo "DONE $fixed/$total"
+[ "$fixed" -gt 0 ] && command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null 2>&1 &
+exit 0
