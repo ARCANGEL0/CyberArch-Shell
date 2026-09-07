@@ -5,7 +5,8 @@
 set -u
 STYLE="${1:-cybercore}"
 RIO="${XDG_CONFIG_HOME:-$HOME/.config}/rio"
-SRC="$RIO/styles/$STYLE.toml"
+SRC="${CYBER_DIR:-$HOME/.config/hypr/themes/cyberpunk}/assets/rio/styles/$STYLE.toml"
+[ -f "$SRC" ] || SRC="$RIO/styles/$STYLE.toml"
 [ -f "$SRC" ] || exit 0
 [ -f "$RIO/config.toml" ] && [ "$(cat "$RIO/.rio-style" 2>/dev/null)" = "$STYLE" ] && exit 0
 sed "s|__RIO_SHADERS__|$RIO/shaders|g" "$SRC" > "$RIO/config.toml"

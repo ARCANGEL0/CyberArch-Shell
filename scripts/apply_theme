@@ -10,7 +10,9 @@ ICON_NAME="iconpack"
 mkdir -p "$HOME/.local/share/icons"
 ln -sfn "$GTK/iconpack" "$HOME/.local/share/icons/$ICON_NAME"
 
-# ── GTK 3 and 4: dark base theme + icons, and link in gtk.css glass tweaks
+# ── GTK 3 and 4: dark base theme + icons, and the per-theme gtk.css from shell-theme
+PALETTE=$(sed -n 's/^local palette = "\([A-Z]*\)".*/\1/p' \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch/user_colors.lua" 2>/dev/null | tail -n 1)
 for v in 3.0 4.0; do
     d="$HOME/.config/gtk-$v"; mkdir -p "$d"
     cat > "$d/settings.ini" <<EOF
@@ -20,7 +22,6 @@ gtk-icon-theme-name=$ICON_NAME
 gtk-application-prefer-dark-theme=1
 gtk-cursor-theme-name=neurodance
 EOF
-    ln -sfn "$GTK/gtk.css" "$d/gtk.css"
 done
 
 if command -v gsettings >/dev/null 2>&1; then
@@ -30,17 +31,8 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface cursor-theme "neurodance" 2>/dev/null
 fi
 
-KV_NAME="Daemon"
-KV_SRC="$GTK/DaemonKvantum"
-KVDIR="$HOME/.config/Kvantum/$KV_NAME"
 rm -rf "$HOME/.config/Kvantum/daemon-2.0"
-mkdir -p "$KVDIR"
-cp -f "$KV_SRC/$KV_NAME.kvconfig" "$KVDIR/$KV_NAME.kvconfig"
-cp -f "$KV_SRC/$KV_NAME.svg"      "$KVDIR/$KV_NAME.svg"
-cat > "$HOME/.config/Kvantum/kvantum.kvconfig" <<EOF
-[General]
-theme=$KV_NAME
-EOF
+CYBER_DIR="$AUG" "$AUG/scripts/shell-theme" "${PALETTE:-NETWATCH}"
 
 mkdir -p "$HOME/.config/kitty"
 ln -sfn "$AUG/assets/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"
