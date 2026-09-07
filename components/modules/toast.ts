@@ -5,7 +5,7 @@ import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { makePlane, strokePath, tiltText } from "./proj.ts"
-import { NEON, f, onColorChange, tintPixbuf, imgTint } from "./colors.ts"
+import { NEON, f, onColorChange, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
 import { passthrough } from "./anim.ts"
 
@@ -55,8 +55,8 @@ const drawIcon = (ctx, a) => {
  const pbW = ALERT.get_width(), pbH = ALERT.get_height()
  ctx.save()
  ctx.translate(pc[0], pc[1]); ctx.rotate(ang); ctx.scale((2 * hw) / pbW, (2 * hh) / pbH)
- if (imgTint.value) {
-     tintPixbuf(ctx, ALERT, -pbW / 2, -pbH / 2, a)
+ if (imgTint.value || notifIconTint.value) {
+     tintPixbuf(ctx, ALERT, -pbW / 2, -pbH / 2, a, notifIconTint.value)
  } else {
      ctx.setOperator(12)
      Gdk.cairo_set_source_pixbuf(ctx, ALERT, -pbW / 2, -pbH / 2); ctx.paintWithAlpha(0.3 * a)

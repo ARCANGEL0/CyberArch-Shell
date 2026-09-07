@@ -6,7 +6,7 @@ import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
-import { txt as gtxt, pango as gpango, RED, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
+import { txt as gtxt, pango as gpango, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
 import { TITLE, MONO, ENIXE, FROSTBITE_WIDE, GUNSHIP_ITAL } from "./fonts.ts"
 
 const Cairo = (imports as any).cairo

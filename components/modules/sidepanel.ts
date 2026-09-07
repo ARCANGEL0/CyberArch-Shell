@@ -10,7 +10,7 @@ import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
-import { txt as gtxt, pango as gpango, RED, RACC, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
+import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
 
 const Cairo = (imports).cairo
@@ -375,7 +375,7 @@ const wxPick = (r) => { wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || 
 const ensureWxModal = () => {
  if (wxModal) return
  wxModal = createModal({
- name: "weather", tabTitle: "WEATHER UPLINK", W: 384, H: 312, hud: true, col: RED, accent: RACC,
+ name: "weather", tabTitle: "WEATHER UPLINK", W: 384, H: 312, hud: true,
  onOpen: () => { wxQuery = ""; wxResults = []; wxHint = "TYPE A CITY ▸"; wxScroll = 0 },
  onKey: (k) => {
  if (k === Gdk.KEY_BackSpace) wxQuery = wxQuery.slice(0, -1)
@@ -385,27 +385,27 @@ const ensureWxModal = () => {
  onScroll: (d) => { wxScroll = Math.max(0, Math.min(Math.max(0, wxResults.length - 1), wxScroll + d)); wxModal.requestDraw() },
  draw: (ctx, g) => {
  const x = g.X + 18, w = g.w - 36
- gtxt(ctx, x + w - 4 - ctx.textExtents(`NOW: ${wxName}`).width, g.Y + GHEAD + 22, `NOW: ${wxName}`, GMONO, 9, RED, 0.6)
- gtxt(ctx, x, g.Y + GHEAD + 22, "SEARCH FORECAST CITY", GMONO, 10, RED, 0.85, 1)
+ gtxt(ctx, x + w - 4 - ctx.textExtents(`NOW: ${wxName}`).width, g.Y + GHEAD + 22, `NOW: ${wxName}`, GMONO, 9, GCYAN, 0.6)
+ gtxt(ctx, x, g.Y + GHEAD + 22, "SEARCH FORECAST CITY", GMONO, 10, GCYAN, 0.85, 1)
  const by = g.Y + GHEAD + 32, bh = 30
- aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(RED[0] * 0.12, RED[1] * 0.06, RED[2] * 0.06, 0.5); ctx.fill()
- aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(RED[0], RED[1], RED[2], 0.85); ctx.setLineWidth(0.9); ctx.stroke()
+ aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0] * 0.12, GCYAN[1] * 0.06, GCYAN[2] * 0.06, 0.5); ctx.fill()
+ aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0], GCYAN[1], GCYAN[2], 0.85); ctx.setLineWidth(0.9); ctx.stroke()
  const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
- gpango(ctx, x + 14, by + bh / 2 + 5, (wxQuery ? wxQuery + cur : "Search a city…"), GTITLE, false, 13, wxQuery ? RACC : RED, wxQuery ? 0.96 : 0.4)
- gtxt(ctx, x, by + bh + 18, "// " + wxHint, GMONO, 9, RED, 0.6)
+ gpango(ctx, x + 14, by + bh / 2 + 5, (wxQuery ? wxQuery + cur : "Search a city…"), GTITLE, false, 13, wxQuery ? GACC : GCYAN, wxQuery ? 0.96 : 0.4)
+ gtxt(ctx, x, by + bh + 18, "// " + wxHint, GMONO, 9, GCYAN, 0.6)
  const ly = by + bh + 28, lh = (g.Y + g.h) - ly - 22, rowH = 30, gap = 5, step = rowH + gap, vis = Math.max(1, Math.floor(lh / step))
  const maxS = Math.max(0, wxResults.length - vis), sc = Math.min(wxScroll, maxS)
  ctx.save(); ctx.rectangle(x - 2, ly - 2, w + 4, lh + 4); ctx.clip()
  for (let i = 0; i <= vis; i++) {
  const idx = sc + i; if (idx >= wxResults.length) break
  const r = wxResults[idx], ry = ly + i * step; if (ry + rowH > ly + lh + step) break
- aPath(ctx, x, ry, w, rowH, 5); ctx.setSourceRGBA(RED[0] * 0.16, RED[1] * 0.08, RED[2] * 0.08, 0.34); ctx.fill()
- aPath(ctx, x, ry, w, rowH, 5); ctx.setSourceRGBA(RED[0], RED[1], RED[2], 0.6); ctx.setLineWidth(0.9); ctx.stroke()
- gpango(ctx, x + 14, ry + rowH / 2 + 4, r.full, GTITLE, true, 11, RACC, 0.95)
+ aPath(ctx, x, ry, w, rowH, 5); ctx.setSourceRGBA(GCYAN[0] * 0.16, GCYAN[1] * 0.08, GCYAN[2] * 0.08, 0.34); ctx.fill()
+ aPath(ctx, x, ry, w, rowH, 5); ctx.setSourceRGBA(GCYAN[0], GCYAN[1], GCYAN[2], 0.6); ctx.setLineWidth(0.9); ctx.stroke()
+ gpango(ctx, x + 14, ry + rowH / 2 + 4, r.full, GTITLE, true, 11, GACC, 0.95)
  g.push({ kind: "row", bx0: x, by0: ry, bx1: x + w, by1: ry + rowH, on: () => wxPick(r) })
  }
  ctx.restore()
- gtxt(ctx, x, g.Y + g.h - 10, "type ▸ click a result · ESC cancels", GMONO, 8, RED, 0.42)
+ gtxt(ctx, x, g.Y + g.h - 10, "type ▸ click a result · ESC cancels", GMONO, 8, GCYAN, 0.42)
  },
  })
 }
@@ -415,8 +415,8 @@ let fcModal: any = null, fcSel = 0, fcTick = 0, fcOpenAt = 0, fcCityTap = 0
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
 const fcReveal = () => ease((Date.now() - fcOpenAt) / 620)
 
-const YEL: [number, number, number] = USER.amber
-const ARA: [number, number, number] = RACC
+const YEL: [number, number, number] = USER.cyan
+const ARA: [number, number, number] = GACC
 const HOT: [number, number, number] = USER.red
 
 const chamfer = (ctx, x, y, w, h, c = 11) => {
@@ -500,7 +500,7 @@ const ensureForecastModal = () => {
  if (fcModal) return
  fcModal = createModal({
  name: "forecast", tabTitle: "ATMOSPHERIC UPLINK · 7-DAY", W: 940, H: 480,
- col: RED, accent: YEL, yaw: -29, pitch: -5, roll: -0.4, focal: 2400, dist: 2300, glass: 0.88, anchorLeft: true, keymode: Keymode.ON_DEMAND,
+ col: GCYAN, accent: GACC, yaw: -29, pitch: -5, roll: -0.4, focal: 2400, dist: 2300, glass: 0.88, anchorLeft: true, keymode: Keymode.ON_DEMAND,
  onOpen: () => { fcSel = 0; fcTick = 0; fcOpenAt = Date.now(); refreshWeather() },
  onFrame: () => { fcTick++; fcModal.requestDraw() },
  onKey: (k) => {

@@ -12,13 +12,16 @@ import { TITLE, MONO, ICONF } from "./fonts.ts"
 export { TITLE, MONO, ICONF }
 export const CYAN: [number, number, number] = [...USER.dock] as [number, number, number]
 const syncCyan = () => {
-    const src = neonBtn.value ? USER.press : USER.dock
+    const src = neonBtn.value ? USER.press : USER.wheelfg
     CYAN[0] = src[0]; CYAN[1] = src[1]; CYAN[2] = src[2]
 }
+export const RED: [number, number, number] = [...USER.wheelfg] as [number, number, number]
+const syncRed = () => { RED[0] = USER.wheelfg[0]; RED[1] = USER.wheelfg[1]; RED[2] = USER.wheelfg[2] }
 onColorChange(syncCyan)
+onColorChange(syncRed)
 syncCyan()
+syncRed()
 export const ACC: [number, number, number] = USER.glassacc
-export const RED: [number, number, number] = USER.red
 export const RACC: [number, number, number] = USER.glassacc
 export const ch = (c: number) => String.fromCharCode(c)
 

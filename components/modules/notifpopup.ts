@@ -8,7 +8,7 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
 import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
-import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr } from "./colors.ts"
+import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr, notifIconTint } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
@@ -157,13 +157,13 @@ const draw = (ctx: any) => {
     const pA = seg(intro, 0, 0.30), aA = beep(pA)
     glyphBlock(ctx, -15, 2, aA * 0.9)
     glitchText(ctx, 20, 9, "CONNECTION 201.89.43", ORBITRON, 7, GLYPH_COL, aA, pA, { bold: true, glow: 0.4 })
-    drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA, isOvr("notifphone") ? NEON.notifphone : null)
+    drawIcon(ctx, png("notif.png"), -24, 35, 42, aA, true, 1 - pA, isOvr("notifphone") ? NEON.notifphone : notifIconTint.value)
 
     const pB = seg(intro, 0.22, 0.48)
-    drawIcon(ctx, png("file.png"), 3, 23, 76, softg(pB), true, (1 - pB) * 0.5, isOvr("notifbadge") ? NEON.notifbadge : null)
+    drawIcon(ctx, png("file.png"), 3, 23, 76, softg(pB), true, (1 - pB) * 0.5, isOvr("notifbadge") ? NEON.notifbadge : notifIconTint.value)
 
     const pC = seg(intro, 0.52, 0.74), aC = beep(pC)
-    drawIcon(ctx, png("message.png"), 67, 16, 30, aC, true, 1 - pC, isOvr("notifmail") ? NEON.notifmail : null)
+    drawIcon(ctx, png("message.png"), 67, 16, 30, aC, true, 1 - pC, isOvr("notifmail") ? NEON.notifmail : notifIconTint.value)
     glitchText(ctx, CX + 32, 36, msgs.length > 1 ? "NEW MESSAGES" : "NEW MESSAGE", NAVINE, 15, NEON.notifheads, aC, pC, { bold: true, glow: 0.5, shadow: 0.8 })
     const pN = seg(intro, 0.58, 0.80)
     glitchText(ctx, CX + 2, 63, msgs[0].app, NAVINE, 20, NEON.notiftitle, clamp(pN * 1.3), pN, { bold: true, glow: 0.45 })
