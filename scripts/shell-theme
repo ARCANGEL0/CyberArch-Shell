@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -u
+
+NAME="${1:-NETWATCH}"
+AUG="${CYBER_DIR:-$HOME/.config/hypr/themes/cyberpunk}"
+GTK="$AUG/assets/gtk"
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+USR="$CFG/cyberarch"
+KVDIR="$CFG/Kvantum/Daemon"
+
+case "$NAME" in
+    DARK)      ACC="255 20 45";   SEC="255 255 255"; TXT="255 255 255"; DIM="90 90 95";    BAS="4 4 5";   WRN="255 90 80" ;;
+    KITTY)     ACC="255 170 215"; SEC="255 200 232"; TXT="255 248 252"; DIM="222 180 205"; BAS="18 8 15"; WRN="255 206 230" ;;
+    BLOODMOON) ACC="255 32 32";   SEC="255 60 60";   TXT="255 210 205"; DIM="130 50 50";   BAS="12 4 4";  WRN="255 90 50" ;;
+    ARCTIC)    ACC="255 255 255"; SEC="210 245 255"; TXT="255 255 255"; DIM="150 175 200"; BAS="8 10 16"; WRN="255 232 190" ;;
+    SYNTHWAVE) ACC="255 45 150";  SEC="45 220 210";  TXT="250 232 250"; DIM="120 85 150";  BAS="10 4 16"; WRN="255 165 60" ;;
+    JOHNNY)    ACC="255 208 60";  SEC="94 244 248";  TXT="250 246 228"; DIM="130 116 70";  BAS="6 8 14";  WRN="255 232 130" ;;
+    GHOST)     ACC="0 255 120";   SEC="40 255 140";  TXT="200 255 220"; DIM="40 90 60";    BAS="4 12 8";  WRN="120 255 90" ;;
+    *)         NAME="NETWATCH"
+               ACC="255 45 61";   SEC="94 244 248";  TXT="231 241 246"; DIM="80 80 100";   BAS="7 9 13";  WRN="255 180 84" ;;
+esac
+
+case "$NAME" in
+    KITTY)     ROUND=15; POWER=2.0; BSZ=1; GLOW=true;  GLOW_RANGE=14; GLOW_ALPHA=38; GLOW_RP=3 ;;
+    GHOST)     ROUND=25; POWER=1.0; BSZ=1; GLOW=true;  GLOW_RANGE=16; GLOW_ALPHA=38; GLOW_RP=3 ;;
+    SYNTHWAVE) ROUND=15; POWER=1.0; BSZ=1; GLOW=true;  GLOW_RANGE=14; GLOW_ALPHA=38; GLOW_RP=3 ;;
+    ARCTIC)    ROUND=2;  POWER=2.0; BSZ=1; GLOW=false; GLOW_RANGE=5;  GLOW_ALPHA=15; GLOW_RP=2 ;;
+    JOHNNY)    ROUND=40; POWER=1.0; BSZ=1; GLOW=true;  GLOW_RANGE=12; GLOW_ALPHA=38; GLOW_RP=3 ;;
+    BLOODMOON) ROUND=5;  POWER=1.0; BSZ=1; GLOW=true;  GLOW_RANGE=6;  GLOW_ALPHA=10; GLOW_RP=1 ;;
+    DARK)      ROUND=15; POWER=1.0; BSZ=1; GLOW=false; GLOW_RANGE=10; GLOW_ALPHA=30; GLOW_RP=2 ;;
+    *)         ROUND=40; POWER=1.0; BSZ=1; GLOW=true;  GLOW_RANGE=14; GLOW_ALPHA=38; GLOW_RP=3 ;;
+esac
+
+A=($ACC); S=($SEC); T=($TXT); D=($DIM); K=($BAS); W=($WRN)
+
+cl() { local v=$1; ((v < 0)) && v=0; ((v > 255)) && v=255; printf '%d' "$v"; }
+up() { cl $(( $1 + (255 - $1) * 24 / 100 )); }
+
+A2=( $(up ${A[0]}) $(up ${A[1]}) $(up ${A[2]}) )
+DM=( $(cl $(( D[0] * 50 / 100 + T[0] * 35 / 100 )))
+     $(cl $(( D[1] * 50 / 100 + T[1] * 35 / 100 )))
+     $(cl $(( D[2] * 50 / 100 + T[2] * 35 / 100 ))) )
+
+tone() {
+    local p=$1
+    printf '%d,%d,%d' \
+        "$(cl $(( K[0] + A[0] * p / 1000 )))" \
+        "$(cl $(( K[1] + A[1] * p / 1000 )))" \
+        "$(cl $(( K[2] + A[2] * p / 1000 )))"
+}
+toneh() {
+    local p=$1
+    printf '#%02x%02x%02x' \
+        "$(cl $(( K[0] + A[0] * p / 1000 )))" \
+        "$(cl $(( K[1] + A[1] * p / 1000 )))" \
+        "$(cl $(( K[2] + A[2] * p / 1000 )))"
+}
+hex() { printf '#%02x%02x%02x' "$1" "$2" "$3"; }
+raw() { printf '%02x%02x%02x' "$1" "$2" "$3"; }
+
+ACC_H=$(hex ${A[0]} ${A[1]} ${A[2]})
+AC2_H=$(hex ${A2[0]} ${A2[1]} ${A2[2]})
+SEC_H=$(hex ${S[0]} ${S[1]} ${S[2]})
+TXT_H=$(hex ${T[0]} ${T[1]} ${T[2]})
+DIM_H=$(hex ${DM[0]} ${DM[1]} ${DM[2]})
+WRN_H=$(hex ${W[0]} ${W[1]} ${W[2]})
+ACC_R=$(raw ${A[0]} ${A[1]} ${A[2]})
+AC2_R=$(raw ${A2[0]} ${A2[1]} ${A2[2]})
+
+mkdir -p "$USR"
+
+if [ -f "$GTK/gtk.css" ]; then
+    {
+        printf '@define-color cy_bg     rgba(%s,0.88);\n' "$(tone 0)"
+        printf '@define-color cy_bg2    rgba(%s,0.93);\n' "$(tone 35)"
+        printf '@define-color cy_base   rgba(%s,0.80);\n' "$(tone 15)"
+        printf '@define-color cy_hdr    rgba(%s,0.93);\n' "$(tone 20)"
+        printf '@define-color cy_side   rgba(%s,0.90);\n' "$(tone 8)"
+        printf '@define-color cy_btn    rgba(%s,0.90);\n' "$(tone 35)"
+        printf '@define-color cy_head   rgba(%s,0.95);\n' "$(tone 28)"
+        printf '@define-color cy_trough rgba(%s,0.80);\n' "$(tone 35)"
+        printf '@define-color cy_tip    rgba(%s,0.96);\n' "$(tone 0)"
+        printf '@define-color cy_fg     %s;\n' "$TXT_H"
+        printf '@define-color cy_dim    %s;\n' "$DIM_H"
+        printf '@define-color cy_red    %s;\n' "$ACC_H"
+        printf '@define-color cy_red2   %s;\n' "$AC2_H"
+        printf '@define-color cy_cyan   %s;\n' "$SEC_H"
+        printf '@define-color cy_warn   %s;\n' "$WRN_H"
+        printf '@define-color cy_ink    %s;\n' "$(toneh 0)"
+        printf '@define-color cy_sel    rgba(%d,%d,%d,0.34);\n' ${A[0]} ${A[1]} ${A[2]}
+        printf '@define-color cy_border rgba(%d,%d,%d,0.42);\n' ${A[0]} ${A[1]} ${A[2]}
+        awk 'f{print} /__CYBER_PALETTE__/{f=1}' "$GTK/gtk.css"
+    } > "$USR/gtk.css"
+
+    for v in 3.0 4.0; do
+        d="$CFG/gtk-$v"
+        mkdir -p "$d"
+        rm -f "$d/gtk.css"
+        cp -f "$USR/gtk.css" "$d/gtk.css"
+    done
+fi
+
+if [ -f "$GTK/DaemonKvantum/Daemon.kvconfig" ]; then
+    mkdir -p "$KVDIR"
+    sed -e "s|^window\.color=.*|window.color=$(toneh 0)|" \
+        -e "s|^base\.color=.*|base.color=$(toneh 0)|" \
+        -e "s|^alt\.base\.color=.*|alt.base.color=$(toneh 35)|" \
+        -e "s|^button\.color=.*|button.color=$(toneh 20)|" \
+        -e "s|^light\.color=.*|light.color=$ACC_H|" \
+        -e "s|^mid\.light\.color=.*|mid.light.color=$AC2_H|" \
+        -e "s|^dark\.color=.*|dark.color=$ACC_H|" \
+        -e "s|^inactive\.highlight\.color=.*|inactive.highlight.color=$ACC_H|" \
+        -e "s|^tooltip\.base\.color=.*|tooltip.base.color=$(toneh 35)|" \
+        -e "s|^text\.color=.*|text.color=$ACC_H|" \
+        -e "s|^window\.text\.color=.*|window.text.color=$ACC_H|" \
+        -e "s|^button\.text\.color=.*|button.text.color=$ACC_H|" \
+        -e "s|^disabled\.text\.color=.*|disabled.text.color=$DIM_H|" \
+        -e "s|^tooltip\.text\.color=.*|tooltip.text.color=$ACC_H|" \
+        -e "s|^highlight\.text\.color=.*|highlight.text.color=$TXT_H|" \
+        -e "s|^link\.color=.*|link.color=$SEC_H|" \
+        -e "s|^link\.visited\.color=.*|link.visited.color=$AC2_H|" \
+        -e "s|^text\.normal\.color=.*|text.normal.color=$ACC_H|" \
+        -e "s|^composite=.*|composite=true|" \
+        -e "s|^translucent_windows=.*|translucent_windows=true|" \
+        -e "s|^reduce_window_opacity=.*|reduce_window_opacity=40|" \
+        -e "s|^reduce_menu_opacity=.*|reduce_menu_opacity=30|" \
+        -e "s|^blur_translucent=.*|blur_translucent=true|" \
+        -e "s|^transparent_dolphin_view=.*|transparent_dolphin_view=true|" \
+        -e "s|^transparent_ktitle_label=.*|transparent_ktitle_label=true|" \
+        -e "s|^transparent_menutitle=.*|transparent_menutitle=true|" \
+        "$GTK/DaemonKvantum/Daemon.kvconfig" > "$KVDIR/Daemon.kvconfig"
+
+    printf '[General]\ntheme=Daemon\n' > "$CFG/Kvantum/kvantum.kvconfig"
+fi
+
+if [ -f "$GTK/DaemonKvantum/Daemon.svg" ]; then
+    mkdir -p "$KVDIR"
+    sed -e "s|#5aeedc|$ACC_H|g" -e "s|#5beedc|$ACC_H|g" \
+        -e "s|#1e3d40|$(toneh 190)|g" -e "s|#890f11|$(toneh 260)|g" \
+        -e "s|#fb3048|$AC2_H|g" -e "s|#b74aff|$SEC_H|g" -e "s|#c86c00|$WRN_H|g" \
+        -e "s|#070d1a|$(toneh 0)|g" -e "s|#0f0e15|$(toneh 0)|g" \
+        -e "s|#101e2a|$(toneh 35)|g" -e "s|#111e29|$(toneh 35)|g" \
+        "$GTK/DaemonKvantum/Daemon.svg" > "$KVDIR/Daemon.svg"
+fi
+
+cat > "$USR/shell_colors.lua" <<EOF
+return {
+    palette  = "$NAME",
+    accent   = "$ACC_R",
+    accent2  = "$AC2_R",
+    bar      = "$(raw $(cl $(( K[0] + A[0] * 60 / 1000 ))) $(cl $(( K[1] + A[1] * 60 / 1000 ))) $(cl $(( K[2] + A[2] * 60 / 1000 ))))",
+    rounding   = $ROUND,
+    rounding_power = $POWER,
+    border     = $BSZ,
+    glow       = $GLOW,
+    glow_range = $GLOW_RANGE,
+    glow_alpha = "$GLOW_ALPHA",
+    glow_rp    = $GLOW_RP,
+}
+EOF
+
+if command -v hyprctl >/dev/null 2>&1; then
+    BAR=$(raw "$(cl $(( K[0] + A[0] * 60 / 1000 )))" "$(cl $(( K[1] + A[1] * 60 / 1000 )))" "$(cl $(( K[2] + A[2] * 60 / 1000 )))")
+    hyprctl eval "hl.config({general={border_size=$BSZ,col={active_border={colors={\"rgba(${ACC_R}ff)\",\"rgba(${AC2_R}ff)\"},angle=45},inactive_border=\"rgba(${ACC_R}44)\"}},decoration={rounding=$ROUND,rounding_power=$POWER,shadow={color=\"rgba(${ACC_R}${GLOW_ALPHA})\",color_inactive=\"rgba(${ACC_R}18)\",range=$GLOW_RANGE,render_power=$GLOW_RP},glow={enabled=$GLOW,color=\"rgba(${ACC_R}ff)\",range=$GLOW_RANGE,render_power=$GLOW_RP}}})" >/dev/null 2>&1 || true
+    hyprctl eval "hl.config({plugin={hyprbars={bar_color=\"rgba(${BAR}f2)\",col={text=\"rgba(${ACC_R}ff)\"},[\"hyprbars-button\"]={\"rgb(${ACC_R}), 15, \\\\xEE\\\\xAE\\\\x8B, hyprctl dispatch killactive\"}}})" >/dev/null 2>&1 || true
+fi
+
+if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null
+fi
+
+exit 0

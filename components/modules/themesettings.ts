@@ -5,8 +5,12 @@ import GLib from "gi://GLib"
 import { Keymode } from "./widget.ts"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
-import { createModal, drawBtn, drawToggle, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
+import { createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
+import {
+    wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
+    CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
+} from "./wmconfig.ts"
 import { USER_DIR } from "../../env.ts"
 import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
@@ -61,10 +65,29 @@ export const ThemesCtrl = () => {
             kbScroll = 0
             cfgOpen = null
             cfgExpand = {}
+            wmOpen = null
+            wmExpand = {}
+            wmColorPick = null
+            wmAppText = ""
         },
         onKeyRaw: onKbKeyRaw,
         onScroll: (d) => { cfgOpen = null; kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw() },
         onKey: (k: number) => {
+            if (wmColorPick) {
+                if (k === Gdk.KEY_Escape) { closeWmPicker(); return true }
+                return true
+            }
+            if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
+                if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; ctrl.requestDraw() }
+                else if (k === Gdk.KEY_Return) { commitWmApps() }
+                else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); ctrl.requestDraw() }
+                else {
+                    const name = Gdk.keyval_name(k) || ""
+                    if (name.length === 1) { wmAppText += name; ctrl.requestDraw() }
+                    else if (name === "space") { wmAppText += " "; ctrl.requestDraw() }
+                }
+                return true
+            }
             if (kbCaptureKind === "newuser" && kbAddStep === "command" && k !== Gdk.KEY_Escape) {
                 const name = Gdk.keyval_name(k) || ""
                 if (k === Gdk.KEY_BackSpace) {
@@ -125,6 +148,7 @@ export const ThemesCtrl = () => {
             if (tab === "colors") drawColors(ctx, g, x, panelY + HEADER + 12, w)
             else if (tab === "keybinds") drawKeybinds(ctx, g, x, panelY + HEADER + 12, w)
             else if (tab === "anim") drawConfig(ctx, g, x, panelY + HEADER + 12, w)
+            else if (tab === "wm") drawWm(ctx, g, x, panelY + HEADER + 12, w)
             else drawWip(ctx, g, x, panelY + HEADER + 12, w)
         },
     })
@@ -367,6 +391,11 @@ let kbDeleteConfirm: { raw_line: number; combo: string; label: string } | null =
 let kbScroll = 0
 let kbMaxScroll = 0
 let kbAddStep: "prompt" | "command" | "app" | "capture" | null = null
+let wmOpen: string | null = null
+let wmExpand: Record<string, boolean> = {}
+let wmColorPick: { key: string; h: number; s: number; v: number } | null = null
+let wmAppEditing = false
+let wmAppText = ""
 let kbCommandText = ""
 
 const ROW_H = 42
@@ -1062,6 +1091,339 @@ const drawWip = (ctx, g, x, y, w) => {
     const t2 = "COMING SOON :)"
     ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(11)
     txt(ctx, cx - ctx.textExtents(t2).width / 2, y + 98, t2, MONO, 11, g.col, 0.6)
+}
+
+const commitWmApps = () => {
+    const apps = wmAppText.split(/[,\n]/).map((s) => s.trim()).filter(Boolean)
+    if (apps.length > 0) setWm("wmOpacityApps", apps.join(","))
+    wmAppText = ""
+    wmAppEditing = false
+    ctrl.requestDraw()
+}
+
+const rgbToHsv = (r: number, g: number, b: number): [number, number, number] => {
+    const rr = r / 255, gg = g / 255, bb = b / 255
+    const mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb), d = mx - mn
+    let h = 0
+    if (d !== 0) {
+        if (mx === rr) h = ((gg - bb) / d + (gg < bb ? 6 : 0)) * 60
+        else if (mx === gg) h = ((bb - rr) / d + 2) * 60
+        else h = ((rr - gg) / d + 4) * 60
+    }
+    return [h, mx === 0 ? 0 : d / mx, mx]
+}
+const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => {
+    const c = v * s, hh = ((h % 360) + 360) % 360 / 60, x = c * (1 - Math.abs((hh % 2) - 1))
+    let r = 0, g = 0, b = 0
+    if (hh < 1) { r = c; g = x } else if (hh < 2) { r = x; g = c } else if (hh < 3) { g = c; b = x }
+    else if (hh < 4) { g = x; b = c } else if (hh < 5) { r = x; b = c } else { r = c; b = x }
+    const m = v - c
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)]
+}
+const rgbToHex = (r: number, g: number, b: number): string =>
+    [r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, "0")).join("")
+
+const openWmPicker = (key: string) => {
+    const cur = hexToRgb(wmStr(key))
+    if (cur) wmColorPick = { key, ...rgbToHsv(cur[0], cur[1], cur[2]) }
+    else wmColorPick = { key, h: 0, s: 0.85, v: 0.95 }
+    wmOpen = null
+    ctrl.requestDraw()
+}
+const liveWmPick = () => {
+    if (!wmColorPick) return
+    const [r, gg, b] = hsvToRgb(wmColorPick.h, wmColorPick.s, wmColorPick.v)
+    setWm(wmColorPick.key, rgbToHex(r, gg, b))
+    ctrl.requestDraw()
+}
+const closeWmPicker = () => { wmColorPick = null; ctrl.requestDraw() }
+
+const drawColorCell = (ctx, g, x, ry, h, rgb: [number, number, number] | null) => {
+    if (rgb) ctx.setSourceRGBA(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 1)
+    else { ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.18) }
+    ctx.rectangle(x, ry, h, h); ctx.fill()
+    ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.8); ctx.setLineWidth(1)
+    ctx.rectangle(x + 0.5, ry + 0.5, h - 1, h - 1); ctx.stroke()
+}
+
+const hexToRgb = (h: string): [number, number, number] | null => {
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+}
+
+const drawWmSlider = (ctx, g, x, ry, w, key, min, max, fmt) => {
+    const trackX = x + w - 190, trackW = 150
+    const v = wmNum(key)
+    const norm = Math.max(0, Math.min(1, (v - min) / (max - min)))
+    drawSlider(ctx, g.push, trackX, ry + 11, trackW, norm, (nv) => {
+        setWm(key, Math.round((min + nv * (max - min)) * 100) / 100)
+    })
+    txt(ctx, trackX - 40, ry + 15, fmt(v), MONO, 8.5, g.accent, 0.9, 0, 0)
+}
+
+const WM_SECTIONS: { title: string; keys: string[]; rows: { t: "tog" | "sld" | "sel" | "col" | "car" | "apps" | "corner"; k: string; label: string; grp?: string }[] }[] = [
+    {
+        title: "// ::window transparency",
+        keys: ["wmOpacity", "wmOpacityVal", "wmOpacityMode", "wmOpacityApps"],
+        rows: [
+            { t: "tog", k: "wmOpacity", label: "WINDOW BACKGROUND TRANSPARENCY" },
+            { t: "sld", k: "wmOpacityVal", label: "OPACITY LEVEL" },
+            { t: "sel", k: "wmOpacityMode", label: "APPLICATION MODE" },
+            { t: "apps", k: "wmOpacityApps", label: "SELECTED APPLICATIONS" },
+        ],
+    },
+    {
+        title: "// ::glow & shadow",
+        keys: ["wmGlow", "wmGlowRange", "wmGlowRp", "wmShadow", "wmShadowColor", "wmShadowAlpha", "wmShadowRange"],
+        rows: [
+            { t: "tog", k: "wmGlow", label: "WINDOW GLOW" },
+            { t: "sld", k: "wmGlowRange", label: "GLOW RANGE" },
+            { t: "sld", k: "wmGlowRp", label: "GLOW INTENSITY" },
+            { t: "tog", k: "wmShadow", label: "WINDOW SHADOW" },
+            { t: "col", k: "wmShadowColor", label: "SHADOW COLOUR" },
+            { t: "sld", k: "wmShadowAlpha", label: "SHADOW STRENGTH" },
+            { t: "sld", k: "wmShadowRange", label: "SHADOW RANGE" },
+        ],
+    },
+    {
+        title: "// ::borders",
+        keys: ["wmBorders", "wmBorderSize", "wmBorderColor"],
+        rows: [
+            { t: "tog", k: "wmBorders", label: "WINDOW BORDERS" },
+            { t: "sld", k: "wmBorderSize", label: "BORDER WIDTH" },
+            { t: "col", k: "wmBorderColor", label: "BORDER COLOUR" },
+        ],
+    },
+    {
+        title: "// ::corners",
+        keys: ["wmCorners", "wmRounding", "wmRoundingTl", "wmRoundingTr", "wmRoundingBl", "wmRoundingBr"],
+        rows: [
+            { t: "sel", k: "wmCorners", label: "CORNER STYLE" },
+            { t: "sld", k: "wmRounding", label: "CORNER SIZE" },
+            { t: "car", k: "wmRoundAdv", label: "ADVANCED :: PER-CORNER" },
+            { t: "sld", k: "wmRoundingTl", label: "TOP LEFT", grp: "wmRoundAdv" },
+            { t: "sld", k: "wmRoundingTr", label: "TOP RIGHT", grp: "wmRoundAdv" },
+            { t: "sld", k: "wmRoundingBl", label: "BOTTOM LEFT", grp: "wmRoundAdv" },
+            { t: "sld", k: "wmRoundingBr", label: "BOTTOM RIGHT", grp: "wmRoundAdv" },
+        ],
+    },
+]
+
+const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
+    const push = hit ? g.push : noPush
+    const lx = r.grp ? x + 30 : x + 16
+    const dis = r.k === "wmOpacityVal" ? !wmBool("wmOpacity") : false
+
+    if (r.t === "car") {
+        const open = wmExpand[r.k] === true
+        drawBtn(ctx, push, x + 16, ry + 4, 230, 18, `${open ? "▾" : "▸"}  ${r.label}`, () => { wmExpand[r.k] = !open; wmOpen = null; ctrl.requestDraw() }, open, g.col, "", 9)
+        return
+    }
+
+    if (r.t === "tog") {
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
+        drawToggle(ctx, push, x + w - 44, ry + 4, wmBool(r.k), () => { toggleWm(r.k) }, false, g.col)
+        return
+    }
+
+    if (r.t === "sld") {
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, dis ? [0.5, 0.54, 0.58] : g.col, dis ? 0.38 : 0.9)
+        if (dis) return
+        const fmts: Record<string, (v: number) => string> = {
+            wmOpacityVal: (v) => `${Math.round(v * 100)}%`,
+            wmBorderSize: (v) => `${Math.round(v)}px`,
+            wmGlowRange: (v) => `${Math.round(v)}px`,
+            wmGlowRp: (v) => `x${Math.round(v)}`,
+            wmShadowRange: (v) => `${Math.round(v)}px`,
+            wmShadowAlpha: (v) => `${Math.round(v)}%`,
+            wmRounding: (v) => `${Math.round(v)}px`,
+            wmRoundingTl: (v) => `${Math.round(v)}px`, wmRoundingTr: (v) => `${Math.round(v)}px`,
+            wmRoundingBl: (v) => `${Math.round(v)}px`, wmRoundingBr: (v) => `${Math.round(v)}px`,
+        }
+        const ranges: Record<string, [number, number]> = {
+            wmOpacityVal: [0.4, 1], wmBorderSize: [0, 5], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
+            wmShadowRange: [0, 40], wmShadowAlpha: [10, 100], wmRounding: [0, 40],
+            wmRoundingTl: [0, 40], wmRoundingTr: [0, 40], wmRoundingBl: [0, 40], wmRoundingBr: [0, 40],
+        }
+        drawWmSlider(ctx, g, x, ry, w, r.k, ranges[r.k]?.[0] ?? 0, ranges[r.k]?.[1] ?? 1, fmts[r.k] ?? ((v) => `${v}`))
+        return
+    }
+
+    if (r.t === "col") {
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
+        const cur = wmStr(r.k)
+        const rgb = hexToRgb(cur)
+        const picking = wmColorPick?.key === r.k
+        const label = cur ? `#${cur}` : "THEME"
+        drawColorCell(ctx, g, x + w - 120, ry + 3, 18, rgb)
+        push({ kind: "btn", bx0: x + w - 124, by0: ry + 1, bx1: x + w - 50, by1: ry + 22, on: () => { if (!picking) openWmPicker(r.k) } })
+        txt(ctx, x + w - 96, ry + 16, label, MONO, 8.5, rgb ? g.accent : g.col, 0.9)
+        drawBtn(ctx, push, x + w - 44, ry + 3, 40, 18, picking ? "OPEN" : "PICK", () => {
+            if (!picking) openWmPicker(r.k)
+        }, picking, g.col, "", 8)
+        return
+    }
+
+    if (r.t === "apps") {
+        const apps = wmStr(r.k).split(",").map((s) => s.trim()).filter(Boolean)
+        const mode = wmStr("wmOpacityMode")
+        const editing = wmAppEditing && wmAppText !== ""
+        const shown = editing ? `${wmAppText}_` : apps.length ? apps.join(", ") : "NONE"
+        const editable = mode !== "off"
+        txt(ctx, lx, ry + 16, r.label, TITLE, 9, editable ? g.col : [0.5, 0.54, 0.58], editable ? 0.9 : 0.38)
+        if (!editable) return
+        txt(ctx, lx + 190, ry + 16, fitTxt(ctx, shown, MONO, 8, w - 320), MONO, 8, editing ? g.accent : g.col, editing ? 1 : 0.7)
+        drawBtn(ctx, push, x + w - 44, ry + 3, 40, 18, editing ? "OK" : "EDIT", () => {
+            if (editing) commitWmApps()
+            else { wmAppEditing = true; wmAppText = ""; ctrl.requestDraw() }
+        }, editing, g.col, "", 8)
+        return
+    }
+
+    const isCorner = r.k === "wmCorners"
+    const isMode = r.k === "wmOpacityMode"
+    const opts = isCorner ? CORNER_OPTS : isMode ? OPACITY_MODES : []
+    const labels = isCorner ? CORNER_LABEL : isMode ? OPACITY_MODE_LABEL : {}
+    const cur = wmStr(r.k), open = wmOpen === r.k
+    txt(ctx, lx, ry + 16, r.label, TITLE, 9, g.col, 0.9)
+    drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${labels[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
+}
+
+const drawWm = (ctx, g, x, y, w) => {
+    const visTop = y + 16, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
+
+    const layout: { y: number; kind: "sec" | "row"; title: string; sec?: { title: string; keys: string[]; rows: any[] }; row?: any }[] = []
+    let yAcc = 0
+    for (const sec of WM_SECTIONS) {
+        layout.push({ y: yAcc, kind: "sec", title: sec.title, sec })
+        yAcc += GSEC_H
+        for (const r of sec.rows) {
+            if (r.grp && !wmExpand[r.grp]) continue
+            layout.push({ y: yAcc, kind: "row", title: r.label, row: r }); yAcc += GROW_H
+        }
+        yAcc += 10
+    }
+
+    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    kbMaxScroll = maxScroll
+    if (kbScroll > maxScroll) kbScroll = maxScroll
+    if (kbScroll < 0) kbScroll = 0
+
+    let pop: { key: string; bx: number; by: number; bw: number } | null = null
+    let colAnchor: number | null = null
+
+    ctx.save()
+    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
+    ctx.clip()
+    for (const it of layout) {
+        const ry = visTop + it.y - kbScroll
+        if (it.kind === "sec") {
+            if (ry + GSEC_H < visTop || ry > visBottom) continue
+            sectionHeader(ctx, g, x, ry + 12, it.sec!.title, w - 66)
+            const shown = ry >= visTop - 1 && ry + 18 <= visBottom + 1
+            drawBtn(ctx, (shown && !wmColorPick && !wmOpen) ? g.push : noPush, x + w - 62, ry + 1, 62, 16, "DEFAULTS", () => { resetWm(it.sec!.keys); wmOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 8)
+            continue
+        }
+        if (ry + GROW_H < visTop || ry > visBottom) continue
+        const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
+        const r = it.row!
+        if (r.t === "sel" && wmOpen === r.k) pop = { key: r.k, bx: x + w - 266, by: ry + 23, bw: 264 }
+        if (r.t === "col" && wmColorPick?.key === r.k) colAnchor = ry
+        drawWmRow(ctx, g, x, ry, w, r, hit && !wmOpen && !wmColorPick)
+    }
+    ctx.restore()
+
+    if (maxScroll > 0) {
+        const fillH = visHeight * (kbScroll / maxScroll)
+        const barH = Math.max(20, visHeight - fillH)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
+    }
+
+    if (pop) {
+        const isCorner = pop.key === "wmCorners"
+        const opts = isCorner ? CORNER_OPTS : OPACITY_MODES
+        const labels = isCorner ? CORNER_LABEL : OPACITY_MODE_LABEL
+        const ih = 20, listH = opts.length * ih + 6
+        let ly = pop.by + 2
+        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 25 - listH)
+        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(pop.bx, ly, pop.bw, listH); ctx.fill()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
+        ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
+        const cur = wmStr(pop.key)
+        opts.forEach((o, i) => {
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, labels[o] ?? o, () => { setWm(pop!.key, o); wmOpen = null; ctrl.requestDraw() }, cur === o, g.col, "", 9)
+        })
+        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { wmOpen = null; ctrl.requestDraw() } })
+    }
+
+    if (wmColorPick) {
+        const p = wmColorPick
+        const pW = 232, pH = 228
+        const px = x + w - pW - 8
+        let py = colAnchor != null ? colAnchor + 24 : visTop + (visHeight - pH) / 2
+        if (py + pH > visBottom) py = Math.max(visTop, (colAnchor != null ? colAnchor - pH - 8 : visTop) )
+        const sx = px + 14, sy = py + 14, svw = 148, svh = 148
+        const hx = px + 14, hy = py + 172, hw = 148, hh = 14
+        const [ar, ag, ab] = hsvToRgb(p.h, p.s, p.v)
+        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.98); ctx.rectangle(px, py, pW, pH); ctx.fill()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
+        ctx.rectangle(px + 0.5, py + 0.5, pW - 1, pH - 1); ctx.stroke()
+
+        const [hr, hg, hb] = hsvToRgb(p.h, 1, 1)
+        const gws = new Cairo.LinearGradient(sx, 0, sx + svw, 0)
+        gws.addColorStopRGB(0, 1, 1, 1); gws.addColorStopRGB(1, hr / 255, hg / 255, hb / 255)
+        ctx.setSource(gws); ctx.rectangle(sx, sy, svw, svh); ctx.fill()
+        const gbs = new Cairo.LinearGradient(0, sy, 0, sy + svh)
+        gbs.addColorStopRGBA(0, 0, 0, 0, 0); gbs.addColorStopRGBA(1, 0, 0, 0, 1)
+        ctx.setSource(gbs); ctx.rectangle(sx, sy, svw, svh); ctx.fill()
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.4); ctx.setLineWidth(1)
+        ctx.rectangle(sx + 0.5, sy + 0.5, svw - 1, svh - 1); ctx.stroke()
+
+        ctx.setSourceRGB(ar / 255, ag / 255, ab / 255)
+        ctx.rectangle(px + 170, sy, 48, 122); ctx.fill()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.8); ctx.setLineWidth(1)
+        ctx.rectangle(px + 170.5, sy + 0.5, 47, 121); ctx.stroke()
+        txt(ctx, px + 170, sy + 138, `#${rgbToHex(ar, ag, ab)}`, MONO, 8, g.accent, 0.95)
+
+        const ghu = new Cairo.LinearGradient(hx, 0, hx + hw, 0)
+        for (let i = 0; i <= 6; i++) { const [r2, g2, b2] = hsvToRgb(i * 60, 1, 1); ghu.addColorStopRGB(i / 6, r2 / 255, g2 / 255, b2 / 255) }
+        ctx.setSource(ghu); ctx.rectangle(hx, hy, hw, hh); ctx.fill()
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.4); ctx.setLineWidth(1)
+        ctx.rectangle(hx + 0.5, hy + 0.5, hw - 1, hh - 1); ctx.stroke()
+
+        const ccx = sx + p.s * svw, ccy = sy + (1 - p.v) * svh
+        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(0.8)
+        ctx.newPath(); ctx.arc(ccx, ccy, 6.2, 0, 2 * Math.PI); ctx.stroke()
+        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.4)
+        ctx.newPath(); ctx.arc(ccx, ccy, 5, 0, 2 * Math.PI); ctx.stroke()
+        const hcx = hx + (p.h / 360) * hw
+        ctx.setSourceRGBA(0, 0, 0, 0.8); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(hcx, hy - 3); ctx.lineTo(hcx, hy + hh + 3); ctx.stroke()
+        ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.2)
+        ctx.newPath(); ctx.moveTo(hcx, hy - 3); ctx.lineTo(hcx, hy + hh + 3); ctx.stroke()
+
+        drawBtn(ctx, g.push, px + 14, py + pH - 30, 70, 20, "THEME", () => { setWm(p.key, ""); closeWmPicker() }, false, [1, 0.4, 0.44], "", 8)
+        drawBtn(ctx, g.push, px + 92, py + pH - 30, 70, 20, "DONE", () => closeWmPicker(), true, g.col, "", 8)
+
+        g.push({
+            kind: "sld2", key: "wmPickSV", bx0: sx - 3, by0: sy - 3, bx1: sx + svw + 3, by1: sy + svh + 3,
+            onXY: (mx, my) => {
+                p.s = Math.max(0, Math.min(1, (mx - sx) / svw))
+                p.v = Math.max(0, Math.min(1, 1 - (my - sy) / svh))
+                liveWmPick()
+            },
+        })
+        g.push({
+            kind: "sld", key: "wmPickHue", u0: hx, v0: hy + hh / 2, u1: hx + hw, v1: hy + hh / 2,
+            bx0: hx - 5, by0: hy - 5, bx1: hx + hw + 5, by1: hy + hh + 5,
+            on: (t) => { p.h = t * 360; liveWmPick() },
+        })
+        g.push({ kind: "btn", bx0: px, by0: py, bx1: px + pW, by1: py + pH, on: () => {} })
+        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => closeWmPicker() })
+    }
 }
 
 type CfgKind = "tog" | "snd" | "sel" | "car"

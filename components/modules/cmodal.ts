@@ -273,6 +273,7 @@ export const createModal = (spec) => {
             if (contains(r, x, y)) {
                 hit = true
                 if (r.kind === "sld") { drag = r; dragKey = r.key; r.on(sliderParam(r, x, y)); area.queue_draw() }
+                else if (r.onXY) { drag = r; dragKey = r.key ?? null; r.onXY(x, y); area.queue_draw() }
                 else if (b === 3 && r.onRight) r.onRight()
                 else if (r.on) { if (r.key) { pressKey = r.key; area.queue_draw() }; r.on() }
                 break
@@ -286,7 +287,7 @@ export const createModal = (spec) => {
         if (!point) { if (hoverKey !== null) { hoverKey = null; area.queue_draw() }; return false }
         const [x, y] = point
         lastXY = [x, y]
-        if (drag) { drag.on(sliderParam(drag, x, y)); area.queue_draw(); return false }
+        if (drag) { if (drag.onXY) drag.onXY(x, y); else drag.on(sliderParam(drag, x, y)); area.queue_draw(); return false }
         let nk: any = null
         for (const r of hitRegions) { if (r.hoverable && contains(r, x, y)) { nk = r.key; break } }
         if (nk !== hoverKey) { hoverKey = nk; area.queue_draw() }
@@ -303,7 +304,7 @@ export const createModal = (spec) => {
     })
     const kv = (e) => { let k = 0; try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch {} return k }
     const kmask = (e) => { try { const r = e.get_state?.(); return r ? r[1] : (e.state || 0) } catch { return 0 } }
-    const onKeyPress = (_w, e) => { const k = kv(e); const m = kmask(e); if (spec.onKeyRaw) spec.onKeyRaw(k, m, true); if (k === Gdk.KEY_Escape) ctrl.close(); else spec.onKey?.(k); return true }
+    const onKeyPress = (_w, e) => { const k = kv(e); const m = kmask(e); if (spec.onKeyRaw) spec.onKeyRaw(k, m, true); if (k === Gdk.KEY_Escape) { let eaten = false; try { eaten = spec.onKey?.(k) === true } catch {} if (!eaten) ctrl.close() } else spec.onKey?.(k); return true }
     const onKeyRelease = (_w, e) => { if (spec.onKeyRaw) spec.onKeyRaw(kv(e), kmask(e), false); return true }
 
     const winOpts: any = { name: `modal_${name}`, namespace: `modal_${name}`, className: "aug modal", layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE, keymode: spec.keymode ?? Keymode.EXCLUSIVE, visible: false, child: evt }

@@ -1,6 +1,7 @@
 import GLib from "gi://GLib"
 import GdkPixbufLib from "gi://Gdk?version=3.0"
 import { execAsync } from "astal"
+import { applyWmFromTheme } from "./wmconfig.ts"
 import { CYBER_DIR, USER_DIR } from "../../env.ts"
 
 export type RGB = [number, number, number]
@@ -588,6 +589,12 @@ const applyRioStyle = (name: string) => {
     execAsync([`${CYBER_DIR}/scripts/rio-style`, RIO_STYLES[name] ?? "cybercore"]).catch(() => "")
 }
 
+const applyShellTheme = (name: string) => {
+    execAsync(["bash", "-c", `CYBER_DIR="${CYBER_DIR}" "${CYBER_DIR}/scripts/shell-theme" "${name}"`])
+        .then(() => { applyWmFromTheme() })
+        .catch(() => "")
+}
+
 let curPalette = "NETWATCH"
 
 const applyDerived = (name: string) => {
@@ -606,6 +613,7 @@ const applyDerived = (name: string) => {
     updateLauncherLabelTint(name)
     updateRadioBg(name)
     updateNotifBubble(name)
+    applyShellTheme(name)
 }
 
 export const applyPalette = (name: string) => {
