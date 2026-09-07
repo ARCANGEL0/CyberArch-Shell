@@ -3,13 +3,13 @@ import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import { execAsync } from "astal"
 import { createModal } from "./cmodal.ts"
-import { txt as gtxt, pango as gpango, RED, RACC, Cairo, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
+import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, Cairo, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
 import { USER } from "./colors.ts"
 
-const YEL: [number, number, number] = USER.amber
-const ARA: [number, number, number] = RACC
+const YEL: [number, number, number] = USER.cyan
+const ARA: [number, number, number] = GACC
 const AC2: [number, number, number] = USER.glassacc
-const HOT: [number, number, number] = USER.red
+const HOT: [number, number, number] = USER.cyan
 
 const pad2 = (n: number) => String(n).padStart(2, "0")
 
@@ -181,7 +181,7 @@ const ensure = () => {
     if (modal) return
     modal = createModal({
         name: "time", tabTitle: "SYSTEM TIME", W: 620, H: 560,
-        col: RED, accent: YEL, yaw: 13, pitch: -3, roll: 0.8, focal: 2400, dist: 2300, noGlass: true, anchorRight: true,
+        col: GCYAN, accent: GACC, yaw: 13, pitch: -3, roll: 0.8, focal: 2400, dist: 2300, noGlass: true, anchorRight: true,
         onOpen: () => { query = ""; scroll = 0; status = ""; tick = 0; focusField = "filter"; seedManual(); readState(); loadZones() },
         onFrame: () => { tick++; if (tick % 8 === 0) modal.requestDraw() },
         onScroll: (d) => { scroll = Math.max(0, Math.min(Math.max(0, results.length - 1), scroll + d * 2)); modal.requestDraw() },

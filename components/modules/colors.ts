@@ -45,6 +45,7 @@ export const NEON: Record<string, RGB> = {
     aurwht: [232, 255, 240],
     f25: [242, 91, 86],
     overlay: [255, 42, 58],
+    sysveil: [255, 42, 58],
     pure: [255, 255, 255],
     glassacc: [196, 248, 255],
     modalbg: [0, 0, 0],
@@ -88,7 +89,7 @@ export const NEON: Record<string, RGB> = {
     radioctl: [94, 244, 248],
 }
 
-export type PaletteName = "NETWATCH" | "DARK" | "KITTY" | "BLOODMOON" | "ARCTIC" | "SYNTHWAVE" | "JOHNNY" | "GHOST"
+export type PaletteName = "NETWATCH" | "BLADE" | "KITTY" | "BLOODMOON" | "ARCTIC" | "SYNTHWAVE" | "JOHNNY" | "GHOST"
 
 export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
     NETWATCH: {
@@ -120,34 +121,48 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         glassacc: [196, 248, 255],
         overlay: [255, 42, 58],
     },
-    DARK: {
-        red: [0, 0, 0], cyan: [0, 0, 0], magenta: [0, 0, 0],
-        green: [0, 0, 0], amber: [0, 0, 0], blue: [0, 0, 0],
-        white: [255, 255, 255], dim: [10, 10, 12], grid: [0, 0, 0],
-        dock: [0, 0, 0], press: [255, 20, 45], badge: [255, 20, 45],
-        stamina: [255, 20, 45], ram: [0, 0, 0], netinfo: [0, 0, 0],
-        cpu: [0, 0, 0],
-        notifred: [0, 0, 0],
-        notifyel: [0, 0, 0],
-        notifcyn: [0, 0, 0],
-        goldf: [8, 8, 10],
-        goldd: [4, 4, 5],
-        notifgrey: [255, 255, 255],
-        glyphcol: [0, 0, 0],
-        msggrey: [10, 10, 12],
-        dimred: [0, 0, 0],
-        appsred: [0, 0, 0],
-        hudcyan: [255, 20, 45],
-        darkred: [0, 0, 0],
-        notifbadge: [255, 20, 45],
-        aurgreen: [0, 0, 0],
-        aurbrt: [255, 255, 255],
-        aurblack: [0, 0, 0],
-        aurwht: [255, 255, 255],
-        f25: [0, 0, 0],
-        pure: [255, 255, 255],
-        glassacc: [255, 255, 255],
-        overlay: [0, 0, 0],
+    // replaced the old dark theme. dusk amber/rust base, pink/purple only on
+    // notifications and toasts, terminal interfaces in cyan/teal
+    BLADE: {
+        red: [183, 81, 7], cyan: [1, 180, 178], magenta: [202, 83, 170],
+        green: [146, 99, 43], amber: [195, 120, 18], blue: [86, 155, 178],
+        white: [224, 214, 200], dim: [127, 123, 157], grid: [26, 18, 14],
+        dock: [183, 81, 7], press: [187, 56, 160], badge: [195, 120, 18],
+        stamina: [146, 99, 43], ram: [189, 128, 59], netinfo: [189, 128, 59],
+        cpu: [195, 120, 18],
+        notifred: [202, 83, 170],
+        notifyel: [195, 120, 18],
+        notifcyn: [1, 180, 178],
+        goldf: [58, 28, 122],
+        goldd: [34, 16, 70],
+        notifgrey: [127, 123, 157],
+        glyphcol: [187, 56, 160],
+        msggrey: [127, 123, 157],
+        dimred: [116, 50, 8],
+        appsred: [195, 120, 18],
+        hudcyan: [2, 155, 156],
+        darkred: [80, 41, 11],
+        notifbadge: [187, 56, 160],
+        aurgreen: [187, 56, 160],
+        aurbrt: [217, 119, 191],
+        aurblack: [42, 8, 36],
+        aurwht: [224, 214, 200],
+        f25: [187, 56, 160],
+        pure: [232, 226, 216],
+        glassacc: [1, 180, 178],
+        overlay: [1, 180, 178],
+        dockvh: [255, 230, 126],
+        dockhh: [255, 230, 126],
+        wheelfg: [1, 180, 178],
+        modalhov: [1, 180, 178],
+        notiffg: [1, 180, 178],
+        notiflbl: [1, 180, 178],
+        notifheads: [217, 119, 191],
+        notiftitle: [2, 155, 156],
+        notifphone: [187, 56, 160],
+        notifmail: [187, 56, 160],
+        notifbg: [13, 66, 72],
+        sysveil: [183, 81, 7],
     },
     KITTY: {
         red: [255, 170, 215], cyan: [255, 200, 232], magenta: [255, 180, 222],
@@ -376,9 +391,10 @@ const DERIVE: Record<string, [string, Mul]> = {
 }
 
 const resetAlpha = () => { for (const k of Object.keys(USER_A)) if (!OVR[k]) USER_A[k] = 1 }
-const applyDeriveTable = () => {
+const applyDeriveTable = (pinned: Record<string, Partial<Record<string, RGB>>> = PALETTES, name = curPalette) => {
+    const pin = pinned[name] || {}
     for (const k of Object.keys(DERIVE)) {
-        if (OVR[k]) continue
+        if (OVR[k] || pin[k]) continue
         const [src, mul] = DERIVE[k]
         const s = NEON[src]
         if (!s) continue
@@ -390,7 +406,7 @@ const applyDeriveTable = () => {
 export const imgTint = { value: null as RGB | null, strength: 0 }
 const IMG_TINT: Record<string, [RGB, number]> = {
     ARCTIC: [[255, 255, 255], 1],
-    DARK: [[0, 0, 0], 0.97],
+    BLADE: [[81, 37, 11], 0.62],
     KITTY: [[255, 180, 222], 0.8],
     JOHNNY: [[255, 208, 60], 0.85],
     BLOODMOON: [[255, 32, 32], 0.9],
@@ -408,7 +424,7 @@ const updateImgTint = (name: string) => {
 export const tintSurface = (ctx: any, surf: any, w: number, h: number, a = 1, colorOverride: RGB | null = null, strength = -1) => {
     const tc = colorOverride || imgTint.value
     if (!tc || !surf) return
-    const st = strength >= 0 ? strength : imgTint.strength
+    const st = strength >= 0 ? strength : (colorOverride ? 1 : imgTint.strength)
     try {
         ctx.setSourceSurface(surf, 0, 0); ctx.paintWithAlpha(a)
         ctx.setOperator(27)
@@ -424,7 +440,7 @@ export const tintSurfaceFlat = (ctx: any, surf: any, w: number, h: number, a = 1
     try {
         ctx.setSourceSurface(surf, 0, 0)
         const pat = ctx.getSource()
-        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, imgTint.strength * a)
+        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, (colorOverride ? 1 : imgTint.strength) * a)
         ctx.mask(pat)
     } catch {}
 }
@@ -439,25 +455,26 @@ export const tintOpaque = (ctx: any, w: number, h: number, a = 1) => {
     ctx.restore()
 }
 
-export const tintPixbuf = (ctx: any, pb: any, x: number, y: number, a = 1) => {
-    const tc = imgTint.value
+export const tintPixbuf = (ctx: any, pb: any, x: number, y: number, a = 1, colorOverride: RGB | null = null, strength = -1) => {
+    const tc = colorOverride || imgTint.value
     if (!tc || !pb) return
+    const st = strength >= 0 ? strength : (colorOverride ? 1 : imgTint.strength)
     try {
         GdkPixbufLib.cairo_set_source_pixbuf(ctx, pb, x, y)
         const pat = ctx.getSource()
         ctx.paintWithAlpha(a)
         ctx.setOperator(27)
-        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, imgTint.strength * a)
+        ctx.setSourceRGBA(tc[0] / 255, tc[1] / 255, tc[2] / 255, st * a)
         ctx.mask(pat)
         ctx.setOperator(2)
     } catch {}
 }
 
-const GLASS_ALPHA: Record<string, number> = { GHOST: 0.14, DARK: 0.85 }
+const GLASS_ALPHA: Record<string, number> = { GHOST: 0.14, BLADE: 0.85 }
 export const glassAlpha = { value: 1 }
 const updateGlassAlpha = (name: string) => { glassAlpha.value = GLASS_ALPHA[name] ?? 1 }
 
-const GLASS_MODE: Record<string, boolean> = { ARCTIC: true, DARK: true }
+const GLASS_MODE: Record<string, boolean> = { ARCTIC: true, BLADE: true }
 export const glassMode = { value: false }
 const updateGlassMode = (name: string) => { glassMode.value = GLASS_MODE[name] ?? false }
 
@@ -468,7 +485,7 @@ const MENU_BG: Record<string, MenuBg> = {
     ARCTIC: { bg: [2, 1, 4], bgA: 0.42, fog: [255, 255, 255], fogA: 0.18 },
     KITTY: { bg: [16, 6, 12], bgA: 0.5, fog: [255, 185, 224], fogA: 0.2 },
     JOHNNY: { bg: [2, 4, 10], bgA: 0.5, fog: [255, 208, 60], fogA: 0.18 },
-    DARK: { bg: [0, 0, 0], bgA: 0.55, fog: [140, 15, 30], fogA: 0.22 },
+    BLADE: { bg: [3, 2, 2], bgA: 0.55, fog: [128, 33, 122], fogA: 0.26 },
     BLOODMOON: { bg: [6, 0, 0], bgA: 0.5, fog: [255, 32, 32], fogA: 0.2 },
     GHOST: { bg: [0, 6, 3], bgA: 0.45, fog: [0, 255, 120], fogA: 0.18 },
     SYNTHWAVE: { bg: [6, 0, 10], bgA: 0.5, fog: [255, 60, 220], fogA: 0.2 },
@@ -486,6 +503,7 @@ const MAP_ACCENT: Record<string, MapAccent> = {
     KITTY: { clock: [255, 182, 222], city: [255, 205, 236], forecast: [255, 180, 222] },
     SYNTHWAVE: { clock: [255, 60, 220], city: [100, 255, 170], forecast: [255, 60, 220] },
     JOHNNY: { clock: [255, 208, 60], city: [176, 255, 157], forecast: null },
+    BLADE: { clock: [189, 128, 59], city: [2, 155, 156], forecast: [1, 180, 178] },
 }
 export const mapAccent = { ...MAP_ACCENT_DEF }
 const updateMapAccent = (name: string) => {
@@ -503,6 +521,7 @@ type HudSoft = { acc: RGB01; label: RGB01 }
 const HUD_SOFT: Record<string, HudSoft> = {
     ARCTIC: { acc: [1, 1, 1], label: [1, 1, 1] },
     KITTY: { acc: [1, 0.6667, 0.8431], label: [1, 0.7451, 0.8824] },
+    BLADE: { acc: [0.004, 0.707, 0.698], label: [0.325, 0.878, 0.871] },
 }
 export const hudSoft = { acc: [1, 1, 1] as RGB01, label: [1, 1, 1] as RGB01 }
 const updateHudSoft = (name: string) => {
@@ -517,7 +536,7 @@ const NEON_BTN: Record<string, boolean> = { DARK: true }
 export const neonBtn = { value: false }
 const updateNeonBtn = (name: string) => { neonBtn.value = NEON_BTN[name] ?? false }
 
-const CIRCLE_TINT: Record<string, RGB> = { DARK: [255, 20, 45] }
+const CIRCLE_TINT: Record<string, RGB> = { BLADE: [187, 56, 160] }
 export const circleTint = { value: null as RGB | null }
 const updateCircleTint = (name: string) => {
     const e = CIRCLE_TINT[name]
@@ -560,6 +579,16 @@ const updateNotifBubble = (name: string) => {
     notifBubble.value = (e || OVR.notifphone) ? NEON.notifphone : null
 }
 
+export const notifIconTint = { value: null as RGB | null }
+const updateNotifIconTint = (name: string) => {
+    notifIconTint.value = curPalette === "BLADE" ? NEON.notifphone : null
+}
+
+export const aurTitleTint = { value: null as RGB | null }
+const updateAurTitleTint = (name: string) => {
+    aurTitleTint.value = curPalette === "BLADE" ? NEON.aurbrt : null
+}
+
 const changeBus: Array<() => void> = []
 export const onColorChange = (cb: () => void): (() => void) => { changeBus.push(cb); return () => { const i = changeBus.indexOf(cb); if (i >= 0) changeBus.splice(i, 1) } }
 const notifyColorChange = () => { for (const cb of [...changeBus]) { try { cb() } catch (e) { print("[color] notify:", e) } } }
@@ -583,7 +612,7 @@ export const rgbToHex = ([r, g, b]: RGB) =>
     "#" + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, "0")).join("")
 
 // each theme has its own .toml terminal file, this maps them
-const RIO_STYLES: Record<string, string> = { GHOST: "ghost", KITTY: "kitty", SYNTHWAVE: "synthwave", ARCTIC: "arctic", BLOODMOON: "bloodmoon", DARK: "dark", JOHNNY: "johnny" }
+const RIO_STYLES: Record<string, string> = { GHOST: "ghost", KITTY: "kitty", SYNTHWAVE: "synthwave", ARCTIC: "arctic", BLOODMOON: "bloodmoon", BLADE: "blade", JOHNNY: "johnny" }
 
 const applyRioStyle = (name: string) => {
     execAsync([`${CYBER_DIR}/scripts/rio-style`, RIO_STYLES[name] ?? "cybercore"]).catch(() => "")
@@ -601,7 +630,7 @@ const applyDerived = (name: string) => {
     curPalette = name
     resetAlpha()
     updateImgTint(name)
-    applyDeriveTable()
+    applyDeriveTable(PALETTES, name)
     updateGlassAlpha(name)
     updateMenuBg(name)
     updateMapAccent(name)
@@ -613,6 +642,8 @@ const applyDerived = (name: string) => {
     updateLauncherLabelTint(name)
     updateRadioBg(name)
     updateNotifBubble(name)
+    updateNotifIconTint(name)
+    updateAurTitleTint(name)
     applyShellTheme(name)
 }
 

@@ -3,7 +3,7 @@ import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import { SCREEN_WIDTH , SCREEN_HEIGHT } from "../../env.ts"
-import { NEON, f, onColorChange, USER, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
+import { NEON, f, onColorChange, USER, tintSurface, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"
 import { MONO } from "./fonts.ts"
 import { CYBER_DIR } from "../../env.ts"
 import { setRecording, isRecording } from "./anim.ts"
@@ -188,8 +188,8 @@ const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
  }
  ctx.setOperator(2)
  const scaled = recIconPix.scale_simple(dw, dh, GdkPixbuf.InterpType.BILINEAR)
- if (imgTint.value) {
-     tintPixbuf(ctx, scaled, dx, dy, a)
+ if (imgTint.value || notifIconTint.value) {
+     tintPixbuf(ctx, scaled, dx, dy, a, notifIconTint.value)
  } else {
      Gdk.cairo_set_source_pixbuf(ctx, scaled, dx, dy)
      ctx.paintWithAlpha(a)
@@ -209,7 +209,7 @@ const drawCard = (ctx, cp) => {
  const trace = (pts) => { ctx.newPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath() }
 
  ctx.save()
- trace(bevel()); ctx.setSourceRGBA(USER.overlay[0] * 0.16, USER.overlay[1] * 0.16, USER.overlay[2] * 0.16, 0.55 * load); ctx.fill()
+ trace(bevel()); ctx.setSourceRGBA(USER.overlay[0] * 0.10, USER.overlay[1] * 0.10, USER.overlay[2] * 0.12, 0.32 * load); ctx.fill()
  const [ovr2, ovg2, ovb2] = f(NEON.overlay)
  ctx.setOperator(12); trace(bevel()); ctx.setSourceRGBA(ovr2, ovg2, ovb2, 0.12 * load); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
  trace(bevel()); ctx.setSourceRGBA(ovr2, ovg2, ovb2, 0.85 * load); ctx.setLineWidth(1.4); ctx.stroke()
@@ -262,8 +262,8 @@ const drawAlertIcon = (ctx, x, y, sz, a) => {
  const dx = x + Math.round((sz - dw) / 2), dy = y + Math.round((sz - dh) / 2)
  ctx.save()
  const sc = alertPix.scale_simple(dw, dh, GdkPixbuf.InterpType.BILINEAR)
- if (imgTint.value) {
-     tintPixbuf(ctx, sc, dx, dy, a)
+ if (imgTint.value || notifIconTint.value) {
+     tintPixbuf(ctx, sc, dx, dy, a, notifIconTint.value)
  } else {
      Gdk.cairo_set_source_pixbuf(ctx, sc, dx, dy)
      ctx.paintWithAlpha(a)
