@@ -1196,15 +1196,10 @@ const WM_SECTIONS: { title: string; keys: string[]; rows: { t: "tog" | "sld" | "
     },
     {
         title: "// ::corners",
-        keys: ["wmCorners", "wmRounding", "wmRoundingTl", "wmRoundingTr", "wmRoundingBl", "wmRoundingBr"],
+        keys: ["wmCorners", "wmRounding"],
         rows: [
             { t: "sel", k: "wmCorners", label: "CORNER STYLE" },
             { t: "sld", k: "wmRounding", label: "CORNER SIZE" },
-            { t: "car", k: "wmRoundAdv", label: "ADVANCED :: PER-CORNER" },
-            { t: "sld", k: "wmRoundingTl", label: "TOP LEFT", grp: "wmRoundAdv" },
-            { t: "sld", k: "wmRoundingTr", label: "TOP RIGHT", grp: "wmRoundAdv" },
-            { t: "sld", k: "wmRoundingBl", label: "BOTTOM LEFT", grp: "wmRoundAdv" },
-            { t: "sld", k: "wmRoundingBr", label: "BOTTOM RIGHT", grp: "wmRoundAdv" },
         ],
     },
 ]
@@ -1212,7 +1207,9 @@ const WM_SECTIONS: { title: string; keys: string[]; rows: { t: "tog" | "sld" | "
 const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     const push = hit ? g.push : noPush
     const lx = r.grp ? x + 30 : x + 16
-    const dis = r.k === "wmOpacityVal" ? !wmBool("wmOpacity") : false
+    const dis = r.k === "wmOpacityVal" ? !wmBool("wmOpacity")
+        : r.k === "wmRounding" ? wmCornersIs("sharp")
+        : false
 
     if (r.t === "car") {
         const open = wmExpand[r.k] === true
@@ -1237,13 +1234,10 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
             wmShadowRange: (v) => `${Math.round(v)}px`,
             wmShadowAlpha: (v) => `${Math.round(v)}%`,
             wmRounding: (v) => `${Math.round(v)}px`,
-            wmRoundingTl: (v) => `${Math.round(v)}px`, wmRoundingTr: (v) => `${Math.round(v)}px`,
-            wmRoundingBl: (v) => `${Math.round(v)}px`, wmRoundingBr: (v) => `${Math.round(v)}px`,
         }
         const ranges: Record<string, [number, number]> = {
             wmOpacityVal: [0.4, 1], wmBorderSize: [0, 5], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
             wmShadowRange: [0, 40], wmShadowAlpha: [10, 100], wmRounding: [0, 40],
-            wmRoundingTl: [0, 40], wmRoundingTr: [0, 40], wmRoundingBl: [0, 40], wmRoundingBr: [0, 40],
         }
         drawWmSlider(ctx, g, x, ry, w, r.k, ranges[r.k]?.[0] ?? 0, ranges[r.k]?.[1] ?? 1, fmts[r.k] ?? ((v) => `${v}`))
         return

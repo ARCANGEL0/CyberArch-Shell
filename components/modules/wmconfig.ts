@@ -10,8 +10,7 @@ const DEF: Record<string, WmVal> = {
  wmGlow: true, wmGlowRange: 14, wmGlowRp: 3, wmShadow: true,
  wmShadowColor: "", wmShadowAlpha: 38, wmShadowRange: 16,
  wmBorders: true, wmBorderSize: 1, wmBorderColor: "",
- wmCorners: "round", wmRounding: 10, wmRoundingTl: 10, wmRoundingTr: 10,
- wmRoundingBl: 10, wmRoundingBr: 10,
+ wmCorners: "round", wmRounding: 10,
 }
 const WM: Record<string, WmVal> = { ...DEF }
 const Touched: Record<string, boolean> = {}
@@ -103,11 +102,9 @@ export const applyWmLive = (): void => {
  const glowOn = wmBool("wmGlow") && wmBool("wmBorders")
  const op = wmBool("wmOpacity") ? wmNum("wmOpacityVal") : 1
  const alpha = Math.round(wmNum("wmShadowAlpha") * 2.55)
- const cornerTouched = Touched["wmRoundingTl"] || Touched["wmRoundingTr"] || Touched["wmRoundingBl"] || Touched["wmRoundingBr"]
- let round = cornerTouched
-     ? Math.round((wmNum("wmRoundingTl") + wmNum("wmRoundingTr") + wmNum("wmRoundingBl") + wmNum("wmRoundingBr")) / 4)
-     : wmNum("wmRounding")
+ let round = Math.round(wmNum("wmRounding"))
  if (wmCornersIs("sharp")) round = 0
+ if (round < 0) round = 0
  if (round > 40) round = 40
  const power = wmCornersIs("bevel") ? 1 : 2
  let conf = `general={border_size=${wmBool("wmBorders") ? wmNum("wmBorderSize") : 0}`
@@ -171,8 +168,7 @@ export const resetWm = (keys: string[]): void => {
 const OPACITY_KEYS = ["wmOpacity", "wmOpacityVal", "wmOpacityMode", "wmOpacityApps"]
 const LIVE_KEYS = OPACITY_KEYS.concat(["wmGlow", "wmGlowRange", "wmGlowRp", "wmShadow",
  "wmShadowColor", "wmShadowAlpha", "wmShadowRange", "wmBorders", "wmBorderSize",
- "wmBorderColor", "wmCorners", "wmRounding", "wmRoundingTl", "wmRoundingTr",
- "wmRoundingBl", "wmRoundingBr"])
+ "wmBorderColor", "wmCorners", "wmRounding"])
 
 export const applyWmFromTheme = (): void => {
  const sc = readShellColors()
@@ -182,10 +178,6 @@ export const applyWmFromTheme = (): void => {
  if (!Touched["wmGlowRp"] && sc.glow_rp) setWmSilent("wmGlowRp", parseInt(sc.glow_rp, 10))
  if (!Touched["wmRounding"] && sc.rounding) setWmSilent("wmRounding", parseInt(sc.rounding, 10))
  if (!Touched["wmCorners"] && sc.rounding_power) setWmSilent("wmCorners", parseFloat(sc.rounding_power) < 1.5 ? "bevel" : "round")
- if (!Touched["wmRoundingTl"]) setWmSilent("wmRoundingTl", wmNum("wmRounding"))
- if (!Touched["wmRoundingTr"]) setWmSilent("wmRoundingTr", wmNum("wmRounding"))
- if (!Touched["wmRoundingBl"]) setWmSilent("wmRoundingBl", wmNum("wmRounding"))
- if (!Touched["wmRoundingBr"]) setWmSilent("wmRoundingBr", wmNum("wmRounding"))
  applyWmLive()
 }
 const setWmSilent = (k: string, v: WmVal): void => {
