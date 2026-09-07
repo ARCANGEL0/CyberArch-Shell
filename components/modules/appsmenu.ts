@@ -318,6 +318,7 @@ export const closeWheel = () => {
 export const openAppsMenu = () => {
  if (!menuWin) return
  if (active) { closeWheel(); return }
+ appInfoCache = null
  openWheel({ title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: (a) => { try { a.launch([], null) } catch (e) { print("[apps] launch:", e) } closeWheel() }, onSecondary: null, onReset: null, emptyText: "// NO APPS" }, buildAppEntries())
 }
 
