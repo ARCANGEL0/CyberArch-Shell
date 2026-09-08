@@ -45,6 +45,7 @@ import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = `${COMPONENTS_DIR}/style/cyber.css`
+const AURBAR_DISABLED = GLib.file_test(`${GLib.get_home_dir()}/.config/cyberarch/disable-aurbar`, GLib.FileTest.EXISTS)
 
 const compileCss = async () => {
  try {
@@ -320,7 +321,7 @@ App.start({
  }
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
- passthrough(AurBarWindow())
+ if (!AURBAR_DISABLED) passthrough(AurBarWindow())
  NotifHudWindow()
  NowPlayingWindow()
  WsAnimWindow()
