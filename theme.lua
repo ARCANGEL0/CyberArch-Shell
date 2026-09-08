@@ -8,8 +8,8 @@ end
 
 hl.exec_cmd("dbus-update-activation-environment --systemd --all")
 hl.exec_cmd("sh -c 'sleep 3; hyprctl dispatch exec \"dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE\"' &")
-hl.exec_cmd("killall -9 waybar mako dunst swaync 2>/dev/null; systemctl --user stop waybar mako dunst swaync 2>/dev/null || true")
-hl.exec_cmd("sh -c 'pgrep -x gjs >/dev/null 2>&1 || { " .. os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null; sleep 1; " .. cyberpunk .. "/scripts/launch-theme; }'")
+hl.exec_cmd("killall -9 mako dunst swaync 2>/dev/null; systemctl --user stop mako dunst swaync 2>/dev/null || true")
+hl.exec_cmd("sh -c '" .. os.getenv("HOME") .. "/.local/bin/ags list 2>/dev/null | grep -qx cyberpunk || { " .. os.getenv("HOME") .. "/.local/bin/ags quit -i cyberpunk 2>/dev/null; sleep 1; " .. cyberpunk .. "/scripts/launch-theme; }'")
 hl.exec_cmd(cyberpunk .. "/scripts/ws pin")
 local user_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/cyberarch"
 local ucfg = {}
@@ -79,14 +79,14 @@ if wmf then
 end
 local shadow_color = nil
 local border_override = nil
-if wmt.wmBorderSize and type(wm.wmBorderSize) == "number" then border_size = wm.wmBorderSize end
+if wmt.wmBorderSize and type(wm.wmBorderSize) == "number" then border_size = math.floor(wm.wmBorderSize + 0.5) end
 if wmt.wmBorders and wm.wmBorders == false then border_size = 0 end
 if type(wm.wmBorderColor) == "string" then border_override = h2rgb(wm.wmBorderColor) end
 if type(wm.wmShadowColor) == "string" and wm.wmShadowColor ~= "" then shadow_color = h2rgb(wm.wmShadowColor) end
 if wmt.wmGlow ~= nil then glow = wm.wmGlow == true end
-if wmt.wmGlowRange and type(wm.wmGlowRange) == "number" then glow_range = wm.wmGlowRange end
-if wmt.wmGlowRp and type(wm.wmGlowRp) == "number" then glow_rp = wm.wmGlowRp end
-if wmt.wmRounding and type(wm.wmRounding) == "number" then rounding = wm.wmRounding end
+if wmt.wmGlowRange and type(wm.wmGlowRange) == "number" then glow_range = math.floor(wm.wmGlowRange + 0.5) end
+if wmt.wmGlowRp and type(wm.wmGlowRp) == "number" then glow_rp = math.floor(wm.wmGlowRp + 0.5) end
+if wmt.wmRounding and type(wm.wmRounding) == "number" then rounding = math.floor(wm.wmRounding + 0.5) end
 local corner_mode = type(wm.wmCorners) == "string" and wm.wmCorners or "round"
 local corner_touched = wmt.wmRoundingTl or wmt.wmRoundingTr or wmt.wmRoundingBl or wmt.wmRoundingBr
 if wmt.wmCorners then
@@ -111,7 +111,7 @@ if rounding > 40 then rounding = 40 end
 local shadow_on = true
 if wmt.wmShadow ~= nil then shadow_on = wm.wmShadow == true end
 local shadow_range = glow_range
-if wmt.wmShadowRange and type(wm.wmShadowRange) == "number" then shadow_range = wm.wmShadowRange end
+if wmt.wmShadowRange and type(wm.wmShadowRange) == "number" then shadow_range = math.floor(wm.wmShadowRange + 0.5) end
 local shadow_alpha = glow_alpha
 if wmt.wmShadowAlpha and type(wm.wmShadowAlpha) == "number" then
     shadow_alpha = string.format("%02x", math.floor(wm.wmShadowAlpha * 2.55 + 0.5))

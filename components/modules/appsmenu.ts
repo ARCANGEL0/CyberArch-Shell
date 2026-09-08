@@ -4,6 +4,7 @@ import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
+import GLib from "gi://GLib"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
 import { NEON, USER, USER_A, f, onColorChange, menuBg, glassMode } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -315,11 +316,41 @@ export const closeWheel = () => {
   active = false; introTarget = 0; animate()
   const r = wheelCfg.onReset; if (r) r()
 }
+const LAUNCH_HELPER = `${GLib.get_home_dir()}/.local/bin/cyberarch-launch-desktop`
+const ensureSessionEnv = () => {
+  const rt = GLib.getenv("XDG_RUNTIME_DIR") || `/run/user/${GLib.get_user_name() === "root" ? 0 : 1000}`
+  if (!GLib.getenv("XDG_RUNTIME_DIR")) GLib.setenv("XDG_RUNTIME_DIR", rt, true)
+  if (!GLib.getenv("DBUS_SESSION_BUS_ADDRESS")) GLib.setenv("DBUS_SESSION_BUS_ADDRESS", `unix:path=${rt}/bus`, true)
+  if (!GLib.getenv("XDG_SESSION_TYPE")) GLib.setenv("XDG_SESSION_TYPE", "wayland", true)
+  if (!GLib.getenv("XDG_CURRENT_DESKTOP")) GLib.setenv("XDG_CURRENT_DESKTOP", "Hyprland", true)
+  if (!GLib.getenv("XDG_SESSION_DESKTOP")) GLib.setenv("XDG_SESSION_DESKTOP", "Hyprland", true)
+  if (!GLib.getenv("DISPLAY")) GLib.setenv("DISPLAY", ":0", true)
+}
+const launchAppRobust = (a) => {
+  ensureSessionEnv()
+  const name = (() => { try { return a.get_name?.() || "unknown" } catch { return "unknown" } })()
+  const id = (() => { try { return a.get_id?.() || "" } catch { return "" } })()
+  const file = (() => { try { return a.get_filename?.() || "" } catch { return "" } })()
+  print(`[apps] ACTIVATE name=${name} id=${id} file=${file}`)
+  if (file) {
+    execAsync([LAUNCH_HELPER, file, id, name]).catch((e) => print("[apps] desktop helper error:", e))
+    return
+  }
+  try {
+    const ctx = new Gio.AppLaunchContext()
+    ctx.setenv("DBUS_SESSION_BUS_ADDRESS", GLib.getenv("DBUS_SESSION_BUS_ADDRESS") || "")
+    ctx.setenv("XDG_SESSION_TYPE", "wayland")
+    ctx.setenv("XDG_CURRENT_DESKTOP", "Hyprland")
+    const ok = a.launch([], ctx)
+    print(`[apps] Gio launch result=${ok}`)
+  } catch (e) { print("[apps] Gio launch error:", e) }
+}
+
 export const openAppsMenu = () => {
  if (!menuWin) return
  if (active) { closeWheel(); return }
  appInfoCache = null
- openWheel({ title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: (a) => { try { a.launch([], null) } catch (e) { print("[apps] launch:", e) } closeWheel() }, onSecondary: null, onReset: null, emptyText: "// NO APPS" }, buildAppEntries())
+ openWheel({ title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, keymode: Keymode.EXCLUSIVE, onActivate: (a) => { launchAppRobust(a); closeWheel() }, onSecondary: null, onReset: null, emptyText: "// NO APPS" }, buildAppEntries())
 }
 
 export const AppsMenuWindow = () => {
@@ -334,7 +365,23 @@ export const AppsMenuWindow = () => {
  evt.connect("button-press-event", (_w, e) => {
      if (!active) return true
      let b = 1; try { b = e.get_button?.()[1] ?? e.button } catch {}
-     const r = rowAtY(mouseY)
+     // Use the click event's coordinates directly. The previous code relied on
+     // a cached motion-notify Y position, which can be stale after wheel/touchpad scroll.
+     let clickY = mouseY
+     try {
+         const c = e.get_coords?.()
+         if (c && c.length >= 3 && c[0]) clickY = c[2]
+         else if (typeof e.y === "number") clickY = e.y
+     } catch { if (typeof e.y === "number") clickY = e.y }
+     mouseY = clickY
+     let r = rowAtY(clickY)
+    if (!r && RENDER.length) {
+      r = RENDER.reduce((best, cur) => {
+        const by = (best.y0 + best.y1) / 2, cy = (cur.y0 + cur.y1) / 2
+        return Math.abs(cy - clickY) < Math.abs(by - clickY) ? cur : best
+      }, RENDER[0])
+    }
+    print(`[apps] CLICK y=${clickY} row=${r ? r.entry?.label : "none"}`)
      if (b === 3) { if (r && wheelCfg.onSecondary) wheelCfg.onSecondary(r.entry.data); else closeWheel(); return true }
      if (r) {
          if (typeof r.idxAbs === "number" && r.idxAbs !== Math.round(scroll)) {
@@ -373,7 +420,10 @@ export const AppsMenuWindow = () => {
      if (k === Gdk.KEY_Escape) { if (query) { query = ""; applyFilter() } else closeWheel(); return true }
       if (k === Gdk.KEY_Up) { scrollTarget -= 1; const n = filtered.length; if (n <= VISIBLE) scrollTarget = Math.max(0, scrollTarget); beep(); animate(); return true }
       if (k === Gdk.KEY_Down) { scrollTarget += 1; const n = filtered.length; if (n <= VISIBLE) scrollTarget = Math.min(n - 1, scrollTarget); beep(); animate(); return true }
-     if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { if (n) activate(filtered[mod(Math.round(scroll), n)]); return true }
+     if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) {
+       if (n) { const e = filtered[mod(Math.round(scroll), n)]; print(`[apps] ENTER row=${e?.label || "unknown"}`); activate(e) }
+       return true
+     }
      if (k === Gdk.KEY_BackSpace) { if (wheelCfg.searchable && query) { query = query.slice(0, -1); applyFilter() } return true }
 
      const uni = Gdk.keyval_to_unicode(k)
