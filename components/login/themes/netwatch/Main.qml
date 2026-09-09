@@ -172,7 +172,7 @@ Rectangle {
 
     MouseArea { anchors.fill: parent; cursorShape: Qt.ArrowCursor; z: -1 }
 
-    Loader { anchors.fill: parent; source: "BackgroundVideo.qml" }
+    Loader { anchors.fill: parent; source: "Background.qml" }
 
     Rectangle { anchors.fill: parent; color: "#660A0A08"; z: 2 }
     Rectangle {

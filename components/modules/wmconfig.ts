@@ -147,6 +147,7 @@ export const applyWmRules = (): void => {
 
 export const setWm = (k: string, v: WmVal): void => {
  if (!(k in DEF) || WM[k] === v) return
+ if (typeof v === "number" && typeof DEF[k] === "number" && Number.isInteger(DEF[k] as number)) v = Math.round(v)
  WM[k] = v
  Touched[k] = true
  saveWmConfig()

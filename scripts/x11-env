@@ -1,0 +1,4 @@
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${DISPLAY:-}" ]; then
+  command -v dbus-update-activation-environment >/dev/null 2>&1 \
+    && dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE >/dev/null 2>&1
+fi

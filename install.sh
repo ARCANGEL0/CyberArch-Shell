@@ -341,8 +341,8 @@ if [ "$THEME" != "$CANON" ]; then
 else
   LOGINDST="$LOGINSRC"
 fi
-if [ -f "$THEME/assets/img/lucy_lock.mp4" ]; then
-  cp -f "$THEME/assets/img/lucy_lock.mp4" "$LOGINDST/themes/netwatch/bg.mp4"
+if [ -f "$THEME/assets/wallpapers/netwatch/lucy.mp4" ]; then
+  cp -f "$THEME/assets/wallpapers/netwatch/lucy.mp4" "$LOGINDST/themes/netwatch/bg.mp4"
 fi
 USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch"
 WALLPAPERS_PATH="$HOME/Pictures/Wallpapers"
@@ -359,12 +359,12 @@ if [ -d "$HOME/.local/share/cyberdeck" ]; then
     fi
   done
 fi
-if [ -f "$THEME/assets/img/lucy_wallpaper.png" ]; then
+if [ -f "$THEME/assets/wallpapers/netwatch/lucy.png" ]; then
   mkdir -p "$CANON/assets/img"
-  cp -f "$THEME/assets/img/lucy_wallpaper.png" "$CANON/assets/img/lucy_wallpaper.png"
+  cp -f "$THEME/assets/wallpapers/netwatch/lucy.png" "$CANON/assets/img/lucy_wallpaper.png"
   ok "wallpaper deployed → $CANON/assets/img/lucy_wallpaper.png"
   if [ ! -f "$WALLPAPERS_PATH/lucy.png" ]; then
-    cp -f "$THEME/assets/img/lucy_wallpaper.png" "$WALLPAPERS_PATH/lucy.png"
+    cp -f "$THEME/assets/wallpapers/netwatch/lucy.png" "$WALLPAPERS_PATH/lucy.png"
     ok "wallpaper copied → $WALLPAPERS_PATH/lucy.png"
   else
     ok "wallpaper kept → $WALLPAPERS_PATH/lucy.png"
@@ -456,6 +456,30 @@ SDDMCNF
       "  sudo install -d -m 755 $SDDM_THEME_DIR" \
       "  sudo cp -rf '$LOGINSRC/sddm-theme'/. $SDDM_THEME_DIR/" \
       "Your greeter was NOT switched yet, so nothing about your login changed."
+  fi
+  if sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "$SDDM_THEME_DIR/current"; then
+    if ! ls "$SDDM_THEME_DIR/current"/image.* >/dev/null 2>&1 && ! ls "$SDDM_THEME_DIR/current"/video.* >/dev/null 2>&1; then
+      SEED_WP=""
+      if [ -r "$USER_DIR/wallpaper.lua" ]; then
+        SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
+      fi
+      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/lucy.png"
+      SEED_EXT="${SEED_WP##*.}"
+      if [ -n "$SEED_EXT" ] && [ "$SEED_EXT" != "$SEED_WP" ] && [ -r "$SEED_WP" ]; then
+        case "$SEED_EXT" in
+          mp4|webm|mkv|mov) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/video.$SEED_EXT" ;;
+          *) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/image.$SEED_EXT" ;;
+        esac
+        chmod 644 "$SDDM_THEME_DIR/current"/image.* "$SDDM_THEME_DIR/current"/video.* 2>/dev/null
+        ok "sddm current wallpaper seeded → $SDDM_THEME_DIR/current"
+      else
+        warn "could not seed sddm current wallpaper |::| first theme load will deploy it"
+      fi
+    else
+      ok "sddm current wallpaper kept → $SDDM_THEME_DIR/current"
+    fi
+  else
+    warn "could not create $SDDM_THEME_DIR/current |::| sddm falls back to the theme's bg.mp4"
   fi
   DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
   case "$DMLINK" in
@@ -780,6 +804,11 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
     fi
     echo "Installing dangerous theme..."
     fish -c "omf install dangerous" || true
+    OMF_DANGEROUS="$HOME/.local/share/omf/themes/dangerous"
+    if [ -d "$OMF_DANGEROUS" ] && grep -rl 'egrep' "$OMF_DANGEROUS" >/dev/null 2>&1; then
+      sed -i 's/egrep -c/grep -E -c/g' "$OMF_DANGEROUS"/*.fish
+      ok "dangerous prompt patched |::| egrep -> grep -E"
+    fi
     fish -c "set -U fish_key_bindings fish_vi_key_bindings" 2>/dev/null || true
     fish -c "set -U dangerous_nogreeting" 2>/dev/null || true
   fi
@@ -1025,13 +1054,22 @@ cf_add() {
   CF_FILE+=("$1"); CF_LINE+=("$2"); CF_TEXT+=("$3"); CF_COMBO+=("$4")
   CF_DESC+=("${5:-theme bind}"); CF_MARK+=(1)
 }
+
 cf_comment() {
   local f="$1" n="$2"
-  if [[ "$f" == *.lua ]]; then sed -i "${n}s|^|-- |" "$f"; else sed -i "${n}s|^|#|" "$f"; fi
+  [[ "$n" =~ ^[0-9]+$ ]] || return 1
+  [ -f "$f" ] || return 1
+  if [[ "$f" == *.lua ]]; then
+    sed -i "${n}s|^|-- |" "$f"
+  else
+    sed -i "${n}s|^|#|" "$f"
+  fi
 }
+
 # the lua side of the scan lives in scripts/kbconflicts — same engine the theme
 # runs on load, so the installer and the runtime modal never disagree on what
 # counts as a conflict
+
 kbc_records() {
   local kbc="$THEME/scripts/kbconflicts" rec f n combo tsrc text lbl
   [ -f "$kbc" ] || { warn "scripts/kbconflicts missing |::| lua-side keybind scan skipped."; return 0; }
@@ -1042,7 +1080,8 @@ kbc_records() {
     combo="${rec%%|*}"; rec="${rec#*|}"
     tsrc="${rec%%|*}"; rec="${rec#*|}"
     text="${rec%%|*}"; lbl="${rec#*|}"
-    cf_add "$f" "$n" "$text" "$combo" "theme: ${lbl:+$lbl @ }$tsrc"
+		[[ "$n" =~ ^[0-9]+$ ]] || continue
+	cf_add "$f" "$n" "$text" "$combo" "theme: ${lbl:+$lbl @ }$tsrc"
   done < <(bash "$kbc" check 2>/dev/null)
 }
 THAS() {
@@ -1298,7 +1337,16 @@ else
         "Then re-run:  ./install.sh"
     else
       gt_runs "$GTBIN" && step "rebuilding GPU Terminal to match this theme..." || step "building GPU Terminal with GPU shader support..."
-      cargo install rioterm --version "$GTVER" --force --locked --features wgpu || warn "cargo reported a build failure |::| checking for a usable binary anyway"
+      if cargo install rioterm --version "$GTVER" --force --locked --features wgpu 2>&1 | tee /tmp/.gt-cargo.log; test "${PIPESTATUS[0]}" -eq 0; then
+        :
+      else
+        warn "cargo build failed |::| the wgpu build errors were printed above."
+        warn "a previous plain build may still be sitting in ~/.cargo/bin/rio — it has no shader chain."
+        rm -f "$GTBIN"
+        if gt_runs "$GTBIN"; then
+          warn "cargo left a binary behind despite the failure |::| testing it for shader support."
+        fi
+      fi
       GT_ALT="$(command -v rio 2>/dev/null || true)"
       GT_PICK=""
       if gt_runs "$GTBIN" && gt_has_gpu "$GTBIN"; then GT_PICK="$GTBIN"
@@ -1309,14 +1357,13 @@ else
         ok "librashader linked into $GTBIN |::| the CRT shader chain will run"
       elif gt_runs "$GTBIN" || { [ -n "$GT_ALT" ] && gt_runs "$GT_ALT"; }; then
         gt_runs "$GTBIN" || GTBIN="$GT_ALT"
-        fatal "the rio on this deck has no librashader — it would load the palette and silently drop every shader." \
-          "Binary: $GTBIN" \
-          "That is the 'theme switches colours but the CRT frame never appears' bug, so it stops here." \
-          "The cargo build with shader support is the fix:" \
-          "  cargo install rioterm --version $GTVER --force --locked --features wgpu" \
-          "If cargo just failed, read its last error — it is nearly always a missing cmake, binutils or llvm-libs." \
-          "A distro-packaged rio is built without the filter feature, so it can never run the chain." \
-          "Then re-run:  ./install.sh"
+        warn "the rio at $GTBIN has no librashader — it will run, but the CRT shader chain is missing."
+        warn "that is the 'theme switches colours but the CRT frame never appears' case."
+        warn "rebuild with shaders when you can:"
+        warn "  cargo install rioterm --version $GTVER --force --locked --features wgpu"
+        warn "if cargo fails, read its last error — it is nearly always a missing cmake, binutils or llvm-libs."
+        warn "a distro rio counts too if it was built with the filter feature."
+        GT_OK=1
       else
         fatal "no runnable rio binary was produced at $GTBIN." \
           "cargo finished but nothing executable came out, so the terminal bound to $GTKEY does not exist." \
@@ -1364,6 +1411,14 @@ fi
 
 hdr "ACTIVATE THEMING"
 [ -x "$THEME/scripts/apply_theme" ] && "$THEME/scripts/apply_theme" && ok "icon/cursor/kitty/kvantum theming applied" || warn "apply_theme not run"
+X11ENV="/etc/profile.d/cyberarch-x11-env.sh"
+if [ -f "$THEME/scripts/x11-env" ]; then
+  if sudo install -m 644 "$THEME/scripts/x11-env" "$X11ENV"; then
+    ok "X11 activation env exported at shell startup → $X11ENV"
+  else
+    warn "could not install $X11ENV |::| X11 apps may miss DISPLAY until the theme loads"
+  fi
+fi
 
 hdr "REFRESH HYPRLAND + BUILD hyprbars"
 NEED_RESTART=0
