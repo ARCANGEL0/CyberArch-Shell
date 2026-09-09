@@ -5,7 +5,7 @@
 set -u
 wallpapers_path="${HOME}/Pictures/Wallpapers"
 wallpaper_lua="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch/wallpaper.lua"
-wallpaper="${wallpapers_path}/lucy.png"
+wallpaper="${wallpapers_path}/netwatch/lucy.mp4"
 if [ -r "$wallpaper_lua" ]; then
     lua_wallpaper="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$wallpaper_lua" | tail -n 1)"
     if [ -n "${lua_wallpaper:-}" ]; then
@@ -77,10 +77,44 @@ if [ "$compositor_ready" -ne 1 ]; then
     exit 1
 fi
 
+case "${wallpaper##*.}" in
+    mp4|webm|mkv|mov)
+        if command -v mpvpaper >/dev/null 2>&1; then
+            old_mpvp="$(pgrep -x mpvpaper 2>/dev/null || true)"
+            old_awww="$(pgrep -x awww-daemon 2>/dev/null || true)"
+            sock="/tmp/cyberwall-$$.sock"
+            rm -f "$sock"
+            mpvpaper -o "no-audio --really-quiet --loop-file=inf --keepaspect=no --hwdec=auto-safe --gpu-shader-cache=no --input-ipc-server=$sock" ALL "$wallpaper" >>"${HOME}/.cache/cyberpunk-mpvpaper.log" 2>&1 &
+            new_pid=$!
+            if command -v socat >/dev/null 2>&1; then
+                for _ in $(seq 1 200); do
+                    [ -S "$sock" ] && printf '%s\n' '{ "command": ["get_property", "pause"] }' | timeout 1 socat - "$sock" >/dev/null 2>&1 && break
+                    sleep 0.05
+                done
+            else
+                sleep 2
+            fi
+            sleep 0.4
+            if kill -0 "$new_pid" 2>/dev/null; then
+                [ -n "$old_mpvp" ] && kill $old_mpvp 2>/dev/null
+                [ -n "$old_awww" ] && kill $old_awww 2>/dev/null
+                exit 0
+            fi
+            printf '%s\n' 'new mpvpaper died before rendering |::| keeping the previous wallpaper' >>"${HOME}/.cache/cyberpunk-mpvpaper.log"
+            exit 1
+        fi
+        printf '%s\n' 'mpvpaper not found |::| falling back to the static wallpaper' >>"${HOME}/.cache/cyberpunk-awww.log"
+        wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
+        ;;
+esac
+
 for _ in $(seq 1 80); do
-    if awww query >/dev/null 2>&1; then
-        awww img --transition-type none "$wallpaper" >>"${HOME}/.cache/cyberpunk-awww.log" 2>&1
-        exit $?
+    if timeout 2 awww query >/dev/null 2>&1; then
+        if timeout 5 awww img --transition-type none "$wallpaper" >>"${HOME}/.cache/cyberpunk-awww.log" 2>&1; then
+            pkill -x mpvpaper 2>/dev/null
+            exit 0
+        fi
+        exit 1
     fi
 
     if ! pgrep -u "$(id -u)" -x awww-daemon >/dev/null 2>&1; then
