@@ -11,7 +11,7 @@ import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
 } from "./wmconfig.ts"
-import { USER_DIR } from "../../env.ts"
+import { USER_DIR, CYBER_DIR } from "../../env.ts"
 import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
@@ -32,7 +32,7 @@ let selPalette = "NETWATCH"
 
 const readTune = () => { selPalette = getPaletteName() }
 
-const applyColors = (name: string) => { applyPalette(name); saveUserColors(); selPalette = name }
+const applyColors = (name: string) => { applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
 
 const TABS: [string, string][] = [
     ["CONFIGURATION", "anim"], ["COLORS", "colors"], ["KEYBINDS", "keybinds"],

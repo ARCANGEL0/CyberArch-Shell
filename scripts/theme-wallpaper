@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -u
+
+NAME="${1:-NETWATCH}"
+WALLPAPERS_PATH="${HOME}/Pictures/Wallpapers"
+USER_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch"
+THEME="${CYBER_DIR:-${HOME}/.config/hypr/themes/cyberpunk}"
+
+case "$NAME" in
+    BLADE) folder="blade_runner" ;;
+    *)      folder="$(printf '%s' "$NAME" | tr '[:upper:]' '[:lower:]')" ;;
+esac
+
+dir="$WALLPAPERS_PATH/$folder"
+[ -d "$dir" ] || exit 0
+
+current=""
+if [ -r "$USER_DIR/wallpaper.lua" ]; then
+    current="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
+fi
+
+pool="$(find "$dir" -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' \) | sort)"
+[ -n "$pool" ] || exit 0
+
+choice=""
+if [ -n "$current" ]; then
+    choice="$(printf '%s\n' "$pool" | grep -vx -F -- "$current" | shuf -n1)"
+fi
+[ -n "$choice" ] || choice="$(printf '%s\n' "$pool" | shuf -n1)"
+
+mkdir -p "$USER_DIR"
+printf 'wallpaper = "%s"\nreturn wallpaper\n' "$choice" > "$USER_DIR/wallpaper.lua"
+
+exec bash "$THEME/scripts/set-wallpaper" "$choice"

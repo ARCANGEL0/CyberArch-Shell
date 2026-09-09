@@ -23,7 +23,7 @@ end
 local anim_master = ucfg["anim"] ~= false
 local anim_workspace = anim_master and ucfg["animWorkspace"] == true
 local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
-local set_wallpaper = wallpapers_path .. "/lucy.png"
+local set_wallpaper = wallpapers_path .. "/netwatch/lucy.mp4"
 local wf = loadfile(user_dir .. "/wallpaper.lua")
 if wf then
     local ok, res = pcall(wf)

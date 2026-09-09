@@ -145,6 +145,7 @@ AUR=(
   aylurs-gtk-shell
   libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git
   pamtester
+  mpvpaper
 )
 
 clear; banner
@@ -359,19 +360,17 @@ if [ -d "$HOME/.local/share/cyberdeck" ]; then
     fi
   done
 fi
-if [ -f "$THEME/assets/wallpapers/netwatch/lucy.png" ]; then
-  mkdir -p "$CANON/assets/img"
-  cp -f "$THEME/assets/wallpapers/netwatch/lucy.png" "$CANON/assets/img/lucy_wallpaper.png"
-  ok "wallpaper deployed → $CANON/assets/img/lucy_wallpaper.png"
-  if [ ! -f "$WALLPAPERS_PATH/lucy.png" ]; then
-    cp -f "$THEME/assets/wallpapers/netwatch/lucy.png" "$WALLPAPERS_PATH/lucy.png"
-    ok "wallpaper copied → $WALLPAPERS_PATH/lucy.png"
-  else
-    ok "wallpaper kept → $WALLPAPERS_PATH/lucy.png"
-  fi
+mkdir -p "$CANON/assets/img"
+if [ -f "$THEME/assets/img/lucy_wallpaper.png" ]; then
+  cp -f "$THEME/assets/img/lucy_wallpaper.png" "$CANON/assets/img/lucy_wallpaper.png"
+  ok "static fallback deployed → $CANON/assets/img/lucy_wallpaper.png"
+fi
+if [ -d "$THEME/assets/wallpapers" ]; then
+  cp -rn "$THEME/assets/wallpapers/." "$WALLPAPERS_PATH/"
+  ok "wallpaper pool migrated → $WALLPAPERS_PATH"
 fi
 if [ ! -f "$USER_DIR/wallpaper.lua" ]; then
-  DEFAULT_WP="$WALLPAPERS_PATH/lucy.png"
+  DEFAULT_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
   OLD_WP="$HOME/.local/share/cyberdeck/wallpaper"
   if [ -r "$OLD_WP" ]; then
     read -r prev_wp <"$OLD_WP" || prev_wp=""
@@ -463,7 +462,7 @@ SDDMCNF
       if [ -r "$USER_DIR/wallpaper.lua" ]; then
         SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
       fi
-      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/lucy.png"
+      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
       SEED_EXT="${SEED_WP##*.}"
       if [ -n "$SEED_EXT" ] && [ "$SEED_EXT" != "$SEED_WP" ] && [ -r "$SEED_WP" ]; then
         case "$SEED_EXT" in
