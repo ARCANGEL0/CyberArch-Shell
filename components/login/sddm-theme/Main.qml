@@ -68,7 +68,10 @@ Rectangle {
             } catch(e) {}
         }
         root.loadNewsCache()
-        root.ui = 1; fadeIn.start(); riseIn.start(); pwd.forceActiveFocus(); focusRetry.restart()
+        root.lockUser = userModel.lastUser || ""
+        root.ui = 1; fadeIn.start(); riseIn.start()
+        if (root.lockUser.length > 0) pwd.forceActiveFocus(); else user.forceActiveFocus()
+        focusRetry.restart()
         root.sessionSig = root.genSig()
         root.buildTicker(root.tickerLines)
     }
@@ -135,14 +138,15 @@ Rectangle {
 
     Timer { interval: 300000; running: true; repeat: true; onTriggered: root.loadNewsCache() }
 
+    property string lockUser: ""
     property string lockInput: ""
     property bool lockError: false
     property bool isAuthenticating: false
 
     function doAuth() {
-        if (root.lockInput === "" || root.isAuthenticating) return
+        if (root.lockUser === "" || root.lockInput === "" || root.isAuthenticating) return
         root.isAuthenticating = true
-        sddm.login(userModel.lastUser, root.lockInput, sessionModel.lastIndex)
+        sddm.login(root.lockUser, root.lockInput, sessionModel.lastIndex)
     }
 
     Connections {
@@ -242,7 +246,37 @@ Rectangle {
                 Text { anchors.left: parent.left; text: "USER"; font.family: fExo.name; font.bold: true; font.pixelSize: 9.5 * s; font.letterSpacing: 1.5 * s; color: root.cYellow; anchors.verticalCenter: parent.verticalCenter }
                 Text { anchors.right: parent.right; text: root.hostName; font.family: fHead.name; font.pixelSize: 11 * s; font.letterSpacing: 1 * s; color: root.cWhite; anchors.verticalCenter: parent.verticalCenter }
             }
-            Item { width: 1; height: 14 * s }
+            Item { width: 1; height: 8 * s }
+
+            Item { width: parent.width; height: 46 * s
+                Rectangle { anchors.fill: parent; color: root.cBlack; opacity: 0.4
+                    border.color: user.focus ? root.cAmber : root.cLineDim; border.width: 1 * s
+                    Behavior on border.color { ColorAnimation { duration: 180 } } }
+                Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 2 * s
+                    color: user.focus ? root.cAmber : root.cLineDim
+                    Behavior on color { ColorAnimation { duration: 180 } } }
+                Text { anchors.left: parent.left; anchors.leftMargin: 14 * s; anchors.verticalCenter: parent.verticalCenter
+                    text: ">"; font.family: fMono.name; font.pixelSize: 14 * s; color: user.focus ? root.cAmber : root.cGrayDim
+                    Behavior on color { ColorAnimation { duration: 180 } } }
+                Item { anchors.left: parent.left; anchors.leftMargin: 34 * s; anchors.right: parent.right; anchors.rightMargin: 14 * s; anchors.verticalCenter: parent.verticalCenter; height: 24 * s; clip: true
+                    Text { id: userText; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                        text: root.lockUser
+                        font.family: fMono.name; font.pixelSize: 13 * s; font.letterSpacing: 1 * s; color: root.cAmber }
+                    Rectangle { id: userCaret; anchors.left: userText.right; anchors.leftMargin: 6 * s; anchors.verticalCenter: parent.verticalCenter
+                        width: 8 * s; height: 18 * s; color: root.cAmber; visible: user.focus
+                        SequentialAnimation on opacity { loops: Animation.Infinite; NumberAnimation{to:0;duration:520} NumberAnimation{to:1;duration:520} } }
+                    Text { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left
+                        text: "USERNAME"; visible: root.lockUser.length === 0
+                        font.family: fElectrolize.name; font.pixelSize: 10 * s; font.letterSpacing: 1.5 * s; color: root.cGrayDim }
+                }
+                FocusScope { anchors.fill: parent
+                    TextInput { id: user; width: 1; height: 1; opacity: 0; cursorVisible: false; text: root.lockUser
+                        onTextEdited: root.lockUser = text
+                        Keys.onReturnPressed: pwd.forceActiveFocus()
+                        Keys.onEnterPressed: pwd.forceActiveFocus()
+                        Keys.onTabPressed: pwd.forceActiveFocus() } }
+            }
+            Item { width: 1; height: 10 * s }
 
             Item { width: parent.width; height: 46 * s
                 Rectangle { anchors.fill: parent; color: root.cBlack; opacity: 0.4
@@ -265,12 +299,13 @@ Rectangle {
                         text: "PASSWORD"; visible: root.lockInput.length === 0
                         font.family: fElectrolize.name; font.pixelSize: 10 * s; font.letterSpacing: 1.5 * s; color: root.cGrayDim }
                 }
-                FocusScope { anchors.fill: parent; focus: true
-                    TextInput { id: pwd; width: 1; height: 1; opacity: 0; echoMode: TextInput.NoEcho; cursorVisible: false; focus: true; text: root.lockInput
+                FocusScope { anchors.fill: parent
+                    TextInput { id: pwd; width: 1; height: 1; opacity: 0; echoMode: TextInput.NoEcho; cursorVisible: false; text: root.lockInput
                         onTextEdited: root.lockInput = text
                         Keys.onReturnPressed: root.doAuth()
                         Keys.onEnterPressed: root.doAuth()
-                        Keys.onEscapePressed: root.lockInput = "" } }
+                        Keys.onEscapePressed: root.lockInput = ""
+                        Keys.onBacktabPressed: user.forceActiveFocus() } }
             }
             Item { width: 1; height: 10 * s }
 
@@ -328,5 +363,5 @@ Rectangle {
         NumberAnimation{target:panelContainer;property:"anchors.horizontalCenterOffset";to:0;duration:45} }
 
     Timer { id: focusRetry; interval: 60; repeat: true; property int cnt: 0
-        onTriggered: { pwd.forceActiveFocus(); if(++cnt>=6){running=false;cnt=0} } }
+        onTriggered: { (root.lockUser.length > 0 ? pwd : user).forceActiveFocus(); if(++cnt>=6){running=false;cnt=0} } }
 }
