@@ -18,6 +18,20 @@ fi
 if [ ! -r "$wallpaper" ]; then
     wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
 fi
+
+sddm_current="/usr/share/sddm/themes/netwatch/current"
+if [ -d "$sddm_current" ] && [ -w "$sddm_current" ] && [ -r "$wallpaper" ]; then
+    wp_ext="${wallpaper##*.}"
+    if [ -n "$wp_ext" ] && [ "$wp_ext" != "$wallpaper" ]; then
+        rm -f "$sddm_current"/image.* "$sddm_current"/video.* 2>/dev/null
+        case "$wp_ext" in
+            mp4|webm|mkv|mov) cp -f "$wallpaper" "$sddm_current/video.$wp_ext" ;;
+            *) cp -f "$wallpaper" "$sddm_current/image.$wp_ext" ;;
+        esac
+        chmod 644 "$sddm_current"/image.* "$sddm_current"/video.* 2>/dev/null
+    fi
+fi
+
 cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/awww"
 mkdir -p "$cache_dir"
 

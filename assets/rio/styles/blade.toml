@@ -4,7 +4,7 @@ draw-bold-text-with-light-colors = true
 
 line-height = 1.16
 
-margin = [14, 20, 18, 20]
+margin = [30, 26, 34, 26]
 
 scrollback-history-limit = 20000
 confirm-before-quit = true

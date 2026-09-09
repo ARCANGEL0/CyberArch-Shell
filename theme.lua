@@ -86,7 +86,7 @@ if type(wm.wmShadowColor) == "string" and wm.wmShadowColor ~= "" then shadow_col
 if wmt.wmGlow ~= nil then glow = wm.wmGlow == true end
 if wmt.wmGlowRange and type(wm.wmGlowRange) == "number" then glow_range = wm.wmGlowRange end
 if wmt.wmGlowRp and type(wm.wmGlowRp) == "number" then glow_rp = wm.wmGlowRp end
-if wmt.wmRounding and type(wm.wmRounding) == "number" then rounding = wm.wmRounding end
+if wmt.wmRounding and type(wm.wmRounding) == "number" then rounding = math.floor(wm.wmRounding + 0.5) end
 local corner_mode = type(wm.wmCorners) == "string" and wm.wmCorners or "round"
 local corner_touched = wmt.wmRoundingTl or wmt.wmRoundingTr or wmt.wmRoundingBl or wmt.wmRoundingBr
 if wmt.wmCorners then
