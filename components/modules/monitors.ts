@@ -30,7 +30,12 @@ const RAMCOL: RGB = NEON.ram
 const BADGECOL: RGB = NEON.badge
 const STOCOL: RGB = NEON.xpbar
 
-const batColor = (p: number): RGB => p < 10 ? [255, 55, 55] as any : p < 50 ? [255, 120, 45] as any : p < 70 ? [255, 205, 55] as any : NEON.stamina
+const HEADROOM = new Set(["battery", "ramfree"])
+const isHeadroom = (k: string) => HEADROOM.has(k)
+
+const goodLowColor = (p: number): RGB => p < 10 ? [255, 55, 55] as any : p < 50 ? [255, 120, 45] as any : p < 70 ? [255, 205, 55] as any : NEON.stamina
+const goodHighColor = (p: number): RGB => p > 90 ? [255, 55, 55] as any : p > 75 ? [255, 120, 45] as any : p > 55 ? [255, 205, 55] as any : NEON.stamina
+const gaugeColor = (k: string, p: number): RGB => isHeadroom(k) ? goodLowColor(p) : goodHighColor(p)
 
 const read = (p: string) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d) : "" } catch { return "" } }
 
@@ -280,7 +285,7 @@ export const Monitors = () => {
     })
     area.connect("draw", (_w: any, ctx: any) => {
         const isBat = slotKey("bat") === "battery"
-        const bcol = batColor(mFrac("bat") * 100)
+        const bcol = gaugeColor(slotKey("bat"), mFrac("bat") * 100)
         const bx = 18, by = 14, S = 40
         const P = (px: number, py: number): [number, number] => [bx + px / 45 * S, by + py / 45 * S]
         const badge: [number, number][] = [P(1, 1), P(44, 1), P(44, 44), P(14.6, 44), P(1, 27.4)]
@@ -310,7 +315,8 @@ export const Monitors = () => {
         {
             const y = 44, h = 18, tw = 8, gap = 1.6
             const n = Math.max(1, Math.floor((RAMX - X0 + gap) / (tw + gap)))
-            const lit = Math.round(bar("ram") * n)
+            const ramAvail = !animOn("animGauge") ? 1 : isHeadroom(slotKey("ram")) ? bar("ram") : 1 - bar("ram")
+            const lit = Math.round(ramAvail * n)
             const RAMP: [number, number][] = [[11.29, 0], [18, 0], [18, 52.09], [11.29, 60], [4.58, 60], [4.58, 30], [0, 30], [0, 0]]
             for (let i = 0; i < n; i++) {
                 const sx = X0 + i * (tw + gap)

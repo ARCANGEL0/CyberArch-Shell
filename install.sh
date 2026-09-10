@@ -122,7 +122,7 @@ dm_current() {
 local l u 
 l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null | true)"
 if [ -n "$1" ] && [ -e "$1" ]; then basename "$1" .service; return 0; fi
-for u in sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
+for u in plasmalogin sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
 if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
 done
 printf ''
@@ -146,6 +146,8 @@ AUR=(
   libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git
   pamtester
   mpvpaper
+  gst-plugins-good
+  gst-plugins-base
 )
 
 clear; banner
@@ -994,21 +996,6 @@ hl.define_submap("kill", function()
     hl.bind("escape",    app("scripts/overkill exit"))
 end)
 
-if type(hl.gesture) == "function" then
-    hl.gesture({ fingers = 3, direction = "left", action = function()
-        hl.exec_cmd(cyberpunk .. "/scripts/ws -1")
-    end })
-    hl.gesture({ fingers = 3, direction = "right", action = function()
-        hl.exec_cmd(cyberpunk .. "/scripts/ws +1")
-    end })
-    hl.gesture({ fingers = 3, direction = "up", action = function()
-        hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/zoom-step in")
-    end })
-    hl.gesture({ fingers = 3, direction = "down", action = function()
-        hl.exec_cmd(os.getenv("HOME") .. "/.config/hypr/scripts/zoom-step out")
-    end })
-end
-
 USEREOF
     ok "created user.lua template at $USERLUA"
     warn "edit $USERLUA to add your own hl.bind, CD.rebind, or CD.add calls."
@@ -1419,7 +1406,7 @@ if [ -f "$THEME/scripts/x11-env" ]; then
   fi
 fi
 
-hdr "REFRESH HYPRLAND + BUILD hyprbars"
+hdr "REFRESH HYPRLAND"
 NEED_RESTART=0
 if command -v hyprctl >/dev/null 2>&1; then
   PROVIDER="$(hyprctl systeminfo 2>/dev/null | sed -n 's/.*configProvider:[[:space:]]*//p' | head -n1)"
@@ -1438,23 +1425,6 @@ if command -v hyprctl >/dev/null 2>&1; then
   fi
 fi
 
-printf "[!] Install custom Hyprbars Plugin? (y/N) "
-read -r ans </dev/tty
-if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-  if pkg-config --exists hyprland 2>/dev/null; then
-    HVER="$(pkg-config --modversion hyprland 2>/dev/null)"
-    step "building the cyberpunk titlebars against Hyprland $HVER…"
-    if "$THEME/scripts/build-hyprbars"; then ok "hyprbars.so built + loaded"
-    else
-      warn "titlebars built but couldn't hot-load |::| they'll come up after Hyprland restarts."
-      NEED_RESTART=1
-    fi
-  else
-    warn "hyprland.pc not found |::| install Hyprland headers, then run scripts/build-hyprbars."
-  fi
-else
-  warn "skipped custom Hyprbars plugin |::| run scripts/build-hyprbars later if you want it."
-fi
 hdr "MESA PACKAGES INSTALLATION"
 step "installing/refreshing $MESA_PKGS before restart…"
 sudo pacman -S --needed $MESA_PKGS
@@ -1505,20 +1475,38 @@ else
    printf "[:!:] Restart Hyprland anyway ? (y/N) "
    read -r ans </dev/tty
  fi
- if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
- 	printf "${CYAN} > restarting Hyprland.${R}\n"
- 	pkill -x Hyprland 2>/dev/null || hyprctl dispatch exit >/dev/null 2>&1
- 	 if [ -n "${DM_OLD:-}" ] && pgrep -x plasmalogin >/dev/null 2>&1; then
- 	    sudo systemctl start sddm 2>/dev/null || true
- 	    sudo systemctl stop plasmalogin.service 2>/dev/null || true
- 	    ok 'greeter swapped plasmalogin -> sddm'
- 	  fi
- 	 if dm_active; then
- 	   sleep 1
- 	   sudo chvt 1 2>/dev/null || true
- 	    ok "greeter screen is on tty1 |::| press CTRL+ALT+F1 if the login screen does not come up"
- 	fi
-  else 
-    printf "${GREY} Restart Hyprland yourself when ready (logout / back in, or: ${B}pkill Hyprland${R}${GREY}).${R}\n"
- fi
+
+if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+  printf "${CYAN} > Restarting Hyprland. . . . ${R}\n"
+  pkill -x Hyprland 2>/dev/null || hyprctl dispatch exit >/dev/null 2>&1 
+   if [ "$LOCK_STACK" = 1]; then
+     sleep 1
+     PREV_DM=""
+       #kills current greeter
+       for GRT in plasmalogin plasma-kdm sddm gdm lightdm ly greetd cosmic-greeter; do
+        if pgrep -x "$GRT" >/dev/null 2>&1; then
+          sudo systemctl stop "$GRT.service" 2>/dev/null || true 
+          sudo systemctl disable "$GRT.service" 2>/dev/null || true 
+          [ -z "$PREV_DM" ] && PREV_DM="$GRT"
+       fi 
+     done
+   sudo systemctl enable --force sddm >/dev/null 2>&1 || true 
+   sudo systemctl start sddm 
+   sleep 2
+   if systemctl is-active --quiet sddm; then
+     sudo chvt 1 2>/dev/null || true
+      ok "greeter -> sddm now owns tty |::| press CTRL+ALT+F1 if login screen seems flatlined"
+   else
+     err "sddm flatlined |::| Reversing to ${PREV_DM:-$DM_OLD} so you can delta safely"
+     [ -n "${PREV_DM:-$DM_OLD}" ] && sudo systemctl start "${PREV_DM:-$DM_OLD}.service" 2>/dev/null || true
+     sudo chvt 1 2>/dev/null || true
+     warn "sddm flatline log:  journalctl -b -u sddm --no-pager | tail -50"
+     warn "Retry manually, choom:     sudo systemctl stop ${PREV_DM:-$DM_OLD} && sudo systemctl start sddm"
+     exit 1
+    fi
+   fi
+  else
+    printf "${GREY} Restart Hyprland yourself when ready (logout / quit, or run ${B} pkill Hyprland${R})\n"
+  fi
+
 line

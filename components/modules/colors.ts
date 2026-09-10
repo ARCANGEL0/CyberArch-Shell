@@ -693,11 +693,24 @@ export const setUserAlpha = (key: string, a: number) => {
 
 const COLOR_KEYS = Object.keys(NEON)
 const USER_PATH = `${USER_DIR}/user_colors.lua`
+const LOGIN_PATH = `${USER_DIR}/login_colors.json`
+
+const writeLoginColors = (): void => {
+    try {
+        const j = JSON.stringify({
+            accent: rgbToHex(NEON.cyan),
+            bg: rgbToHex(NEON.modalbg),
+            fg: rgbToHex(NEON.glassacc),
+            hover: rgbToHex(NEON.modalhov),
+        })
+        GLib.file_set_contents(LOGIN_PATH, j)
+    } catch (e) { print("[color] login:", e) }
+}
 
 export const loadUserColors = (): void => {
     try {
         const [ok, bytes] = GLib.file_get_contents(USER_PATH)
-        if (!ok) { applyPalette("NETWATCH"); return }
+        if (!ok) { applyPalette("NETWATCH"); writeLoginColors(); return }
         const src = new TextDecoder().decode(bytes)
         const lines = src.split("\n")
         let saved = ""
@@ -718,6 +731,7 @@ export const loadUserColors = (): void => {
         applyDerived(name)
         applyRioStyle(name)
         notifyColorChange()
+        writeLoginColors()
     } catch (e) { print("[color] load:", e) }
 }
 
@@ -734,5 +748,6 @@ export const saveUserColors = (): void => {
         }
         for (const k of Object.keys(OVR)) if (OVR[k]) out += `over["${k}"] = true\n`
         GLib.file_set_contents(USER_PATH, out)
+        writeLoginColors()
     } catch (e) { print("[color] save:", e) }
 }

@@ -15,19 +15,30 @@ Rectangle {
     readonly property real s: Screen.height / 1080
     property real ui: 0
 
-    readonly property color cAmber:      "#FF2A3C"
-    readonly property color cAmberSoft:  "#FF6B78"
+    property color cAmber:      "#FF2A3C"
+    property color cAmberSoft:  "#FF6B78"
     readonly property color cAmberDim:   "#7A1620"
-    readonly property color cWhite:      "#E6E4D8"
+    property color cWhite:      "#E6E4D8"
     readonly property color cGray:       "#9A8B8D"
     readonly property color cGrayDim:    "#5A4A4E"
     readonly property color cRed:        "#D92027"
     readonly property color cRedDim:     "#7A1E22"
     readonly property color cYellow:     "#FFF200"
-    readonly property color cBlack:      "#0A0A08"
-    readonly property color cPanel:      Qt.rgba(10/255,10/255,8/255,0.72)
-    readonly property color cLine:       Qt.rgba(255/255,42/255,60/255,0.35)
+    property color cBlack:      "#0A0A08"
+    property color cPanel:      Qt.rgba(10/255,10/255,8/255,0.72)
+    property color cLine:       Qt.rgba(255/255,42/255,60/255,0.35)
     readonly property color cLineDim:    Qt.rgba(154/255,150/255,138/255,0.28)
+
+    function applyLoginColors(o) {
+        if (o.accent) { root.cAmber = o.accent; root.cLine = Qt.rgba(root.cAmber.r, root.cAmber.g, root.cAmber.b, 0.35) }
+        if (o.hover) root.cAmberSoft = o.hover
+        if (o.fg) root.cWhite = o.fg
+        if (o.bg) { root.cBlack = o.bg; root.cPanel = Qt.rgba(root.cBlack.r, root.cBlack.g, root.cBlack.b, 0.72) }
+    }
+    Process { id: colorProc; command: ["sh","-c","cat \"" + root.cyberarchConfigDir + "/login_colors.json\" 2>/dev/null || echo '{}'"]; running: true
+        stdout: StdioCollector { onStreamFinished: {
+            try { root.applyLoginColors(JSON.parse(this.text)) } catch(e) {}
+        } } }
 
     FontLoader { id: fHead;        source: "font/Rajdhani-Bold.ttf" }
     FontLoader { id: fMono;        source: "font/ShareTechMono-Regular.ttf" }
