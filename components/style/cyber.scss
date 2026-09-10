@@ -16,14 +16,14 @@ window.aug, .aug { background-color: transparent; }
 .aug-wrap { background-color: transparent; }
 
 // ── left system meters (tilted 3D canvas, sizes itself) ──────────────────────
-.monitors-wrap { margin: 20px 0 0 20px; }
+.monitors-wrap { margin: 0; }
 .monitors { padding: 0; }
 
 // ── right side panel ─────────────────────────────────────────────────────────
-.sidepanel-wrap { margin: 26px 28px 0 0; }
+.sidepanel-wrap { margin: 0; }
 .side-panel { padding: 0; }
 
-.nowplaying-wrap { margin: 30px 414px 0 0; background-color: transparent; }
+.nowplaying-wrap { margin: 0; background-color: transparent; }
 .nowplaying { background-color: transparent; }
 
 .clock-card { padding: 0 0 4px 0; }
@@ -57,8 +57,8 @@ window.aug, .aug { background-color: transparent; }
 .notif-row:hover { border-left: 2px solid $red; background-color: $red-f; }
 
 // ── bottom dock — framed icon tiles ──────────────────────────────────────────
-.toggles-wrap  { margin: 0 0 0px -5px; }
-.launcher-wrap { margin: 0 2px 24px 0; }
+.toggles-wrap  { margin: 0; }
+.launcher-wrap { margin: 0; }
 .launcher-btn { background-color: transparent; padding: 0; }
 
 .dock { padding: 0; }
@@ -207,14 +207,14 @@ window.aug, .aug { background-color: transparent; }
 .dismiss-btn:hover { background-color: rgba(255, 45, 61, 0.3); color: #fff; }
 
 // ── notification popups (top-left, tilted holographic cairo panels) ──────────
-.notifpopups-wrap { margin: 156px 0 0 18px; background-color: transparent; }
+.notifpopups-wrap { margin: 0; background-color: transparent; }
 
 // ── persistent notification center (middle-left) ────────────────────────────
 .notifcenter-wrap { margin: 0 0 0 18px; background-color: transparent; }
 .notifcenter-box { background-color: transparent; }
 
 // ── app launcher (bottom-right) ──────────────────────────────────────────────
-.launcher-wrap { margin: 0 3px 0 0; background-color: transparent; }
+.launcher-wrap { margin: 0; background-color: transparent; }
 // ── quest tracker (mid-right, below the side panel) ──────────────────────────
 .quest-wrap { margin: 62px 36px 0 0; background-color: transparent; }
 

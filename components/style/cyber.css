@@ -11,19 +11,19 @@ window.aug, .aug {
   background-color: transparent; }
 
 .monitors-wrap {
-  margin: 20px 0 0 20px; }
+  margin: 0; }
 
 .monitors {
   padding: 0; }
 
 .sidepanel-wrap {
-  margin: 26px 28px 0 0; }
+  margin: 0; }
 
 .side-panel {
   padding: 0; }
 
 .nowplaying-wrap {
-  margin: 30px 414px 0 0;
+  margin: 0;
   background-color: transparent; }
 
 .nowplaying {
@@ -62,10 +62,10 @@ window.aug, .aug {
   background-color: rgba(255, 45, 61, 0.12); }
 
 .toggles-wrap {
-  margin: 0 0 0px -5px; }
+  margin: 0; }
 
 .launcher-wrap {
-  margin: 0 2px 24px 0; }
+  margin: 0; }
 
 .launcher-btn {
   background-color: transparent;
@@ -337,7 +337,7 @@ window.aug, .aug {
   color: #fff; }
 
 .notifpopups-wrap {
-  margin: 156px 0 0 18px;
+  margin: 0;
   background-color: transparent; }
 
 .notifcenter-wrap {
@@ -348,7 +348,7 @@ window.aug, .aug {
   background-color: transparent; }
 
 .launcher-wrap {
-  margin: 0 3px 0 0;
+  margin: 0;
   background-color: transparent; }
 
 .quest-wrap {

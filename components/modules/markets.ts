@@ -2,7 +2,7 @@ import { Box, DrawingArea, EventBox } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
-import { CYBER_DIR, USER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
@@ -983,7 +983,8 @@ const openNewsArticle = (id: string) => {
     else mkModal?.open?.()
 }
 
-export const MarketsPanel = () => {
+export const MarketsPanel = (mon?: any) => {
+    const S = scaleOf(mon)
     loadPins()
     fetchBrowse("stocks").catch(() => { })
     fetchBrowse("crypto").catch(() => { })
@@ -1001,8 +1002,9 @@ export const MarketsPanel = () => {
     let miniHits: any[] = []
     let hoverMiniNews = ""
     let hoverMiniAnim: any = {}
-    area.set_size_request(MARKET_PLANE.width, MARKET_PLANE.height)
+    area.set_size_request(Math.round(MARKET_PLANE.width * S), Math.round(MARKET_PLANE.height * S))
     area.connect("draw", (_w: any, ctx: any) => {
+        ctx.scale(S, S)
         miniHits = []
         const viewTab = tab
         const newsMini = newsRows.filter((r: any) => sameDay(r.ts))
@@ -1097,7 +1099,7 @@ export const MarketsPanel = () => {
     }
     evt.connect("motion-notify-event", (_w: any, e: any) => {
         let px = 0, py = 0
-        try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1]; py = c[2] } } catch { }
+        try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1] / S; py = c[2] / S } } catch { }
         const h = tabHit(px, py)
         if (h !== hoverTab) { hoverTab = h; kickHover() }
         if (tab === "news") {
@@ -1110,7 +1112,7 @@ export const MarketsPanel = () => {
     evt.connect("leave-notify-event", () => { if (hoverTab || hoverMiniNews) { hoverTab = ""; hoverMiniNews = ""; kickHover() } return false })
     evt.connect("button-press-event", (_w: any, e: any) => {
         let px = 0, py = 0
-        try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1]; py = c[2] } } catch { }
+        try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1] / S; py = c[2] / S } } catch { }
         const now = Date.now()
         if (now - lastTap < 420) { lastTap = 0; openMarketsModal(); return true }
         lastTap = now

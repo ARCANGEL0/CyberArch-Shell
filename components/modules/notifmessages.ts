@@ -1,10 +1,10 @@
 
-import { Window, Box, DrawingArea, EventBox } from "./widget.ts"
+import { Window, Box, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
-import { CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
 import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -197,7 +197,7 @@ const onScroll = (_w: any, e: any) => {
 
 let msgs: any[] = []
 let panelIntro = 0, lastActivity = 0, hudVisible = false
-let area: any = null, loop: any = null, win: any = null
+let area: any = null, loop: any = null, win: any = null, hudWrap: any = null
 let hoverRow = -1, dismissHover = false
 let tabHover: "msg" | "apps" | null = null, blDismissHover = false
 let trayHoverIdx = -1
@@ -857,21 +857,30 @@ const nFire = () => { for (const cb of nCbs) cb() }
 export const toggleNotifHud = () => {
     if (hudVisible && view === "detail") { switchNotifView("main"); return }
     hudVisible = !hudVisible
-    if (hudVisible) { panelIntro = 0; animProg = 0; view = "apps"; selectedApp = null; scrollOffset = 0; menuState = null; win.visible = true; applyInput() }
+    if (hudVisible) {
+        panelIntro = 0; animProg = 0; view = "apps"; selectedApp = null; scrollOffset = 0; menuState = null
+        try {
+            ;(win as any).gdkmonitor = activeMonitor()
+            const S = winScale(win)
+            area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+            if (hudWrap) { hudWrap.set_margin_top(Math.round(156 * S)); hudWrap.set_margin_left(Math.round(18 * S)) }
+        } catch {}
+        win.visible = true; applyInput()
+    }
     kick(); nFire()
 }
 
 export const NotifHudWindow = () => {
     area = DrawingArea({})
-    area.set_size_request(plane.width, plane.height)
+    area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
     onColorChange(() => area.queue_draw())
-    area.connect("draw", (_w, ctx) => (draw(ctx), false))
+    area.connect("draw", (_w, ctx) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     try { area.add_events(Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
     area.connect("scroll-event", onScroll)
 
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.POINTER_MOTION_MASK) } catch {}
-    const coords = (e: any): [number, number] => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1], c[2]] } catch {} return [-1, -1] }
+    const coords = (e: any): [number, number] => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1] / winScale(win), c[2] / winScale(win)] } catch {} return [-1, -1] }
 
     const scrollbarMetrics = () => {
         const items = rowItems(); let totalH = 0
@@ -961,11 +970,14 @@ export const NotifHudWindow = () => {
     })
     evt.connect("button-release-event", () => { draggingScroll = false; return false })
 
+    const wrap = Box({ className: "notifpopups-wrap", child: evt })
+    try { wrap.set_margin_top(Math.round(156 * SCALE)); wrap.set_margin_left(Math.round(18 * SCALE)) } catch {}
+    hudWrap = wrap
     win = Window({
         name: "notifhud", className: "aug notifhud",
         anchor: Anchor.TOP | Anchor.LEFT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
         visible: false,
-        child: Box({ className: "notifpopups-wrap", child: evt }),
+        child: wrap,
     })
     win.connect("realize", applyInput); win.connect("map", applyInput); timeout(120, applyInput)
     try {
