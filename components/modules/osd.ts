@@ -6,6 +6,7 @@ import AstalWp from "gi://AstalWp"
 import { makePlane, tiltBar, tiltText, strokePath } from "./proj.ts"
 import { NEON, onColorChange } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
+import { SCALE, winScale } from "../../env.ts"
 const ICONF = "FiraCode Nerd Font"
 const read = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d).trim() : "" } catch { return "" } }
 const exists = (p) => GLib.file_test(p, GLib.FileTest.EXISTS)
@@ -23,8 +24,10 @@ export const OsdWindow = () => {
  let hideTimer = null, brtCtl: any = null
  const area = DrawingArea({})
  onColorChange(() => area.queue_draw())
- area.set_size_request(plane.width, plane.height)
+ area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
  area.connect("draw", (_w, ctx) => {
+ const S = winScale(win)
+ ctx.scale(S, S)
  const col = kind === "vol" ? NEON.cyan : NEON.amber
  const icon = kind === "vol" ? (muted ? "\uf026" : (frac > 0.5 ? "\uf028" : "\uf027")) : "\uf185"
  const label = kind === "vol" ? "VOLUME" : "BRIGHTNESS"
@@ -47,8 +50,14 @@ export const OsdWindow = () => {
  })
 
  const show = () => {
+ if (!win.visible) {
+ try {
+ (win as any).gdkmonitor = activeMonitor()
+ const S = winScale(win)
+ area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+ } catch {}
+ }
  area.queue_draw()
- if (!win.visible) { try { (win as any).gdkmonitor = activeMonitor() } catch {} }
  win.visible = true
  brtCtl && brtCtl(true)
  if (hideTimer) { hideTimer.cancel?.() }

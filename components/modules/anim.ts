@@ -1,7 +1,7 @@
 import { App, Window, Box, DrawingArea, activeMonitor, monitorAtPoint } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
-import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
+import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, SCALE, winScale, monW, monH, scaleOf } from "../../env.ts"
 import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"
 import { showToast } from "./toast.ts"
@@ -25,8 +25,8 @@ const GX = 78, GY = 52
 let grid= []
 let seq: [number, number][] = []
 let cols = 0, rows = 0
-const genBreach = () => {
- cols = Math.ceil(SCREEN_WIDTH / GX); rows = Math.ceil(SCREEN_HEIGHT / GY)
+const genBreach = (w = SCREEN_WIDTH / SCALE, h = SCREEN_HEIGHT / SCALE) => {
+ cols = Math.ceil(w / GX); rows = Math.ceil(h / GY)
  grid = []
  for (let r = 0; r < rows; r++) { const row= []; for (let c = 0; c < cols; c++) row.push(HEX[(Math.random() * HEX.length) | 0]); grid.push(row) }
  seq = []
@@ -54,6 +54,7 @@ const drawBreach = (ctx, W, H, p, title, sub, flash) => {
  if (order > reveal) continue
  const x = c * GX + 14, y = r * GY + 34
  const key = `${r},${c}`, si = seqSet.get(key)
+ const glyph = grid[r]?.[c] ?? HEX[0]
  if (si !== undefined) {
  const done = si <= cursor
  ctx.setSourceRGBA(rr, rg, rb, (si === cursor ? 1 : 0.85) * env)
@@ -61,11 +62,11 @@ const drawBreach = (ctx, W, H, p, title, sub, flash) => {
  ctx.moveTo(x + 22, y); ctx.showText("]")
  if (si === cursor) ctx.setSourceRGBA(1, 1, 1, env)
  else ctx.setSourceRGBA(done ? gr : rr, done ? gg : rg, done ? gb : rb)
- ctx.moveTo(x, y); ctx.showText(grid[r][c])
+ ctx.moveTo(x, y); ctx.showText(glyph)
  } else {
  const edge = Math.max(0, 1 - (reveal - order) * 4)
  ctx.setSourceRGBA(rr, rg, rb, (0.4 + 0.5 * edge) * env)
- ctx.moveTo(x, y); ctx.showText(grid[r][c])
+ ctx.moveTo(x, y); ctx.showText(glyph)
  }
  }
  for (let i = 0; i < 5; i++) { const yy = rnd(0, H), off = rnd(-40, 40) * env; ctx.setSourceRGBA(rr, rg, rb, 0.10 * env); ctx.rectangle(off, yy, W, 3); ctx.fill() }
@@ -73,7 +74,7 @@ const drawBreach = (ctx, W, H, p, title, sub, flash) => {
  ctx.setSourceRGBA(rr, rg, rb, 0.95 * env)
  ctx.moveTo(60, 64); ctx.showText(`BREACH PROTOCOL // ${title}`)
  ctx.setFontSize(13); ctx.setSourceRGBA(rr, rg, rb, 0.6 * env)
- ctx.moveTo(60, 86); ctx.showText("BUFFER " + seq.map((s, i) => i <= cursor ? grid[s[0]][s[1]] : "··").join(" "))
+ ctx.moveTo(60, 86); ctx.showText("BUFFER " + seq.map((s, i) => i <= cursor ? (grid[s[0]]?.[s[1]] ?? "·") : "··").join(" "))
  const complete = p > 0.66
  ctx.setFontSize(46); ctx.selectFontFace(TITLE, 0, 1)
  const msg = complete ? "UPLOAD COMPLETE" : sub
@@ -90,7 +91,7 @@ const drawBreach = (ctx, W, H, p, title, sub, flash) => {
 type WsState = {
  win: any, area: any, prog: number, timer: any, seed: number, start: number, busy: boolean,
  cachePix: any, frames: any[], small: any, pixbuf: any, lastCap: number, capPending: boolean,
- x: number, y: number, w: number, h: number, hw: number, hh: number, tmp: string, cache: string,
+ x: number, y: number, w: number, h: number, hw: number, hh: number, tmp: string, cache: string, S: number,
 }
 let wsStates: WsState[] = []
 const WsCairo: any = (imports as any).cairo
@@ -305,7 +306,7 @@ const recache = (st: WsState) => {
 
 const drawWs = (ctx, st: WsState, p) => {
  if (p <= 0 || p >= 1) return
- if (!st.small) { if (!st.pixbuf) drawWsGlitchProc(ctx, st.w, st.h, p, st.seed); return }
+ if (!st.small) { if (!st.pixbuf) { ctx.save(); ctx.scale(st.S, st.S); drawWsGlitchProc(ctx, st.w / st.S, st.h / st.S, p, st.seed); ctx.restore() } return }
  let baseA = 1
  if (p > 0.70) {
      const tp = (p - 0.70) / 0.30
@@ -345,6 +346,7 @@ export const WsAnimWindow = () => {
          cachePix: null, frames: [], small: null, pixbuf: null, lastCap: 0, capPending: false,
          x, y, w, h, hw: Math.max(1, w >> 1), hh: Math.max(1, h >> 1),
          tmp: `/tmp/aug_ws_frame_${i}.ppm`, cache: `/tmp/aug_ws_cache_${i}.ppm`,
+         S: scaleOf(mon),
      }
      area.set_size_request(w, h)
      area.connect("draw", (_w, ctx) => (drawWs(ctx, st, st.prog), false))
@@ -388,15 +390,22 @@ let bnTitle = "", bnSub = "", bnFlash = 0
 export const BannerWindow = () => {
  bnArea = DrawingArea({})
  bnArea.set_size_request(SCREEN_WIDTH, SCREEN_HEIGHT)
- bnArea.connect("draw", (_w, ctx) => (drawBreach(ctx, SCREEN_WIDTH, SCREEN_HEIGHT, bnProg, bnTitle, bnSub, bnFlash), false))
+ bnArea.connect("draw", (_w, ctx) => {
+ const S = winScale(bnWin)
+ ctx.scale(S, S)
+ drawBreach(ctx, monW(bnWin) / S, monH(bnWin) / S, bnProg, bnTitle, bnSub, bnFlash)
+ return false
+ })
  bnWin = Window({ name: "banner", className: "aug banner", anchor: Anchor.TOP | Anchor.BOTTOM | Anchor.LEFT | Anchor.RIGHT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE, visible: false, child: bnArea })
  return bnWin
 }
 export const triggerBanner = (title, sub, flash = 0, payload = "") => {
  if (!animMaster()) return
- bnTitle = title; bnSub = sub; bnFlash = flash; genBreach()
+ bnTitle = title; bnSub = sub; bnFlash = flash
+ try { bnWin.gdkmonitor = geomMonitor(parseGeom(payload)) } catch {}
+ try { const S = winScale(bnWin); genBreach(monW(bnWin) / S, monH(bnWin) / S) } catch { genBreach() }
  if (bnTimer) bnTimer.cancel()
- bnProg = 0; try { bnWin.gdkmonitor = geomMonitor(parseGeom(payload)) } catch {} bnWin.visible = true
+ bnProg = 0; bnWin.visible = true
  bnTimer = interval(16, () => { bnProg += 0.03; if (bnProg >= 1) { bnTimer.cancel(); bnTimer = null; bnWin.visible = false; return } bnArea.queue_draw() })
 }
 export const triggerShutter = (payload = "") => triggerBanner("SNAPSHOT", "CAPTURING", 1, payload)
@@ -543,8 +552,8 @@ const recBloom = (screenCtx, w, h, renderFn) => {
 
 export const RecWindow = () => {
  recLeftArea = DrawingArea({})
- recLeftArea.set_size_request(leftPlane.width, leftPlane.height)
- recLeftArea.connect("draw", (_w, ctx) => { recBloom(ctx, leftPlane.width, leftPlane.height, (c) => drawRecLeft(c, recHudTick)); return false })
+ recLeftArea.set_size_request(Math.round(leftPlane.width * SCALE), Math.round(leftPlane.height * SCALE))
+ recLeftArea.connect("draw", (_w, ctx) => { const S = winScale(recLeftWin); recBloom(ctx, leftPlane.width * S, leftPlane.height * S, (c) => { c.scale(S, S); drawRecLeft(c, recHudTick) }); return false })
  recLeftWin = Window({
  name: "rec_left", className: "aug rec_left",
  anchor: Anchor.TOP | Anchor.LEFT,
@@ -554,8 +563,8 @@ export const RecWindow = () => {
  passthrough(recLeftWin)
 
  recRightArea = DrawingArea({})
- recRightArea.set_size_request(rightPlane.width, rightPlane.height)
- recRightArea.connect("draw", (_w, ctx) => { recBloom(ctx, rightPlane.width, rightPlane.height, (c) => drawRecRight(c)); return false })
+ recRightArea.set_size_request(Math.round(rightPlane.width * SCALE), Math.round(rightPlane.height * SCALE))
+ recRightArea.connect("draw", (_w, ctx) => { const S = winScale(recRightWin); recBloom(ctx, rightPlane.width * S, rightPlane.height * S, (c) => { c.scale(S, S); drawRecRight(c) }); return false })
  recRightWin = Window({
  name: "rec_right", className: "aug rec_right",
  anchor: Anchor.TOP | Anchor.RIGHT,
@@ -565,8 +574,8 @@ export const RecWindow = () => {
  passthrough(recRightWin)
 
  recBotArea = DrawingArea({})
- recBotArea.set_size_request(botPlane.width, botPlane.height)
- recBotArea.connect("draw", (_w, ctx) => { recBloom(ctx, botPlane.width, botPlane.height, (c) => drawRecBot(c, recHudTick)); return false })
+ recBotArea.set_size_request(Math.round(botPlane.width * SCALE), Math.round(botPlane.height * SCALE))
+ recBotArea.connect("draw", (_w, ctx) => { const S = winScale(recBotWin); recBloom(ctx, botPlane.width * S, botPlane.height * S, (c) => { c.scale(S, S); drawRecBot(c, recHudTick) }); return false })
  recBotWin = Window({
  name: "rec_bot", className: "aug rec_bot",
  anchor: Anchor.BOTTOM | Anchor.LEFT,
@@ -576,8 +585,8 @@ export const RecWindow = () => {
  passthrough(recBotWin)
 
  recTopArea = DrawingArea({})
- recTopArea.set_size_request(REC_TOP_W, REC_TOP_H)
- recTopArea.connect("draw", (_w, ctx) => { recBloom(ctx, REC_TOP_W, REC_TOP_H, (c) => drawRecTop(c)); return false })
+ recTopArea.set_size_request(Math.round(REC_TOP_W * SCALE), Math.round(REC_TOP_H * SCALE))
+ recTopArea.connect("draw", (_w, ctx) => { const S = winScale(recTopWin); recBloom(ctx, REC_TOP_W * S, REC_TOP_H * S, (c) => { c.scale(S, S); drawRecTop(c) }); return false })
  recTopWin = Window({
  name: "rec_top", className: "aug rec_top",
  anchor: Anchor.TOP,
@@ -780,7 +789,9 @@ export const RecGlitchWindow = () => {
  recTransArea.set_size_request(SCREEN_WIDTH, SCREEN_HEIGHT)
  recTransArea.connect("draw", (_w, ctx) => {
  if (!recTransDir) return false
- drawRecTransition(ctx, SCREEN_WIDTH, SCREEN_HEIGHT, recTransProg)
+ const S = winScale(recTransWin)
+ ctx.scale(S, S)
+ drawRecTransition(ctx, monW(recTransWin) / S, monH(recTransWin) / S, recTransProg)
  return false
  })
  recTransWin = Window({
@@ -796,7 +807,7 @@ export const RecGlitchWindow = () => {
 const drawRecFrame = (ctx, W, H) => {
  if (!recRegionRect || recFrameFade <= 0.01) return
  const { x, y, w, h } = recRegionRect
- const a = recFrameFade
+ const a = recFrameFade, S = winScale(recFrameWin)
  const [rr, rg, rb] = f(NEON.overlay)
  ctx.setSourceRGBA(0, 0, 0, 0.5 * a)
  ctx.rectangle(0, 0, W, y)
@@ -804,18 +815,18 @@ const drawRecFrame = (ctx, W, H) => {
  ctx.rectangle(0, y, x, h)
  ctx.rectangle(x + w, y, W - x - w, h)
  ctx.fill()
- ctx.setSourceRGBA(rr, rg, rb, 0.9 * a); ctx.setLineWidth(2)
- ctx.rectangle(x - 1.5, y - 1.5, w + 3, h + 3); ctx.stroke()
- ctx.setLineWidth(3)
- const L = 22
+ ctx.setSourceRGBA(rr, rg, rb, 0.9 * a); ctx.setLineWidth(2 * S)
+ ctx.rectangle(x - 1.5 * S, y - 1.5 * S, w + 3 * S, h + 3 * S); ctx.stroke()
+ ctx.setLineWidth(3 * S)
+ const L = 22 * S
  for (const [px, py, dx, dy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]] as const) {
  ctx.newPath(); ctx.moveTo(px, py); ctx.lineTo(px + L * dx, py); ctx.stroke()
  ctx.newPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + L * dy); ctx.stroke()
  }
  const blink = 0.55 + 0.45 * Math.sin(recHudTick * 0.6)
- ctx.setSourceRGBA(rr, rg, rb, blink * a); ctx.arc(x + 11, y - 12, 4, 0, Math.PI * 2); ctx.fill()
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11)
- ctx.setSourceRGBA(rr, rg, rb, 0.95 * a); ctx.moveTo(x + 22, y - 8); ctx.showText("REC " + `${Math.round(w)}x${Math.round(h)}`)
+ ctx.setSourceRGBA(rr, rg, rb, blink * a); ctx.arc(x + 11 * S, y - 12 * S, 4 * S, 0, Math.PI * 2); ctx.fill()
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11 * S)
+ ctx.setSourceRGBA(rr, rg, rb, 0.95 * a); ctx.moveTo(x + 22 * S, y - 8 * S); ctx.showText("REC " + `${Math.round(w)}x${Math.round(h)}`)
 }
 
 export const RecFrameWindow = () => {
@@ -855,6 +866,13 @@ const setRecMonitor = (g) => {
  recGeom = g
  const m = geomMonitor(g)
  try { recLeftWin.gdkmonitor = m; recRightWin.gdkmonitor = m; recBotWin.gdkmonitor = m; recTopWin.gdkmonitor = m; recTransWin.gdkmonitor = m } catch {}
+ try {
+ const S = winScale(recLeftWin)
+ recLeftArea.set_size_request(Math.round(leftPlane.width * S), Math.round(leftPlane.height * S))
+ recRightArea.set_size_request(Math.round(rightPlane.width * S), Math.round(rightPlane.height * S))
+ recBotArea.set_size_request(Math.round(botPlane.width * S), Math.round(botPlane.height * S))
+ recTopArea.set_size_request(Math.round(REC_TOP_W * S), Math.round(REC_TOP_H * S))
+ } catch {}
 }
 
 const showRecHud = (g = null) => {

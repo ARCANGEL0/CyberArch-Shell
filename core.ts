@@ -9,6 +9,8 @@
 
 
 
+// Dropped hybrars, too flaky to keep updating and targeting for build, besides alot of issue report
+
 import { App, Window, Box } from "./components/modules/widget.ts"
 import { Anchor, Layer, Exclusivity } from "./components/modules/widget.ts"
 import { execAsync, timeout, interval } from "astal"
@@ -16,7 +18,7 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gio from "gi://Gio"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
-import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT } from "./env.ts"
+import { COMPONENTS_DIR, CYBER_DIR, SCREEN_WIDTH, SCREEN_HEIGHT, scaleOf } from "./env.ts"
 import { loadUserColors } from "./components/modules/colors.ts"
 import { applyWmRules, applyWmFromTheme } from "./components/modules/wmconfig.ts"
 import { Monitors, setWorkspaceBadge } from "./components/modules/monitors.ts"
@@ -56,7 +58,23 @@ const compileCss = async () => {
 }
 
 const hudWins = []
+const WRAP_MARGINS: Record<string, [number, number, number, number]> = {
+ monitors: [20, 0, 0, 20],
+ sidepanel: [26, 28, 0, 0],
+ toggles: [0, 0, 0, -5],
+}
 const surface = (mon, name, anchor, child, extra = {}) => {
+ const S = scaleOf(mon)
+ const wrap = Box({ className: `aug-wrap ${name}-wrap`, child })
+ const m = WRAP_MARGINS[name]
+ if (m) {
+ try {
+ wrap.set_margin_top(Math.round(m[0] * S))
+ wrap.set_margin_right(Math.round(m[1] * S))
+ wrap.set_margin_bottom(Math.round(m[2] * S))
+ wrap.set_margin_left(Math.round(m[3] * S))
+ } catch {}
+ }
  const w = Window({
  name,
  className: `aug ${name}`,
@@ -64,7 +82,7 @@ const surface = (mon, name, anchor, child, extra = {}) => {
  anchor,
  exclusivity: Exclusivity.IGNORE,
  layer: Layer.BOTTOM,
- child: Box({ className: `aug-wrap ${name}-wrap`, child }),
+ child: wrap,
  ...extra,
  })
  hudWins.push(w)
@@ -311,11 +329,12 @@ App.start({
  applyWmFromTheme()
 
  for (const mon of (App as any).get_monitors()) {
- surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors())
- { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel()); (sw as any)._rectHit = true }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(), { margin_top: 560 }); (mw as any)._rectHit = true }
- { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock()); (hw as any)._rectHit = true }
- { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles()); (tw as any)._rectHit = true }
+ const S = scaleOf(mon)
+ surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
+ { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
+ { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
+ { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
+ { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
  { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
  }
  passthrough(OsdWindow())

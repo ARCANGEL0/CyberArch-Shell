@@ -7,7 +7,7 @@ const SS_DEFAULT = 1
 import { execAsync, interval, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
-import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, SCALE, winScale, monW } from "../../env.ts"
 import { Anchor } from "./widget.ts"
 import {
     Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
@@ -201,6 +201,8 @@ export const createModal = (spec) => {
         HUDC = null; setTxtFX(false)
     }
     const draw = (screenCtx) => {
+        const S = winScale(win)
+        screenCtx.scale(S, S)
         screenCtx.setOperator(0); screenCtx.paint(); screenCtx.setOperator(2)
         if (intro <= 0.002 && !visible) return
         const ss = spec.ss ?? SS_DEFAULT
@@ -226,6 +228,7 @@ export const createModal = (spec) => {
     const shapeInput = () => {
         try {
             const gw = win?.get_window?.(); if (!gw) return
+            const S = winScale(win)
             const reg = new Cairo.Region()
             if (visible) {
                 const steps = 56
@@ -233,31 +236,31 @@ export const createModal = (spec) => {
                     const v0 = (i / steps) * H, v1 = ((i + 1) / steps) * H
                     const a0 = plane.project(0, v0), a1 = plane.project(W, v0)
                     const b0 = plane.project(0, v1), b1 = plane.project(W, v1)
-                    const x0 = Math.floor(Math.min(a0[0], b0[0])) - 3
-                    const x1 = Math.ceil(Math.max(a1[0], b1[0])) + 3
-                    const y0 = Math.floor(Math.min(a0[1], a1[1])) - 1
-                    const y1 = Math.ceil(Math.max(b0[1], b1[1])) + 1
+                    const x0 = Math.floor(Math.min(a0[0], b0[0]) * S) - 3
+                    const x1 = Math.ceil(Math.max(a1[0], b1[0]) * S) + 3
+                    const y0 = Math.floor(Math.min(a0[1], a1[1]) * S) - 1
+                    const y1 = Math.ceil(Math.max(b0[1], b1[1]) * S) + 1
                     reg.unionRectangle({ x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) })
                 }
             }
             gw.input_shape_combine_region(reg, 0, 0)
         } catch (e) { print("[cyber] modal input shape:", e) }
     }
-    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {} spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
+    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {}; try { const S = winScale(win); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
     ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; if (!animOn("animModal")) intro = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
     ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
     ctrl.hitRegions = () => hitRegions
 
-    area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
     onColorChange(() => { surf = null; ctrl.requestDraw() })
 
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
     const wbtn = (e) => { try { return e.get_button?.()[1] ?? e.button } catch { return 1 } }
-    const xy = (e) => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1], c[2]] } catch {} try { const x = e.x, y = e.y; if (x != null && y != null) return [x, y] } catch {} return [0, 0] }
+    const xy = (e) => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1] / winScale(win), c[2] / winScale(win)] } catch {} try { const x = e.x, y = e.y; if (x != null && y != null) return [x / winScale(win), y / winScale(win)] } catch {} return [0, 0] }
     const localPoint = (e) => { const [x, y] = xy(e); return unwarpRevealPoint(x, y, plane, W, H, intro, seed) }
     const contains = (r, x, y) => x >= Math.min(r.bx0, r.bx1) && x <= Math.max(r.bx0, r.bx1) && y >= Math.min(r.by0, r.by1) && y <= Math.max(r.by0, r.by1)
     const sliderParam = (r, x, y) => {

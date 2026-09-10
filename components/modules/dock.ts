@@ -9,7 +9,7 @@ import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
 import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./colors.ts"
 import { animOn } from "./config.ts"
 const NOTIF_RED: RGB = NEON.notifbadge
-import { CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, scaleOf } from "../../env.ts"
 
 const Cairo: any = (imports as any).cairo
 let _phoneIcon: any = null
@@ -161,11 +161,13 @@ const makeHover = (layout: typeof VLAYOUT, hv: any, getHovered: () => string | n
  return { kick, cancel: () => hoverT && (hoverT.cancel(), (hoverT = null)) }
 }
 
-const VertDock = () => {
+const VertDock = (mon?: any) => {
+ const S = scaleOf(mon)
  const on = {}, open = {}, hv = {}
-  const area = DrawingArea({}); area.set_size_request(vsp.width + 10, vsp.height + 20); _dockArea = area
+  const area = DrawingArea({}); area.set_size_request(Math.round((vsp.width + 10) * S), Math.round((vsp.height + 20) * S)); _dockArea = area
  const recolorV = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
+ ctx.scale(S, S)
  for (const s of VLAYOUT) {
  const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.dockvh : NEON.dockv
  const fr = vertSlotFrame(s.x, s.y, s.w, s.h)
@@ -213,8 +215,8 @@ const VertDock = () => {
  const evt = EventBox({ child: area })
  let musicTap: any = null
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
- evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} const k = hitSlot(x, y); if (!k) return false; if (k === "music") { let dbl = false; try { dbl = e.get_event_type() === Gdk.EventType.DOUBLE_BUTTON_PRESS } catch {} if (dbl) { if (musicTap) { musicTap.cancel(); musicTap = null } playPauseActive() } else { if (musicTap) musicTap.cancel(); musicTap = timeout(230, () => { musicTap = null; togglePlayer(); openRefresh() }) } } else if (k === "notification") { toggleNotifHud(); openRefresh() } else if (k === "rec") { sh(`${CYBER_DIR}/scripts/screenrecord`); openRefresh() } else { toggleModal(k); openRefresh() } return false })
- evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
+ evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (!k) return false; if (k === "music") { let dbl = false; try { dbl = e.get_event_type() === Gdk.EventType.DOUBLE_BUTTON_PRESS } catch {} if (dbl) { if (musicTap) { musicTap.cancel(); musicTap = null } playPauseActive() } else { if (musicTap) musicTap.cancel(); musicTap = timeout(230, () => { musicTap = null; togglePlayer(); openRefresh() }) } } else if (k === "notification") { toggleNotifHud(); openRefresh() } else if (k === "rec") { sh(`${CYBER_DIR}/scripts/screenrecord`); openRefresh() } else { toggleModal(k); openRefresh() } return false })
+ evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
  evt.connect("leave-notify-event", () => { hoverBus.key = null; kickHover(); return false })
  openRefresh = () => { let ch = false; for (const s of VLAYOUT) { const o = s.k === "music" ? isPlayerOpen() : s.k === "notification" ? isNotifHudOpen() : isModalOpen(s.k); if (o !== open[s.k]) { open[s.k] = o; ch = true } } if (ch) area.queue_draw() }
  const stateRefresh = () => { VLAYOUT.forEach(s => { const t = tileOf(s.k); (t.state ? t.state() : Promise.resolve(true)).then(v => { if (v !== on[s.k]) { on[s.k] = v; area.queue_draw() } }).catch(() => {}) }) }
@@ -235,11 +237,13 @@ const VertDock = () => {
   return evt
 }
 
-const HorizDock = () => {
+const HorizDock = (mon?: any) => {
+ const S = scaleOf(mon)
  const on = {}, open = {}, hv = {}
-  const area = DrawingArea({}); area.set_size_request(hsp.width, hsp.height)
+  const area = DrawingArea({}); area.set_size_request(Math.round(hsp.width * S), Math.round(hsp.height * S))
  const recolorH = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
+ ctx.scale(S, S)
  for (const s of HLAYOUT) {
  const t = tileOf(s.k), hov = hv[s.k] || 0, edge = (open[s.k] || (neonBtn.value && hov > 0.04)) ? NEON.dockhh : NEON.dockh
  const fr = horizSlotFrame(s.x, s.y, s.w, s.h)
@@ -263,8 +267,8 @@ const HorizDock = () => {
  hoverers.push(hover.kick)
  const evt = EventBox({ child: area })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
- evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh(`${CYBER_DIR}/scripts/screenrecord`); else toggleModal(k); openRefresh() } return false })
- evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
+ evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh(`${CYBER_DIR}/scripts/screenrecord`); else toggleModal(k); openRefresh() } return false })
+ evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
  evt.connect("leave-notify-event", () => { hoverBus.key = null; kickHover(); return false })
  openRefresh = () => { for (const s of HLAYOUT) open[s.k] = isModalOpen(s.k); area.queue_draw() }
  const stateRefresh = () => { HLAYOUT.forEach(s => { const t = tileOf(s.k); (t.state ? t.state() : Promise.resolve(true)).then(v => { if (v !== on[s.k]) { on[s.k] = v; area.queue_draw() } }).catch(() => {}) }) }
@@ -276,6 +280,6 @@ const HorizDock = () => {
   return evt
 }
 
-export const Toggles = () => Box({ className: "dock", children: [VertDock()] })
+export const Toggles = (mon?: any) => Box({ className: "dock", children: [VertDock(mon)] })
 
 export { HorizDock }

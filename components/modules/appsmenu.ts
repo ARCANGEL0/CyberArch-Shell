@@ -4,7 +4,7 @@ import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
-import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
+import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW, monH } from "../../env.ts"
 import { NEON, USER, USER_A, f, onColorChange, menuBg, glassMode } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
@@ -81,7 +81,7 @@ const applyFilter = () => {
  animate()
 }
 
-const bandTop = () => Math.round((SCREEN_HEIGHT - VISIBLE * ROW_H) / 2 + 18)
+const bandTop = () => Math.round((monH(menuWin) / winScale(menuWin) - VISIBLE * ROW_H) / 2 + 18)
 const centerY = () => bandTop() + VISIBLE * ROW_H / 2
 
 let appInfoCache: any[] | null = null
@@ -192,18 +192,21 @@ const drawIntroGlitch = (ctx, e) => {
 
 const draw = (ctx) => {
  if (!active && intro <= 0.002) return
+ const S = winScale(menuWin)
+ ctx.scale(S, S)
+ const DW = monW(menuWin) / S, DH = monH(menuWin) / S
  ctx.setOperator(0); ctx.paint(); ctx.setOperator(2)
  const e = intro
  const ea = Math.min(1, e * 2)
  const [bgr, bgg, bgb] = menuBg.bg
- ctx.setSourceRGBA(bgr / 255, bgg / 255, bgb / 255, menuBg.bgA * ea); ctx.rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); ctx.fill()
+ ctx.setSourceRGBA(bgr / 255, bgg / 255, bgb / 255, menuBg.bgA * ea); ctx.rectangle(0, 0, DW, DH); ctx.fill()
  if (menuBg.fog && menuBg.fogA > 0.001) {
      const [fr, fg, fb] = menuBg.fog
-     const cx = SCREEN_WIDTH / 2, cy = SCREEN_HEIGHT / 2, r1 = Math.hypot(cx, cy)
+     const cx = DW / 2, cy = DH / 2, r1 = Math.hypot(cx, cy)
      const grad = new Cairo.RadialGradient(cx, cy, r1 * 0.55, cx, cy, r1)
      grad.addColorStopRGBA(0, fr / 255, fg / 255, fb / 255, 0)
      grad.addColorStopRGBA(1, fr / 255, fg / 255, fb / 255, menuBg.fogA * ea)
-     ctx.setSource(grad); ctx.rectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT); ctx.fill()
+     ctx.setSource(grad); ctx.rectangle(0, 0, DW, DH); ctx.fill()
  }
  if (e >= 0.998) { drawContent(ctx); return }
  const gt = bandTop(), gy1 = gt + VISIBLE * ROW_H + 44
@@ -330,7 +333,7 @@ export const AppsMenuWindow = () => {
 
  const evt = EventBox({ child: menuArea })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.SCROLL_MASK) } catch {}
- evt.connect("motion-notify-event", (_w, e) => { try { const c = e.get_coords?.(); mouseY = c && c.length >= 3 ? c[2] : e.y } catch { mouseY = e.y } return false })
+ evt.connect("motion-notify-event", (_w, e) => { try { const c = e.get_coords?.(); mouseY = c && c.length >= 3 ? c[2] / winScale(menuWin) : e.y / winScale(menuWin) } catch { mouseY = e.y / winScale(menuWin) } return false })
  evt.connect("button-press-event", (_w, e) => {
      if (!active) return true
      let b = 1; try { b = e.get_button?.()[1] ?? e.button } catch {}

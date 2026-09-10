@@ -10,6 +10,7 @@
 import { Box, DrawingArea, EventBox } from "./widget.ts"
 import { interval, Variable } from "astal"
 import { buildStats } from "./sys.ts"
+import { scaleOf } from "../../env.ts"
 import { makePlane, fillQuad, tiltText } from "./proj.ts"
 import { RGB, f, NEON, onColorChange, isOvr } from "./colors.ts"
 import { cfgStr, animOn, onConfigChange, METRIC_LABEL } from "./config.ts"
@@ -235,8 +236,9 @@ const scanlines = (ctx: any, x0: number, x1: number, y: number, h: number, gap: 
         fillQuad(ctx, plane, x0, sy, x1, sy + 0.5, [255, 255, 255] as any, 0.06)
 }
 
-export const Monitors = () => {
-    const area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+export const Monitors = (mon?: any) => {
+    const S = scaleOf(mon)
+    const area = DrawingArea({}); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
     onColorChange(() => area.queue_draw())
     const d = { sto: 0, cpu: 0, ram: 0, bat: 0 }
     const bar = (k: "sto" | "cpu" | "ram" | "bat") => animOn("animGauge") ? clamp(d[k]) : 1
@@ -273,7 +275,7 @@ export const Monitors = () => {
     try { evt.add_events(Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
     evt.connect("motion-notify-event", (_w: any, e: any) => {
         let x = 0, y = 0
-        try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {}
+        try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {}
         mx = x; my = y
         const prev = hovered
         hovered = hitTest(x, y)
@@ -284,10 +286,11 @@ export const Monitors = () => {
         mx = -1; my = -1; hovered = null; area.queue_draw(); return false
     })
     area.connect("draw", (_w: any, ctx: any) => {
+        ctx.scale(S, S)
         const isBat = slotKey("bat") === "battery"
         const bcol = gaugeColor(slotKey("bat"), mFrac("bat") * 100)
-        const bx = 18, by = 14, S = 40
-        const P = (px: number, py: number): [number, number] => [bx + px / 45 * S, by + py / 45 * S]
+        const bx = 18, by = 14, BSZ = 40
+        const P = (px: number, py: number): [number, number] => [bx + px / 45 * BSZ, by + py / 45 * BSZ]
         const badge: [number, number][] = [P(1, 1), P(44, 1), P(44, 44), P(14.6, 44), P(1, 27.4)]
         poly(ctx, badge, [4, 15, 19] as any, 0.55)
         glowShape(ctx, badge, BADGECOL, 3, 0.8)

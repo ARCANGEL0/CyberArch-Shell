@@ -3,7 +3,7 @@ import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { interval } from "astal"
-import { CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, f, onColorChange, imgTint, tintSurface, neonBtn, launcherTint, launcherLabelTint } from "./colors.ts"
 import { openAppsMenu } from "./appsmenu.ts"
@@ -18,12 +18,14 @@ let ICON: any = null
 try { ICON = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/launcher.png`) } catch (e) { print("[launcher] launcher.png:", e) }
 
 export const LauncherWindow = (mon?) => {
- const area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+ const S = scaleOf(mon)
+ const area = DrawingArea({}); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
  onColorChange(() => area.queue_draw())
  let hover = false
  let flick = 1
 
  area.connect("draw", (_w, ctx) => {
+     ctx.scale(S, S)
      const [rr, rg, rb] = f(NEON.red)
 
      const tx = 8, ty = 28
@@ -81,9 +83,11 @@ export const LauncherWindow = (mon?) => {
  evt.connect("enter-notify-event", () => { hover = true; area.queue_draw(); flip(); return false })
  evt.connect("leave-notify-event", () => { hover = false; area.queue_draw(); flip(); return false })
 
+ const wrap = Box({ className: "launcher-wrap", child: evt })
+ try { wrap.set_margin_right(Math.round(3 * S)) } catch {}
  return Window({
      name: "launcher", className: "aug launcher", gdkmonitor: mon, anchor: Anchor.BOTTOM | Anchor.RIGHT,
      layer: Layer.BOTTOM, exclusivity: Exclusivity.IGNORE,
-     child: Box({ className: "launcher-wrap", child: evt }),
+     child: wrap,
  })
 }

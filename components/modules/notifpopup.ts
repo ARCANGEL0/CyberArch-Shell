@@ -1,8 +1,8 @@
-import { Window, DrawingArea } from "./widget.ts"
+import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
-import { CYBER_DIR } from "../../env.ts"
+import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, MONO, NAVINE, NEUE, ORBITRON } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
@@ -289,14 +289,21 @@ const add = (n: any) => {
     msgs.unshift(m)
     while (msgs.length > MAXFR) msgs.pop()
     play(); kick()
-    try { win.visible = true } catch {}
+    try {
+        if (!win.visible) {
+            ;(win as any).gdkmonitor = activeMonitor()
+            const S = winScale(win)
+            area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * S), Math.round((MARGIN_T + plane.height + 20) * S))
+        }
+        win.visible = true
+    } catch {}
     timeout(LIFETIME, () => { if (msgs.includes(m) && !m.read) removeMsg(m) })
 }
 
 export const NotifPopupWindow = () => {
-    area = DrawingArea({}); area.set_size_request(MARGIN_L + plane.width + 20, MARGIN_T + plane.height + 20)
+    area = DrawingArea({}); area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * SCALE), Math.round((MARGIN_T + plane.height + 20) * SCALE))
     onColorChange(() => area.queue_draw())
-    area.connect("draw", (_w: any, ctx: any) => (draw(ctx), false))
+    area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     win = Window({
         name: "notifpopups", className: "aug notifpopups",
         anchor: Anchor.TOP | Anchor.LEFT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,

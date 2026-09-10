@@ -3,7 +3,7 @@ import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR } from "../../env.ts"
+import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW } from "../../env.ts"
 import { makePlane, strokePath, tiltText } from "./proj.ts"
 import { NEON, f, onColorChange, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
@@ -91,14 +91,15 @@ const drawBar = (ctx, frac, textA) => {
 
 let area: any = null, win: any = null
 let t0 = 0, anim: any = null, running = false
-const toastX = () => cfg.x < 0 ? Math.round((SCREEN_WIDTH - plane.width) / 2) : cfg.x
 
 const draw = (ctx) => {
  if (!running) return
+ const S = winScale(win), W = monW(win)
+ ctx.scale(S, S)
  const e = Date.now() - t0
  const tEdge = A_BLINK, tOpen = tEdge + EDGE_HOLD, tHold = tOpen + OPEN, tClose = tHold + HOLD, tEnd = tClose + CLOSE, tDone = tEnd + ENDF
  ctx.save()
- ctx.translate(toastX(), cfg.y)
+ ctx.translate(cfg.x < 0 ? Math.round((W / S - plane.width) / 2) : cfg.x, cfg.y)
 
  let alertA = 0.3 + 0.7 * Math.abs(Math.sin(e / 90))
  if (e >= tEnd) alertA *= Math.max(0, 1 - (e - tEnd) / ENDF)

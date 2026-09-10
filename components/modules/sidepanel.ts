@@ -6,7 +6,7 @@ import { Box, DrawingArea, EventBox, Keymode } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
 import { interval, execAsync } from "astal"
-import { CYBER_DIR, USER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
@@ -309,15 +309,17 @@ const drawNetSpeed = (ctx) => {
 }
 let cache = null, cacheKey = ""
 
-export const SidePanel = () => {
+export const SidePanel = (mon?: any) => {
+ const S = scaleOf(mon)
  ensureWxModal()
  loadWxLocation(); refreshWeather()
  interval(1_800_000, refreshWeather)
  refreshNet(); interval(15_000, refreshNet)
  refreshNetSpeed(); interval(1000, refreshNetSpeed)
- const area = DrawingArea({}); areas.push(area); area.set_size_request(plane.width, plane.height)
+ const area = DrawingArea({}); areas.push(area); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
  if (!mapTile) try { mapTile = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/img/map-grid.png`); mapVer++ } catch {}
  area.connect("draw", (_w, ctx) => {
+ ctx.scale(S, S)
  const now = new Date()
 
  const key = `${paletteGen}|${mapVer}|${pad2(now.getHours())}${pad2(now.getMinutes())}|${wxName}|${wxTemp}|${wxDesc}|${wxFeels}|${geoCoords}|${geoCity}|${wxHum}|${wxWind}|${netName}|${forecast.map(f => f.hi + f.lo).join("")}`
@@ -340,7 +342,7 @@ export const SidePanel = () => {
  let btn = 0
  try { btn = e.get_button?.()[1] ?? 0 } catch {}
  let px = 0, py = 0
- try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1]; py = c[2] } } catch {}
+ try { const c = e.get_coords?.(); if (c && c.length >= 3) { px = c[1] / S; py = c[2] / S } } catch {}
  const onClock = pip(px, py, projQuad(minimap, MX0 + 2, MY0 - 26, MX0 + 76, MY0 + 4))
  const onWx = pip(px, py, projQuad(minimap, MX0 - 4, MY1 - 28, MX1 + 4, MY1 + 110))
  if (btn === 3 && onClock) { openTimeModal(); return true }

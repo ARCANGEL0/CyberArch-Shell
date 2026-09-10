@@ -20,3 +20,25 @@ const monitor = display.get_primary_monitor() ?? display.get_monitor(0)!
 const geo = monitor.get_geometry()
 export const SCREEN_WIDTH = geo.width
 export const SCREEN_HEIGHT = geo.height
+
+// ## Update: scalable HUD
+// Instead hardcoded min/max setups, now the HUD is scalable according to screen HxW, adjusting its own size to make sure it maintains the same layout desing nevertheless the screen used
+
+const scaleEnv = parseFloat(GLib.getenv("CYBER_SCALE") || "")
+const autoScale = (w: number, h: number) => Math.min(w / 1920, h / 1080)
+export const SCALE = scaleEnv > 0 ? scaleEnv : autoScale(SCREEN_WIDTH, SCREEN_HEIGHT)
+
+export const scaleOf = (mon: any): number => {
+ if (scaleEnv > 0) return scaleEnv
+ try { const g = mon?.get_geometry?.(); if (g && g.width > 0 && g.height > 0) return autoScale(g.width, g.height) } catch {}
+ return SCALE
+}
+export const winScale = (w: any): number => { try { return scaleOf((w as any)?.gdkmonitor) } catch { return SCALE } }
+export const monW = (w: any): number => {
+ try { const g = (w as any)?.gdkmonitor?.get_geometry?.(); if (g && g.width > 0) return g.width } catch {}
+ return SCREEN_WIDTH
+}
+export const monH = (w: any): number => {
+ try { const g = (w as any)?.gdkmonitor?.get_geometry?.(); if (g && g.height > 0) return g.height } catch {}
+ return SCREEN_HEIGHT
+}

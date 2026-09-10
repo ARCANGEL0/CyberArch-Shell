@@ -1,12 +1,12 @@
 
 
 
-import { Window, DrawingArea } from "./widget.ts"
+import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
-import { CYBER_DIR, USER_DIR } from "../../env.ts"
+import { CYBER_DIR, USER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
@@ -129,10 +129,21 @@ const startOut = () => {
 }
 
 
+const placeWin = () => {
+    if (!win) return
+    try {
+        ;(win as any).gdkmonitor = activeMonitor()
+        const S = winScale(win)
+        area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+        win.set_margin_left?.(Math.round(14 * S))
+    } catch {}
+}
+
 export const showAurBar = () => {
     if (dismissed || count <= 0 || phase !== "hidden") return
     mode = "update"; cTitle = "AUR UPDATE AVAILABLE!"; cLabel = "NEW GIGS AVAILABLE:"; cValue = `${count}`; cShowU = true
     cUKey = "U"; cULbl = "UPGRADE"
+    placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
 }
@@ -141,6 +152,7 @@ export const showThemeBar = () => {
     if (tDismissed || !tVer || phase !== "hidden") return
     mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
     cUKey = "Q"; cULbl = "UPDATE NOW"
+    placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
 }
@@ -148,6 +160,7 @@ export const showThemeBar = () => {
 export const showInstalled = (title: string, info: string) => {
     mode = "installed"; cTitle = title; cLabel = info; cValue = ""; cShowU = false
     if (autoT) { autoT.cancel(); autoT = null }
+    placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
     autoT = timeout(120000, () => { autoT = null; startOut() })
@@ -324,13 +337,13 @@ const bootCheck = () => {
 }
 
 export const AurBarWindow = () => {
-    area = DrawingArea({}); area.set_size_request(plane.width, plane.height)
+    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
     onColorChange(() => area.queue_draw())
-    area.connect("draw", (_w: any, ctx: any) => (draw(ctx), false))
+    area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     win = Window({
         name: "aurbar", className: "aug aurbar",
         anchor: Anchor.LEFT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
-        margin_left: 14, visible: false, child: area,
+        margin_left: Math.round(14 * SCALE), visible: false, child: area,
     })
     passthrough(win)
     timeout(3500, bootCheck)

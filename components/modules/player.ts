@@ -7,7 +7,7 @@ import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
 import { USER, USER_A, isOvr, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
 import { animOn } from "./config.ts"
-import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { SCREEN_WIDTH, SCREEN_HEIGHT, winScale, monW, monH } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
 const Cairo: any = (imports as any).cairo
@@ -292,9 +292,11 @@ const renderToCache = () => {
 }
 
 const draw = (ctx, aw, ah) => {
+ const S = winScale(pWin)
+ ctx.scale(S, S)
  ctx.setOperator(0); ctx.paint(); ctx.setOperator(2)
  if (intro <= 0.002 && !visible) return
- const sw = aw || SCREEN_WIDTH, sh = ah || SCREEN_HEIGHT
+ const sw = (aw || monW(pWin)) / S, sh = (ah || monH(pWin)) / S
  const e = intro, ease = e * e * (3 - 2 * e)
  ctx.setSourceRGBA(0, 0, 0, 0.6 * ease); ctx.rectangle(0, 0, sw, sh); ctx.fill()
  const X0 = Math.round((sw - PW) / 2), Y0 = Math.round((sh - PH) / 2)
@@ -363,7 +365,7 @@ export const PlayerWindow = () => {
  pArea.connect("draw", (_w, ctx) => { const a = pArea.get_allocated_width?.() || 0, h = pArea.get_allocated_height?.() || 0; draw(ctx, a, h); return false })
  const evt = EventBox({ child: pArea })
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
- const toLocal = (e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1]; y = c[2] } } catch {}; const aw = pArea.get_allocated_width?.() || SCREEN_WIDTH, ah = pArea.get_allocated_height?.() || SCREEN_HEIGHT; return [x - Math.round((aw - PW) / 2), y - Math.round((ah - PH) / 2)] }
+ const toLocal = (e) => { const S = winScale(pWin); let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {}; const aw = (pArea.get_allocated_width?.() || monW(pWin)) / S, ah = (pArea.get_allocated_height?.() || monH(pWin)) / S; return [x - Math.round((aw - PW) / 2), y - Math.round((ah - PH) / 2)] }
  evt.connect("button-press-event", (_w, e) => {
      const [lx, ly] = toLocal(e)
      if (lx < 0 || ly < 0 || lx > PW || ly > PH) { closePlayer(); return true }

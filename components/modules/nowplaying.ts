@@ -5,6 +5,7 @@ import AstalMpris from "gi://AstalMpris"
 import { NEON, f, onColorChange } from "./colors.ts"
 import { makePlane, tiltText, strokePath, fillQuad } from "./proj.ts"
 import { animOn } from "./config.ts"
+import { scaleOf } from "../../env.ts"
 
 import { TITLE } from "./fonts.ts"
 const IW = 300, IH = 54
@@ -157,15 +158,18 @@ export const NowPlayingWindow = () => {
  const mons = (() => { try { return Array.from((App as any).get_monitors()) } catch { return [] } })()
  const list = mons.length ? mons : [null]
  list.forEach((mon: any) => {
+     const S = scaleOf(mon)
      const area = DrawingArea({})
      onColorChange(() => area.queue_draw())
-     area.set_size_request(BW, BH)
-     area.connect("draw", (_w, ctx) => (drawBanner(ctx), false))
+     area.set_size_request(Math.round(BW * S), Math.round(BH * S))
+     area.connect("draw", (_w, ctx) => { ctx.scale(S, S); drawBanner(ctx); return false })
      areas.push(area)
+     const wrap = Box({ className: "aug-wrap nowplaying-wrap", children: [area] })
+     try { wrap.set_margin_top(Math.round(30 * S)); wrap.set_margin_right(Math.round(414 * S)) } catch {}
      const win = Window({
          name: "nowplaying", className: "aug nowplaying", gdkmonitor: mon, visible: false,
          anchor: Anchor.TOP | Anchor.RIGHT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
-         child: Box({ className: "aug-wrap nowplaying-wrap", children: [area] }),
+         child: wrap,
      })
      wins.push(win)
  })
