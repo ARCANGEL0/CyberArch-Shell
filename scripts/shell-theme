@@ -160,9 +160,7 @@ return {
 EOF
 
 if command -v hyprctl >/dev/null 2>&1; then
-    BAR=$(raw "$(cl $(( K[0] + A[0] * 60 / 1000 )))" "$(cl $(( K[1] + A[1] * 60 / 1000 )))" "$(cl $(( K[2] + A[2] * 60 / 1000 )))")
     hyprctl eval "hl.config({general={border_size=$BSZ,col={active_border={colors={\"rgba(${ACC_R}ff)\",\"rgba(${AC2_R}ff)\"},angle=45},inactive_border=\"rgba(${ACC_R}44)\"}},decoration={rounding=$ROUND,rounding_power=$POWER,shadow={color=\"rgba(${ACC_R}${GLOW_ALPHA})\",color_inactive=\"rgba(${ACC_R}18)\",range=$GLOW_RANGE,render_power=$GLOW_RP},glow={enabled=$GLOW,color=\"rgba(${ACC_R}ff)\",range=$GLOW_RANGE,render_power=$GLOW_RP}}})" >/dev/null 2>&1 || true
-    hyprctl eval "hl.config({plugin={hyprbars={bar_color=\"rgba(${BAR}f2)\",col={text=\"rgba(${ACC_R}ff)\"},[\"hyprbars-button\"]={\"rgb(${ACC_R}), 15, \\\\xEE\\\\xAE\\\\x8B, hyprctl dispatch killactive\"}}})" >/dev/null 2>&1 || true
 fi
 
 if command -v gsettings >/dev/null 2>&1; then

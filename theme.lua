@@ -35,7 +35,6 @@ once("bash " .. cyberpunk .. "/scripts/set-wallpaper '" .. set_wallpaper .. "'")
 
 local accent = { 255, 45, 61 }
 local acc2 = { 255, 102, 119 }
-local barhex = "160409"
 local h2rgb = function(h)
     if type(h) == "string" and #h == 6 then
         local r = { tonumber(h:sub(1, 2), 16), tonumber(h:sub(3, 4), 16), tonumber(h:sub(5, 6), 16) }
@@ -57,7 +56,6 @@ if scf then
         local a1 = h2rgb(res.accent)
         local a2 = h2rgb(res.accent2)
         if a1 and a2 then accent, acc2 = a1, a2 end
-        if type(res.bar) == "string" and #res.bar == 6 then barhex = res.bar end
         if type(res.rounding) == "number" then rounding = res.rounding end
         if type(res.rounding_power) == "number" then power = res.rounding_power end
         if type(res.border) == "number" then border_size = res.border end
@@ -183,33 +181,6 @@ hl.config({
         screen_shader = "",
     },
 })
-
-local barsfile = cyberpunk .. "/assets/cyberbars/hyprbars.so"
-local barsfh = io.open(barsfile, "rb")
-if barsfh then
-    barsfh:close()
-    hl.plugin.load(barsfile)
-    hl.config({
-        plugin = {
-            hyprbars = {
-                bar_height = 28,
-                bar_color = string.format("rgba(%sf2)", barhex),
-                col = { text = rgba(accent, "ff") },
-                bar_text_size = 12,
-                bar_text_font = "FiraCode Nerd Font",
-                bar_part_of_window = true,
-                bar_precedence_over_border = false,
-                bar_padding = 12,
-                bar_button_padding = 10,
-                ["hyprbars-button"] = {
-                    rgb(accent) .. ", 15, \xEE\xAE\x8B, hyprctl dispatch killactive",
-                    rgb(accent) .. ", 14, \xEE\xAA\xB9, hyprctl dispatch fullscreen 1",
-                    rgb(accent) .. ", 14, \xEE\xAA\xB7, hyprctl dispatch movetoworkspacesilent special:minimized",
-                },
-            },
-        },
-    })
-end
 
 hl.layer_rule({ match = { namespace = "modal_.*" }, blur = true })
 
