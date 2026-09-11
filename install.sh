@@ -120,15 +120,15 @@ aur_install() {
 }
 dm_current() { 
 local l u 
-l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null | true)"
-if [ -n "$1" ] && [ -e "$1" ]; then basename "$1" .service; return 0; fi
+l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+if [ -n "$l" ] && [ -e "$l" ]; then basename "$l" .service; return 0; fi
 for u in plasmalogin sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
 if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
 done
 printf ''
 }
 MESA_PKGS="mesa mesa-utils libdrm lib32-libdrm lib32-mesa"
-HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire xdg-desktop-portal-hyprland lua lua54 gcc gcc-libs hyprlang ffmpeg ffmpeg4.4 chromaprint"
+HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire xdg-desktop-portal-hyprland lua lua54 gcc gcc-libs hyprlang ffmpeg ffmpeg4.4 chromaprint xorg-xwayland"
 REPO=(
   gjs grim wf-recorder wl-clipboard networkmanager bluez-utils curl
   wireplumber playerctl brightnessctl power-profiles-daemon upower
@@ -1467,46 +1467,86 @@ else
   printf "${GREY}  Log out and back in so the theme config and autostart entries load cleanly.${R}\n"
 fi
 
-if dm_active; then
-	printf "[!] Restart Hyprland now? (y/N) "
-	read -r ans </dev/tty
+if dm_active || [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+	printf "[!] Log out now so the theme and greeter come up clean? (y/N) "
 else
-   warn "no active greeter on this deck |::| If you delta the compositor right now, will drop you to a TTY space" 
-   printf "[:!:] Restart Hyprland anyway ? (y/N) "
-   read -r ans </dev/tty
- fi
+   warn "no active greeter on this deck |::| logging out would drop you to a TTY space"
+   printf "[:!:] Start sddm and log out anyway? (y/N) "
+fi
+read -r ans </dev/tty
 
 if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
-  printf "${CYAN} > Restarting Hyprland. . . . ${R}\n"
-  pkill -x Hyprland 2>/dev/null || hyprctl dispatch exit >/dev/null 2>&1 
-   if [ "$LOCK_STACK" = 1]; then
-     sleep 1
-     PREV_DM=""
-       #kills current greeter
-       for GRT in plasmalogin plasma-kdm sddm gdm lightdm ly greetd cosmic-greeter; do
-        if pgrep -x "$GRT" >/dev/null 2>&1; then
-          sudo systemctl stop "$GRT.service" 2>/dev/null || true 
-          sudo systemctl disable "$GRT.service" 2>/dev/null || true 
-          [ -z "$PREV_DM" ] && PREV_DM="$GRT"
-       fi 
-     done
-   sudo systemctl enable --force sddm >/dev/null 2>&1 || true 
-   sudo systemctl start sddm 
-   sleep 2
-   if systemctl is-active --quiet sddm; then
-     sudo chvt 1 2>/dev/null || true
-      ok "greeter -> sddm now owns tty |::| press CTRL+ALT+F1 if login screen seems flatlined"
-   else
-     err "sddm flatlined |::| Reversing to ${PREV_DM:-$DM_OLD} so you can delta safely"
-     [ -n "${PREV_DM:-$DM_OLD}" ] && sudo systemctl start "${PREV_DM:-$DM_OLD}.service" 2>/dev/null || true
-     sudo chvt 1 2>/dev/null || true
-     warn "sddm flatline log:  journalctl -b -u sddm --no-pager | tail -50"
-     warn "Retry manually, choom:     sudo systemctl stop ${PREV_DM:-$DM_OLD} && sudo systemctl start sddm"
-     exit 1
-    fi
+  PREV_DM="$(dm_current)"
+   if [ "$LOCK_STACK" = 1 ]; then
+     if [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ]; then
+       step "dumping $PREV_DM out the window…"
+        sudo systemctl disable "$PREV_DM.service" 2>/dev/null \
+          && ok "$PREV_DM flatlined by choice |::| ghosted, not deleted" \
+          || warn "$PREV_DM wont budge |::| enable --force further down muscles the alias anyway"
+     fi
+      step "cutting sddm in as the default display manager…"
+     sudo systemctl enable --force sddm >/dev/null 2>&1 || true
+       DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
+     case "$DMLINK" in
+      */sddm.service) ok "sddm owns the door now |::| nobody logs in without it" ;;
+       *)
+        err "cant confirm sddm holds the display-manager alias |::| holding the logout, choom"
+         warn "eyeball it raw:  systemctl status display-manager.service"
+          [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl enable --force "$PREV_DM" >/dev/null 2>&1
+       exit 1
+        ;;
+     esac
+      if ls /etc/sddm.conf.d/*.conf >/dev/null 2>&1 && sudo grep -rqE '^[[:space:]]*Current[[:space:]]*=|^\[Theme\]' /etc/sddm.conf.d/ 2>/dev/null; then
+       warn "Theme/Current overrides found in /etc/sddm.conf.d |::| drop-ins beat /etc/sddm.conf, eyeball them:  sudo grep -rn Current /etc/sddm.conf.d/"
+        fi
+     if ! systemctl is-active --quiet sddm; then
+        sudo systemctl reset-failed sddm 2>/dev/null || true
+       if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+          sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+        if sudo systemd-run --unit=cyber-sddm-start --on-active=6 /usr/bin/systemctl start sddm >/dev/null 2>&1 \
+           && systemctl list-timers cyber-sddm-start.timer --no-legend 2>/dev/null | grep -q cyber-sddm-start; then
+            ok "sddm start scheduled |::| the greeter jacks in right after your session flatlines"
+          else
+            err "couldnt schedule the sddm wakeup |::| holding the logout, choom"
+             warn "start it yourself from a TTY once youre out:  sudo systemctl start sddm"
+              sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+            exit 1
+          fi
+       else
+        step "waking sddm up…"
+         if sudo systemctl start sddm; then
+           sleep 2
+          if systemctl is-active --quiet sddm && pgrep -x sddm-greeter >/dev/null 2>&1; then
+             ok "sddm is jacked in |::| it grabs the login screen the second you flatline your session"
+            else
+           err "sddm flatlined |::| jackin ${PREV_DM:-the old greeter} back in so you can delta safely"
+             [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+               warn "sddm corpse log:  journalctl -b -u sddm --no-pager | tail -50"
+         warn "wake it yourself, choom:  sudo systemctl start sddm"
+            exit 1
+          fi
+         else
+        err "sddm refused the wakeup call |::| holding the logout"
+           warn "journalctl -b -u sddm --no-pager | tail -50"
+            [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+       exit 1
+        fi
+      fi
+    else
+      ok "sddm never slept |::| log out and you drop straight into the netwatch greeter"
+       fi
    fi
+  printf "${CYAN} > Flatlining session. . . . ${R}\n"
+   if command -v hyprctl >/dev/null 2>&1 && hyprctl dispatch exit >/dev/null 2>&1; then
+    :
+  elif [ -n "${XDG_SESSION_ID:-}" ]; then
+      loginctl terminate-session "$XDG_SESSION_ID" 2>/dev/null || true
   else
-    printf "${GREY} Restart Hyprland yourself when ready (logout / quit, or run ${B} pkill Hyprland${R})\n"
+     sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+     warn "no session to flatline |::| wake the greeter yourself:  sudo systemctl start sddm"
+   fi
+else
+    printf "${GREY} Flatline the session yourself when ready |::| greeter and theme chrome up on next login.${R}\n"
   fi
 
 line
