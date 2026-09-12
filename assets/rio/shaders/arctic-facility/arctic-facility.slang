@@ -66,6 +66,10 @@ float ring( vec2 p, float r, float w )
     {
     return 1.0 - smoothstep( w, w + 1.6, abs( hexdist( p ) - r ) );
     }
+float ringc( vec2 p, float r, float w )
+    {
+    return 1.0 - smoothstep( w, w + 1.6, abs( length( p ) - r ) );
+    }
 
 #define PLATE_HI  vec3( 1.000, 1.000, 1.000 )
 #define BEVEL_C   vec3( 0.965, 0.980, 1.000 )
@@ -76,6 +80,8 @@ float ring( vec2 p, float r, float w )
 #define ICE_GLOW  vec3( 0.012, 0.024, 0.038 )
 #define GLASS     vec3( 0.043, 0.058, 0.072 )
 #define FROST     vec3( 0.858, 0.925, 0.980 )
+#define PHOS      vec3( 0.004, 0.707, 0.698 )
+#define PHOS_HI   vec3( 0.560, 0.960, 0.950 )
 
 #define SHELL_W     4.0
 #define BEVEL_W     7.6
@@ -127,35 +133,73 @@ void main()
                  + ( rand( vec2( 3.0, floor( px.y * 0.25 ) ) ) - 0.5 ) * 0.008;
     float fleck  = step( 0.9972, rand( floor( px * 0.5 ) ) ) * 0.13;
 
-    float frost = sheen + lamp + pipe + scan + grain + brush + fleck;
-    vec3  glass = GLASS * depth * pane * ( 1.0 + sunk * 1.6 ) * vig + FROST * frost;
+    vec3  blr = fetch( blurbuffer, uv + vec2( -0.0013, 0.0017 ) );
+    float mat = smoothstep( 0.088, 0.420, luma( blr ) );
 
-    float cnr = ( 1.0 - smoothstep( 0.0, 260.0, dx ) ) * ( 1.0 - smoothstep( 0.0, 260.0, dy ) );
-    glass += ICE_GLOW * cnr;
+    // adds a dna helix on the terminal, some clean white corpo facility, umbrella-like typeshi
+      vec2  mc   = px - vec2( res.x * 0.820, res.y * 0.50 );
+    float mrad = min( res.x, res.y ) * 0.185;
+    float helixc = exp( -pow( length( mc / vec2( 1.0, 1.55 ) ) / ( mrad * 0.92 ), 3.0 ) );
+    float hy  = mc.y / max( mrad, 1.0 );
 
-    vec2  mc   = px - vec2( res.x * 0.735, res.y * 0.40 );
-    float mrad = min( res.x, res.y ) * 0.170;
-    float seal = ring( mc, mrad, 1.4 )
-               + ring( mc, mrad * 0.955, 0.6 ) * 0.45
-               + ring( mc, mrad * 0.60, 1.1 ) * 0.85
-               + linemark( mc.y, 1.2 ) * ( 1.0 - step( mrad * 0.60, hexdist( mc ) ) ) * 0.7
-               + linemark( hexdist( mc ) - mrad * 0.80, 1.0 )
-                 * step( 0.62, fract( atan( mc.y, mc.x ) * 1.9099 ) ) * 0.6;
-    seal = clamp( seal, 0.0, 1.0 ) * ( 1.0 - step( d, 44.0 ) );
-    float etch = ( 1.0 - smoothstep( mrad * 0.94, mrad * 1.02, hexdist( mc ) ) ) * 0.030
-               * ( 1.0 - step( d, 44.0 ) );
-    glass += FROST * ( seal * 0.105 + etch );
+    // twists the strands on the vertical axis instead of just sliding em up n down
+    float helixPhase = t * 1.55;
+      float wob = hy * 4.6;
+    float xA  = sin( wob + helixPhase );
+    float xB  = sin( wob + helixPhase + 3.14159265 );
+    float zA  = cos( wob + helixPhase );
+    float zB  = cos( wob + helixPhase + 3.14159265 );
+    float strandA = exp( -pow( abs( mc.x - mrad * 0.54 * xA ) / 3.6, 2.0 ) );
+    float strandB = exp( -pow( abs( mc.x - mrad * 0.54 * xB ) / 3.6, 2.0 ) );
+     float frontA  = 0.20 + 0.80 * ( 0.5 + 0.5 * zA );
+    float frontB  = 0.20 + 0.80 * ( 0.5 + 0.5 * zB );
+    float rungStep = mrad * 0.20;
+    float rungCell = floor( mc.y / rungStep + 0.5 );
+    float rungLocalY = mc.y - rungCell * rungStep;
+    float rungPhase = rungCell * rungStep / max( mrad, 1.0 ) * 4.6 + helixPhase;
+    float rungXA = mrad * 0.54 * sin( rungPhase );
+    float rungXB = mrad * 0.54 * sin( rungPhase + 3.14159265 );
+    float rungMin = min( rungXA, rungXB );
+    float rungMax = max( rungXA, rungXB );
+    float rungLine = 1.0 - smoothstep( 1.1, 2.4, abs( rungLocalY ) );
+    float rungSpan = smoothstep( rungMin - 2.0, rungMin + 1.0, mc.x )
+                   * ( 1.0 - smoothstep( rungMax - 1.0, rungMax + 2.0, mc.x ) );
+    float rungDepth = 0.20 + 0.32 * abs( cos( rungPhase ) );
+    float rung  = rungLine * rungSpan * rungDepth;
+    float helix = ( rung + strandA * frontA + strandB * frontB ) * helixc;
+    helix = clamp( helix, 0.0, 1.0 ) * ( 1.0 - step( d, 44.0 ) );
 
     float bmk = linemark( dx - 46.0, 0.7 ) * step( 46.0, dy ) * ( 1.0 - smoothstep( 78.0, 80.0, dy ) )
               + linemark( dy - 46.0, 0.7 ) * step( 46.0, dx ) * ( 1.0 - smoothstep( 78.0, 80.0, dx ) );
     bmk = clamp( bmk, 0.0, 1.0 );
-    glass += FROST * bmk * 0.088;
 
-    vec3  blr = fetch( blurbuffer, uv + vec2( -0.0013, 0.0017 ) );
-    float mat = smoothstep( 0.088, 0.420, luma( blr ) );
-    glass *= 1.0 - 0.34 * mat * params.shadow;
+    vec3  crt = src * vec3( 0.55, 1.05, 1.02 ) + blr * PHOS * 0.55;
+    crt += PHOS * mat * 0.48 * params.shadow;
+      crt *= 1.0 + 0.14 * mat;
+    crt += PHOS_HI * ink * 0.16;
+    crt += PHOS * helix * 0.60 + PHOS_HI * helix * 0.32;
+    crt += PHOS * bmk * 0.12;
 
-    vec3 col = mix( glass, src * vec3( 0.980, 1.000, 1.018 ) + blr * 0.14, ink );
+    float holo = 0.94 + 0.06 * sin( uv.y * 8.0 - t * 2.2 );
+    crt *= mix( 1.0, holo, 0.12 );
+
+     float aR = luma( fetch( backbuffer, uv + vec2( 0.0020, 0.0 ) ) );
+    float aB = luma( fetch( backbuffer, uv - vec2( 0.0020, 0.0 ) ) );
+    crt.r += aR * 0.12;
+    crt.b += aB * 0.10;
+
+    float flick = 0.92 + 0.08 * rand( vec2( float( params.FrameCount ), 0.0 ) );
+    crt *= flick;
+
+    crt += vec3( ( rand( floor( px ) ) - 0.5 ) * 0.010 );
+
+    vec2  vp = ( uv - 0.5 ) * vec2( 1.05, 1.0 );
+    crt *= 1.0 - 0.34 * pow( clamp( length( vp ) * 1.30, 0.0, 1.0 ), 2.4 );
+
+    crt += PHOS_HI * pow( clamp( uv.y, 0.0, 1.0 ), 8.0 ) * 0.05;
+    crt = clamp( crt, vec3( 0.0 ), vec3( 1.0 ) );
+
+    vec3 col = crt;
 
     float hz = step( dy, dx );
     float vt = 1.0 - hz;
@@ -224,14 +268,14 @@ void main()
     col = mix( col, CRIMSON,  stat );
 
     float chrome = clamp( shell + lip + rail + bezel + cblock + hazard + stat + stt
-                        + bolt + scale * 0.5 + seal * 0.16 + bmk * 0.20, 0.0, 1.0 );
+                        + bolt + scale * 0.5 + helix * 0.16 + bmk * 0.20, 0.0, 1.0 );
 
     col = clamp( col, vec3( 0.0 ), vec3( 1.0 ) );
 
-    const float PLATE_ALPHA = 0.28;
+    const float PLATE_ALPHA = 0.40;
     float alpha = PLATE_ALPHA + ( 1.0 - PLATE_ALPHA )
                 * clamp( ink * 2.4 + mat * 0.95 + chrome + sunk * 1.6
-                       + scan * 3.0 + pipe * 0.9 + fleck * 1.6, 0.0, 1.0 );
+                       + pipe * 0.9 + fleck * 1.6 + helix * 1.2, 0.0, 1.0 );
     alpha = clamp( alpha, 0.0, 1.0 );
 
     FragColor = vec4( col * alpha, alpha );
