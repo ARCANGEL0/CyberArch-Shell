@@ -26,7 +26,7 @@ blur = true
 decorations = "Enabled"
 
 [fonts]
-family = "Geist Mono"
+family = "Share Tech Mono"
 size = 16
 use-drawable-chars = true
 hinting = true
@@ -113,5 +113,5 @@ audio = true
 [renderer]
 backend = "Webgpu"
 filters = ["__RIO_SHADERS__/arctic-facility/arctic-facility.slangp"]
-strategy = "events"
+strategy = "game"
 disable-unfocused-render = false
