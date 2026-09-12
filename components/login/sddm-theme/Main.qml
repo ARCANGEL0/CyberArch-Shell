@@ -158,8 +158,9 @@ Rectangle {
 
     function doAuth() {
         if (root.lockUser === "" || root.lockInput === "" || root.isAuthenticating) return
+        sessionSelector.closeMenu()
         root.isAuthenticating = true
-        sddm.login(root.lockUser, root.lockInput, sessionModel.lastIndex)
+        sddm.login(root.lockUser, root.lockInput, sessionSelector.currentIndex)
     }
 
     Connections {
@@ -185,7 +186,7 @@ Rectangle {
         root.dateStr = "2077."+p(d.getMonth()+1)+"."+p(d.getDate())+"  "+day[d.getDay()]
     }}
 
-    MouseArea { anchors.fill: parent; cursorShape: Qt.ArrowCursor; z: -1 }
+    MouseArea { anchors.fill: parent; cursorShape: Qt.ArrowCursor; z: -1; onPressed: sessionSelector.closeMenu() }
 
     Loader { anchors.fill: parent; source: "Background.qml" }
 
@@ -287,9 +288,31 @@ Rectangle {
                         onTextEdited: root.lockUser = text
                         Keys.onReturnPressed: pwd.forceActiveFocus()
                         Keys.onEnterPressed: pwd.forceActiveFocus()
-                        Keys.onTabPressed: pwd.forceActiveFocus()
+                        Keys.onTabPressed: sessionSelector.interactive ? sessionSelector.forceActiveFocus() : pwd.forceActiveFocus()
                         Keys.onBacktabPressed: pwd.forceActiveFocus() } }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.IBeamCursor; onClicked: user.forceActiveFocus() }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.IBeamCursor; onClicked: {
+                    sessionSelector.closeMenu(); user.forceActiveFocus()
+                } }
+            }
+            Item { width: 1; height: 10 * s }
+
+            SessionSelector {
+                id: sessionSelector
+                width: parent.width
+                model: sessionModel
+                rememberedIndex: sessionModel.lastIndex
+                scaleFactor: root.s
+                accentColor: root.cAmber
+                accentSoftColor: root.cAmberSoft
+                textColor: root.cWhite
+                mutedColor: root.cGrayDim
+                labelColor: root.cYellow
+                backgroundColor: root.cBlack
+                lineColor: root.cLineDim
+                labelFontFamily: fExo.name
+                valueFontFamily: fMono.name
+                previousFocusItem: user
+                nextFocusItem: pwd
             }
             Item { width: 1; height: 10 * s }
 
@@ -321,8 +344,10 @@ Rectangle {
                         Keys.onEnterPressed: root.doAuth()
                         Keys.onEscapePressed: root.lockInput = ""
                         Keys.onTabPressed: user.forceActiveFocus()
-                        Keys.onBacktabPressed: user.forceActiveFocus() } }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.IBeamCursor; onClicked: pwd.forceActiveFocus() }
+                        Keys.onBacktabPressed: sessionSelector.interactive ? sessionSelector.forceActiveFocus() : user.forceActiveFocus() } }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.IBeamCursor; onClicked: {
+                    sessionSelector.closeMenu(); pwd.forceActiveFocus()
+                } }
             }
             Item { width: 1; height: 10 * s }
 
@@ -380,5 +405,5 @@ Rectangle {
         NumberAnimation{target:panelContainer;property:"anchors.horizontalCenterOffset";to:0;duration:45} }
 
     Timer { id: focusRetry; interval: 60; repeat: true; property int cnt: 0
-        onTriggered: { if (!user.activeFocus && !pwd.activeFocus) user.forceActiveFocus(); if(++cnt>=6){running=false;cnt=0} } }
+        onTriggered: { if (!user.activeFocus && !pwd.activeFocus && !sessionSelector.activeFocus) user.forceActiveFocus(); if(++cnt>=6){running=false;cnt=0} } }
 }

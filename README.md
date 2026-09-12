@@ -161,6 +161,26 @@ chmod +x install.sh
 
 The installer will download any required dependencies, install the theme, quickshell and the necessary packages, along with optional features such as fish, GPU Terminals in theme style, and wallpapers. 
 
+### Safe preflight and recovery
+
+Inspect missing dependencies without requesting root access, refreshing package databases, or changing the system:
+
+```bash
+./install.sh --dry-run
+```
+
+If installation stops, do not bypass its runtime checks. Save the complete terminal output, fix the reported dependency, and run the dry-run again before retrying. For graphics failures, check `vulkaninfo --summary` and `rio --version`. For login failures, inspect `journalctl -b -u sddm --no-pager` from a TTY or another working desktop session.
+
+The installer deploys the Netwatch theme before selecting it and preserves an existing SDDM configuration at `/etc/sddm.conf.pre-cyberarch`. Restore it only when that backup exists:
+
+```bash
+sudo cp -a /etc/sddm.conf.pre-cyberarch /etc/sddm.conf
+```
+
+If switching display managers fails, the installer restores that configuration backup and re-enables the previously active display manager before stopping.
+
+When another display manager is active, answer `N` at the greeter replacement prompt to leave it, SDDM, PAM, and the Hyprland lock command unchanged.
+
 ---
 
 ## ⌁ Updating
@@ -253,7 +273,10 @@ cyberpunk/
 │
 ├─ components/
 │  ├─ modules/          # The widgets and main components of the theme HD
-│  ├─ login/            # Quickshell login
+│  ├─ login/
+│  │  ├─ lock_shell.qml       # Quickshell session-lock entry point
+│  │  ├─ themes/netwatch/     # Netwatch Quickshell lock theme
+│  │  └─ sddm-theme/          # Netwatch SDDM greeter theme
 │  ├─ style/            # cyber.scss and cyber.css
 │  └─ glitch.frag
 │
@@ -261,6 +284,15 @@ cyberpunk/
 ├─ assets/               # fonts, cursor, icons, kitty, kvantum, hyprbars, and resources
 └─ preview/
 ```
+
+### Login theme architecture
+
+The two Netwatch directories target different runtimes and are not interchangeable:
+
+- `components/login/themes/netwatch/` is loaded by `lock_shell.qml` inside the user's running Hyprland session. It uses Quickshell's session-lock integration.
+- `components/login/sddm-theme/` is copied to `/usr/share/sddm/themes/netwatch/` and loaded by SDDM before a desktop session starts. SDDM-only models such as `userModel` and `sessionModel` belong here.
+
+Keep runtime-specific behavior in its corresponding directory. When a visual change should appear in both screens, port it deliberately and test both runtimes rather than copying one `Main.qml` over the other.
 
 ## TODO List
 
@@ -307,4 +339,3 @@ suggestions are welcome! :)
 
 
 </div>
-

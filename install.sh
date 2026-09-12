@@ -159,6 +159,25 @@ DRYRUN=0
 if [ "${1:-}" = "--dry-run" ] || [ -n "${AUG_DRYRUN:-}" ]; then DRYRUN=1; fi
 [ "$DRYRUN" = 1 ] || sudo_prime
 
+hdr "DEPENDENCY SCAN"
+declare -a miss_repo=() miss_aur=()
+pkg_has() { pacman -Qq "$1" &>/dev/null || pacman -Qg "$1" &>/dev/null; }
+for p in "${REPO[@]}"; do
+  if pkg_has "$p"; then printf "  ${GRN}✓${R} %s\n" "$p"
+  else printf "  ${RED}✗${R} %-22s ${GREY}→ install${R}\n" "$p"; miss_repo+=("$p"); fi
+done
+for p in "${AUR[@]}"; do
+  if pkg_has "$p"; then printf "  ${GRN}✓${R} %s\n" "$p"
+  else printf "  ${RED}✗${R} %-22s ${GREY}→ install (AUR)${R}\n" "$p"; miss_aur+=("$p"); fi
+done
+mapfile -t miss_repo < <(printf '%s\n' "${miss_repo[@]}" | awk 'NF' | sort -u)
+mapfile -t miss_aur  < <(printf '%s\n' "${miss_aur[@]}"  | awk 'NF' | sort -u)
+if [ "${1:-}" = "--dry-run" ] || [ -n "${AUG_DRYRUN:-}" ]; then
+  hdr "DRY RUN |::| no changes will be made"
+  printf "  ${CYAN}repo:${R} %s\n  ${CYAN}aur :${R} %s\n" "${miss_repo[*]:-none}" "${miss_aur[*]:-none}"
+  line; exit 0
+fi
+
 hdr "SYSTEM UPGRADE"
 printf "[!] Run a full system upgrade before installing theme? (y/N) "
 read -r ans </dev/tty
@@ -198,25 +217,6 @@ elif [ -z "$AVAIL" ] || [ "$AVAIL" != "$CUR" ]; then
   fi
 else
   ok "Hyprland $CUR already up to date."
-fi
-
-hdr "DEPENDENCY SCAN"
-declare -a miss_repo=() miss_aur=()
-pkg_has() { pacman -Qq "$1" &>/dev/null || pacman -Qg "$1" &>/dev/null; }
-for p in "${REPO[@]}"; do
-  if pkg_has "$p"; then printf "  ${GRN}✓${R} %s\n" "$p"
-  else printf "  ${RED}✗${R} %-22s ${GREY}→ install${R}\n" "$p"; miss_repo+=("$p"); fi
-done
-for p in "${AUR[@]}"; do
-  if pkg_has "$p"; then printf "  ${GRN}✓${R} %s\n" "$p"
-  else printf "  ${RED}✗${R} %-22s ${GREY}→ install (AUR)${R}\n" "$p"; miss_aur+=("$p"); fi
-done
-mapfile -t miss_repo < <(printf '%s\n' "${miss_repo[@]}" | awk 'NF' | sort -u)
-mapfile -t miss_aur  < <(printf '%s\n' "${miss_aur[@]}"  | awk 'NF' | sort -u)
-if [ "${1:-}" = "--dry-run" ] || [ -n "${AUG_DRYRUN:-}" ]; then
-  hdr "DRY RUN |::| no changes will be made"
-  printf "  ${CYAN}repo:${R} %s\n  ${CYAN}aur :${R} %s\n" "${miss_repo[*]:-none}" "${miss_aur[*]:-none}"
-  line; exit 0
 fi
 
 CANON="$HOME/.config/hypr/themes/cyberpunk"
@@ -416,7 +416,53 @@ fi
 
 if [ "$LOCK_STACK" = 1 ] && command -v sddm >/dev/null 2>&1; then
   ok "sddm installed"
+  SDDM_THEME_DIR="/usr/share/sddm/themes/netwatch"
+  if sudo install -d -m 755 "$SDDM_THEME_DIR" && sudo cp -rf "$LOGINSRC/sddm-theme"/. "$SDDM_THEME_DIR"/; then
+    ok "sddm theme deployed → $SDDM_THEME_DIR"
+  else
+    fatal "the netwatch sddm theme could not be deployed." \
+      "تنظیمات SDDM تغییر نکرد؛ صفحهٔ ورود فعلی همچنان فعال است." \
+      "Deploy it by hand:" \
+      "  sudo install -d -m 755 $SDDM_THEME_DIR" \
+      "  sudo cp -rf '$LOGINSRC/sddm-theme'/. $SDDM_THEME_DIR/"
+  fi
+  if sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "$SDDM_THEME_DIR/current"; then
+    if ! ls "$SDDM_THEME_DIR/current"/image.* >/dev/null 2>&1 && ! ls "$SDDM_THEME_DIR/current"/video.* >/dev/null 2>&1; then
+      SEED_WP=""
+      if [ -r "$USER_DIR/wallpaper.lua" ]; then
+        SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
+      fi
+      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
+      SEED_EXT="${SEED_WP##*.}"
+      if [ -n "$SEED_EXT" ] && [ "$SEED_EXT" != "$SEED_WP" ] && [ -r "$SEED_WP" ]; then
+        case "$SEED_EXT" in
+          mp4|webm|mkv|mov) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/video.$SEED_EXT" ;;
+          *) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/image.$SEED_EXT" ;;
+        esac
+        chmod 644 "$SDDM_THEME_DIR/current"/image.* "$SDDM_THEME_DIR/current"/video.* 2>/dev/null
+        ok "sddm current wallpaper seeded → $SDDM_THEME_DIR/current"
+      else
+        warn "could not seed sddm current wallpaper |::| first theme load will deploy it"
+      fi
+    else
+      ok "sddm current wallpaper kept → $SDDM_THEME_DIR/current"
+    fi
+  else
+    warn "could not create $SDDM_THEME_DIR/current |::| sddm falls back to the theme's bg.mp4"
+  fi
+
   SDDM_CONF="/etc/sddm.conf"
+  SDDM_CONF_BACKUP="/etc/sddm.conf.pre-cyberarch"
+  if [ -f "$SDDM_CONF" ]; then
+    if [ -e "$SDDM_CONF_BACKUP" ]; then
+      ok "پشتیبان تنظیمات SDDM حفظ شد → $SDDM_CONF_BACKUP"
+    elif sudo cp -a "$SDDM_CONF" "$SDDM_CONF_BACKUP"; then
+      ok "پشتیبان تنظیمات SDDM ساخته شد → $SDDM_CONF_BACKUP"
+    else
+      fatal "پشتیبان‌گیری از تنظیمات SDDM ناموفق بود." \
+        "برای جلوگیری از قفل‌شدن سیستم، $SDDM_CONF تغییر نکرد."
+    fi
+  fi
   step "configuring sddm → netwatch theme…"
   if [ ! -f "$SDDM_CONF" ]; then
     if sudo tee "$SDDM_CONF" >/dev/null <<'SDDMCNF'
@@ -446,42 +492,26 @@ SDDMCNF
   else
     warn "could not append a [Theme] section to $SDDM_CONF"
   fi
-  SDDM_THEME_DIR="/usr/share/sddm/themes/netwatch"
-  if sudo install -d -m 755 "$SDDM_THEME_DIR" && sudo cp -rf "$LOGINSRC/sddm-theme"/. "$SDDM_THEME_DIR"/; then
-    ok "sddm theme deployed → $SDDM_THEME_DIR"
+  if [ -e "$SDDM_CONF_BACKUP" ]; then
+    SDDM_RECOVERY="بازیابی تنظیمات قبلی: sudo cp -a $SDDM_CONF_BACKUP $SDDM_CONF"
   else
-    fatal "the netwatch sddm theme could not be deployed." \
-      "sddm.conf now points Current=netwatch at a theme dir that is not there." \
-      "Booting that combo gives you a black greeter, so this stops here." \
-      "Deploy it by hand:" \
-      "  sudo install -d -m 755 $SDDM_THEME_DIR" \
-      "  sudo cp -rf '$LOGINSRC/sddm-theme'/. $SDDM_THEME_DIR/" \
-      "Your greeter was NOT switched yet, so nothing about your login changed."
+    SDDM_RECOVERY="تنظیمات قبلی SDDM وجود نداشت؛ پیش از حذف $SDDM_CONF آن را بررسی کنید."
   fi
-  if sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "$SDDM_THEME_DIR/current"; then
-    if ! ls "$SDDM_THEME_DIR/current"/image.* >/dev/null 2>&1 && ! ls "$SDDM_THEME_DIR/current"/video.* >/dev/null 2>&1; then
-      SEED_WP=""
-      if [ -r "$USER_DIR/wallpaper.lua" ]; then
-        SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
-      fi
-      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
-      SEED_EXT="${SEED_WP##*.}"
-      if [ -n "$SEED_EXT" ] && [ "$SEED_EXT" != "$SEED_WP" ] && [ -r "$SEED_WP" ]; then
-        case "$SEED_EXT" in
-          mp4|webm|mkv|mov) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/video.$SEED_EXT" ;;
-          *) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/image.$SEED_EXT" ;;
-        esac
-        chmod 644 "$SDDM_THEME_DIR/current"/image.* "$SDDM_THEME_DIR/current"/video.* 2>/dev/null
-        ok "sddm current wallpaper seeded → $SDDM_THEME_DIR/current"
-      else
-        warn "could not seed sddm current wallpaper |::| first theme load will deploy it"
-      fi
-    else
-      ok "sddm current wallpaper kept → $SDDM_THEME_DIR/current"
+  restore_sddm_state() {
+    if [ -e "$SDDM_CONF_BACKUP" ]; then
+      sudo cp -a "$SDDM_CONF_BACKUP" "$SDDM_CONF" \
+        && ok "تنظیمات قبلی SDDM بازیابی شد" \
+        || warn "بازیابی $SDDM_CONF ناموفق بود؛ از $SDDM_CONF_BACKUP استفاده کنید"
     fi
-  else
-    warn "could not create $SDDM_THEME_DIR/current |::| sddm falls back to the theme's bg.mp4"
-  fi
+    if [ "$CUR_DM" != "sddm" ]; then
+      sudo systemctl disable sddm >/dev/null 2>&1 || true
+    fi
+    if [ -n "$DM_OLD" ]; then
+      sudo systemctl enable --force "$DM_OLD.service" >/dev/null 2>&1 \
+        && ok "مدیر ورود قبلی دوباره فعال شد → $DM_OLD" \
+        || warn "فعال‌سازی دوبارهٔ $DM_OLD ناموفق بود"
+    fi
+  }
   DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
   case "$DMLINK" in
     */sddm.service) ok "sddm is already the default display manager" ;;
@@ -498,14 +528,16 @@ SDDMCNF
       case "$DMLINK" in
         */sddm.service) ok "sddm enabled on boot |::| display-manager.service → sddm" ;;
         *)
+          restore_sddm_state
           fatal "sddm could not be made the default display manager." \
             "systemd said: ${SDDM_ERR:-nothing at all}" \
             "sddm.service carries Alias=display-manager.service, so plain 'enable' bails out when another greeter already owns that name." \
+            "$SDDM_RECOVERY" \
             "Do it raw:" \
             "  sudo systemctl disable ${DM_OLD:-<your-current-greeter>}.service" \
             "  sudo systemctl enable --force sddm" \
             "Then verify:  systemctl status display-manager.service" \
-            "Your existing greeter is still enabled, so you are not locked out."
+            "وضعیت بازیابی را بررسی کنید: systemctl status display-manager.service"
           ;;
       esac
       ;;
@@ -1492,7 +1524,7 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
        *)
         err "cant confirm sddm holds the display-manager alias |::| holding the logout, choom"
          warn "eyeball it raw:  systemctl status display-manager.service"
-          [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl enable --force "$PREV_DM" >/dev/null 2>&1
+          restore_sddm_state
        exit 1
         ;;
      esac
@@ -1510,6 +1542,7 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
             err "couldnt schedule the sddm wakeup |::| holding the logout, choom"
              warn "start it yourself from a TTY once youre out:  sudo systemctl start sddm"
               sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+            restore_sddm_state
             exit 1
           fi
        else
@@ -1520,7 +1553,8 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
              ok "sddm is jacked in |::| it grabs the login screen the second you flatline your session"
             else
            err "sddm flatlined |::| jackin ${PREV_DM:-the old greeter} back in so you can delta safely"
-             [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+             restore_sddm_state
+             [ -n "$DM_OLD" ] && sudo systemctl start "$DM_OLD.service" 2>/dev/null || true
                warn "sddm corpse log:  journalctl -b -u sddm --no-pager | tail -50"
          warn "wake it yourself, choom:  sudo systemctl start sddm"
             exit 1
@@ -1528,7 +1562,8 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
          else
         err "sddm refused the wakeup call |::| holding the logout"
            warn "journalctl -b -u sddm --no-pager | tail -50"
-            [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+            restore_sddm_state
+            [ -n "$DM_OLD" ] && sudo systemctl start "$DM_OLD.service" 2>/dev/null || true
        exit 1
         fi
       fi
