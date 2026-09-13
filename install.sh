@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -uo pipefail
 THEME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$(id -u)" = 0 ]; then
+  if [ -n "${SUDO_USER:-}" ]; then
+    exec runuser -u "$SUDO_USER" -- env -u SUDO_USER bash "$THEME/install.sh" "$@"
+  fi
+  printf '\n✗ raw root shell |::| run it as your user:  ./install.sh   or   sudo ./install.sh\n\n'
+  exit 1
+fi
 R=$'\033[0m'; B=$'\033[1m'; DIM=$'\033[2m'
 RED=$'\033[38;2;255;45;61m'; CYAN=$'\033[38;2;119;226;242m'
 YEL=$'\033[38;2;255;214;31m'; GRN=$'\033[38;2;90;230;130m'; GREY=$'\033[38;2;120;120;130m'
@@ -83,6 +90,26 @@ pac_install() {
     "Choking on a lib32-* chip? Uncomment [multilib] in /etc/pacman.conf, then pacman -Syu." \
     "One bad name kills the whole transaction, which is why the rest went dark too."
 }
+as_user() {
+  if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+    runuser -u "$SUDO_USER" -- "$@"
+  else
+    "$@"
+  fi
+}
+as_user_env() {
+  if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+    local rt f wl=() disp=()
+    rt="/run/user/$(id -u "$SUDO_USER")"
+    for f in "$rt"/wayland-*; do
+      if [ -S "$f" ]; then wl=("WAYLAND_DISPLAY=${f##*/}"); break; fi
+    done
+    [ -S "$rt/X11-unix/X0" ] && disp=("DISPLAY=:0")
+    runuser -u "$SUDO_USER" -- env "XDG_RUNTIME_DIR=$rt" "${wl[@]}" "${disp[@]}" "$@"
+  else
+    "$@"
+  fi
+}
 aur_install() {
   local label="$1"; shift
   local helper; helper="$(command -v paru || command -v yay || true)"
@@ -92,8 +119,9 @@ aur_install() {
       step "building yay from the AUR (base-devel + git + makepkg)…"
       sudo pacman -S --needed --noconfirm base-devel git >/dev/null 2>&1
       local ytmp; ytmp="$(mktemp -d)"
+      chown -R "${SUDO_USER:-$(id -un)}" "$ytmp" 2>/dev/null || true
       if git clone --depth 1 https://aur.archlinux.org/yay.git "$ytmp/yay" 2>/dev/null; then
-        if (cd "$ytmp/yay" && makepkg -si --noconfirm --needed >/dev/null 2>&1); then
+        if as_user bash -c "cd '$ytmp/yay' && makepkg -si --noconfirm --needed" >/dev/null 2>&1; then
           ok "yay installed"; helper="$(command -v yay || true)"
         else err "yay build failed — will fall back to manual instructions."
         fi
@@ -108,7 +136,7 @@ aur_install() {
       "Bootstrap it:  sudo pacman -S --needed base-devel git && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si" \
       "Then re-run:  ./install.sh"
   fi
-  if "$helper" -S --needed "$@"; then ok "$label installed"; return 0; fi
+  if as_user "$helper" -S --needed "$@"; then ok "$label installed"; return 0; fi
   local failed=() p
   for p in "$@"; do pacman -Qq "$p" >/dev/null 2>&1 || failed+=("$p"); done
   if [ "${#failed[@]}" -eq 0 ]; then ok "$label installed"; return 0; fi
@@ -118,25 +146,144 @@ aur_install() {
     "Most AUR flatlines are a half-synced system — run sudo pacman -Syu first, then reboot." \
     "Then re-run:  ./install.sh"
 }
-dm_current() { 
-local l u 
+DM_UNITS="plasmalogin plasma-login plasma-login-manager sddm gdm gdm3 lightdm ly greetd lxdm cosmic-greeter xdm"
+dm_units() {
+local l u
+l="$(basename "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)" 2>/dev/null || true)"
+l="${l%.service}"
+for u in $DM_UNITS; do printf '%s\n' "$u"; done
+[ -n "$l" ] && printf '%s\n' "$l"
+}
+dm_current() {
+local l u
 l="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
 if [ -n "$l" ] && [ -e "$l" ]; then basename "$l" .service; return 0; fi
-for u in plasmalogin sddm gdm lightdm ly greetd lxdm cosmic-greeter plasma-login; do
+while IFS= read -r u; do
+ [ -z "$u" ] && continue
 if systemctl is-enabled --quiet "$u.service" 2>/dev/null; then printf '%s' "$u"; return 0; fi
-done
+done < <(dm_units | awk '!seen[$0]++')
 printf ''
 }
-MESA_PKGS="mesa mesa-utils libdrm lib32-libdrm lib32-mesa"
+dm_enabled_list() {
+local u
+while IFS= read -r u; do
+[ -z "$u" ] && continue
+   systemctl is-enabled --quiet "$u.service" 2>/dev/null && printf '%s\n' "$u"
+done < <(dm_units | awk '!seen[$0]++')
+}
+dm_active_list() {
+local u
+while IFS= read -r u; do
+ [ -z "$u" ] && continue
+systemctl is-active --quiet "$u.service" 2>/dev/null && printf '%s\n' "$u"
+done < <(dm_units | awk '!seen[$0]++')
+}
+graphical_sessions_other() {
+local sid type cls
+while read -r sid _; do
+[ -z "$sid" ] && continue
+ [ "$sid" = "${XDG_SESSION_ID:-}" ] && continue
+cls="$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)"
+ [ "$cls" = "greeter" ] && continue
+type="$(loginctl show-session "$sid" -p Type --value 2>/dev/null || true)"
+   case "$type" in wayland|x11) printf '%s\n' "$sid" ;; esac
+done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
+}
+greeter_sessions_other() {
+local sid user cls
+while read -r sid _ user _; do
+[ -z "$sid" ] && continue
+ case "$user" in sddm|root|"") continue ;; esac
+cls="$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)"
+ [ "$cls" = "greeter" ] && printf '%s %s\n' "$sid" "$user"
+done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
+}
+greeter_units() {
+local sid user leader unit
+while read -r sid user; do
+ [ -z "$sid" ] && continue
+leader="$(loginctl show-session "$sid" -p Leader --value 2>/dev/null || true)"
+unit="$(sed -n 's|.*/\([^/]*\.service\).*|\1|p' "/proc/${leader}/cgroup" 2>/dev/null || true)"
+ case "$unit" in ""|sddm.service|user@*) continue ;; esac
+printf '%s\n' "$unit"
+done < <(greeter_sessions_other | awk '!seen[$0]++')
+}
+greeter_kill() {
+local sid user leader unit w
+for w in 1 2 3; do
+[ -z "$(greeter_sessions_other)" ] && return 0
+while read -r sid user; do
+ [ -z "$sid" ] && continue
+leader="$(loginctl show-session "$sid" -p Leader --value 2>/dev/null || true)"
+unit="$(sed -n 's|.*/\([^/]*\.service\).*|\1|p' "/proc/${leader}/cgroup" 2>/dev/null || true)"
+ case "$unit" in ""|sddm.service|user@*) ;; *) sudo systemctl stop "$unit" 2>/dev/null || true ;; esac
+sudo loginctl terminate-session "$sid" 2>/dev/null || true
+sudo loginctl terminate-user "$user" 2>/dev/null || true
+done < <(greeter_sessions_other)
+for w in $(seq 1 10); do
+ [ -z "$(greeter_sessions_other)" ] && return 0
+sleep 1
+done
+done
+while read -r sid user; do
+[ -n "$user" ] && sudo pkill -KILL -u "$user" 2>/dev/null || true
+done < <(greeter_sessions_other)
+sleep 1
+return 0
+}
+release_seat() {
+local u rc=0
+for u in $(dm_enabled_list | grep -vx sddm || true); do
+ sudo systemctl disable "$u.service" 2>/dev/null || rc=1
+done
+for u in $(greeter_units); do
+ sudo systemctl disable "$u" 2>/dev/null || true
+done
+return "$rc"
+}
+drm_groups_fix() {
+local u g rc=0 changed=""
+while IFS= read -r u; do
+ [ -z "$u" ] && continue
+getent passwd "$u" >/dev/null 2>&1 || continue
+ for g in video render; do
+  getent group "$g" >/dev/null 2>&1 || continue
+id -nG "$u" 2>/dev/null | tr ' ' '\n' | grep -qx "$g" && continue
+    if sudo usermod -aG "$g" "$u" 2>/dev/null && id -nG "$u" 2>/dev/null | tr ' ' '\n' | grep -qx "$g"; then
+changed="$changed $u→$g"
+else
+     err "couldnt get $u into the $g crew"
+rc=1
+fi
+ done
+done < <(dm_units | awk '!seen[$0]++')
+[ -n "$changed" ] && ok "greeter gpu clearance patched |::|$changed"
+return $rc
+}
+gpu_pkgs() {
+  local d cls ven out="mesa mesa-utils libdrm lib32-libdrm lib32-mesa"
+  for d in /sys/bus/pci/devices/*; do
+    [ -r "$d/class" ] && [ -r "$d/vendor" ] || continue
+    read -r cls < "$d/class"; read -r ven < "$d/vendor"
+    case "$cls" in 0x03*) ;; *) continue ;; esac
+    case "$ven" in
+      0x1002) case " $out " in *" vulkan-radeon "*) ;; *) out="$out vulkan-radeon lib32-vulkan-radeon" ;; esac ;;
+      0x8086) case " $out " in *" vulkan-intel "*) ;; *) out="$out vulkan-intel intel-media-driver" ;; esac ;;
+      0x10de) case " $out " in *" nvidia-utils "*) ;; *) out="$out nvidia-open nvidia-utils lib32-nvidia-utils" ;; esac ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+MESA_PKGS="$(gpu_pkgs)"
 HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire xdg-desktop-portal-hyprland lua lua54 gcc gcc-libs hyprlang ffmpeg ffmpeg4.4 chromaprint xorg-xwayland"
 REPO=(
   gjs grim wf-recorder wl-clipboard networkmanager bluez-utils curl
   wireplumber playerctl brightnessctl power-profiles-daemon upower
-  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget fuse2 sqlite3 pacman-contrib awww
+  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget fuse2 sqlite3 pacman-contrib awww cronie
   base-devel pkgconf cmake cpio gcc lib32-libelf lib32-glibc glibc
   python python-pillow imagemagick $MESA_PKGS
   pipewire pipewire-audio pipewire-pulse libpulse mpv ffmpeg sox
-  ttf-jetbrains-mono ttf-firacode-nerd ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono
+  ttf-jetbrains-mono ttf-firacode-nerd ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono otf-fantasque-sans-mono
   lib32-gnutls dnsmasq pipewire-alsa ffmpeg4.4 gst-plugin-pipewire lib32-nettle
   openconnect pipewire-jack pipewire-v4l2 pipewire-x11-bell pipewire-zeroconf
 )
@@ -157,6 +304,7 @@ command -v hyprctl >/dev/null || warn "Hyprland not detected on PATH |::| instal
 
 DRYRUN=0
 if [ "${1:-}" = "--dry-run" ] || [ -n "${AUG_DRYRUN:-}" ]; then DRYRUN=1; fi
+
 [ "$DRYRUN" = 1 ] || sudo_prime
 
 hdr "SYSTEM UPGRADE"
@@ -391,14 +539,14 @@ if [ "$LOCK_STACK" != 1 ]; then
   warn "hypridle lock_cmd left alone |::| $CUR_DM keeps owning the lock"
 else
   mkdir -p "$HOME/.config/qylock"
-  echo "netwatch" > "$HOME/.config/qylock/theme"
+  [ -f "$HOME/.config/qylock/theme" ] || echo "netwatch" > "$HOME/.config/qylock/theme"
   if [ -f "$IDLECONF" ]; then
-    if grep -q "lock_cmd" "$IDLECONF"; then
-      sed -i "s#^\( *\)lock_cmd = .*#\1lock_cmd = $LOGINDST/lock.sh#" "$IDLECONF"
-    else
-      sed -i "/^general {/a\\  lock_cmd = $LOGINDST/lock.sh" "$IDLECONF"
-    fi
-    ok "hypridle lock_cmd → $LOGINDST/lock.sh"
+    sed -i "s#^\( *\)lock_cmd[[:space:]]*=.*#\1lock_cmd = $LOGINDST/lock.sh#" "$IDLECONF"
+    grep -q "^lock_cmd = $LOGINDST/lock.sh" "$IDLECONF" \
+      || sed -i "/^general {/a\\  lock_cmd = $LOGINDST/lock.sh" "$IDLECONF"
+    grep -q "lock_cmd = $LOGINDST/lock.sh" "$IDLECONF" \
+      && ok "hypridle lock_cmd → $LOGINDST/lock.sh" \
+      || warn "hypridle lock_cmd refused the rewrite |::| eyeball $IDLECONF by hand"
   else
     mkdir -p "$(dirname "$IDLECONF")"
     printf 'general {\n  lock_cmd = %s/lock.sh\n  before_sleep_cmd = loginctl lock-session\n}\n' "$LOGINDST" > "$IDLECONF"
@@ -416,63 +564,81 @@ fi
 
 if [ "$LOCK_STACK" = 1 ] && command -v sddm >/dev/null 2>&1; then
   ok "sddm installed"
-  SDDM_CONF="/etc/sddm.conf"
-  step "configuring sddm → netwatch theme…"
-  if [ ! -f "$SDDM_CONF" ]; then
-    if sudo tee "$SDDM_CONF" >/dev/null <<'SDDMCNF'
-[Theme]
-Current=netwatch
-SDDMCNF
-    then ok "sddm configured → $SDDM_CONF"; else warn "could not write $SDDM_CONF"; fi
-  elif sudo grep -qE '^\[Theme\][[:space:]]*$' "$SDDM_CONF"; then
-    if sudo sed -i '/^\[Theme\][[:space:]]*$/,/^\[/ s/^Current[[:space:]]*=.*/Current=netwatch/' "$SDDM_CONF"; then
-      if sudo awk '
-        /^\[Theme\][[:space:]]*$/ { in_theme=1; next }
-        /^\[/ { in_theme=0 }
-        in_theme && /^Current[[:space:]]*=/ { found=1 }
-        END { exit found ? 0 : 1 }
-      ' "$SDDM_CONF"; then
-        ok "sddm theme set → netwatch"
-      elif sudo sed -i '/^\[Theme\][[:space:]]*$/a Current=netwatch' "$SDDM_CONF"; then
-        ok "sddm theme set → netwatch"
-      else
-        warn "could not set Current=netwatch in $SDDM_CONF"
-      fi
+  if ! getent passwd sddm >/dev/null 2>&1; then
+    step "spinning up the sddm greeter account…"
+    if sudo systemd-sysusers /usr/lib/sysusers.d/sddm.conf 2>/dev/null && getent passwd sddm >/dev/null 2>&1; then
+      ok "greeter account created"
     else
-      warn "could not update $SDDM_CONF"
+      fatal "the sddm greeter account never got created on this deck." \
+        "without it the greeter cant even try to open the gpu." \
+        "force it raw, then re-run:" \
+        "  sudo systemd-sysusers /usr/lib/sysusers.d/sddm.conf"
     fi
-  elif printf '\n[Theme]\nCurrent=netwatch\n' | sudo tee -a "$SDDM_CONF" >/dev/null; then
-    ok "sddm theme section appended → netwatch"
-  else
-    warn "could not append a [Theme] section to $SDDM_CONF"
   fi
-  SDDM_THEME_DIR="/usr/share/sddm/themes/netwatch"
+   step "checking greeter gpu clearance…"
+  if drm_groups_fix; then :; else
+    fatal "greeter users couldnt land in video/render." \
+      "without that clearance kwin cant open the drm card — thats the black-screen-at-login special." \
+      "fix it raw, then re-run:" \
+      "  sudo usermod -aG video,render sddm"
+  fi
+  SDDM_THEME_NAME="netwatch"
+  SDDM_DROPIN="/etc/sddm.conf.d/10-${SDDM_THEME_NAME}.conf"
+  if command -v ffmpeg >/dev/null 2>&1 && [ -f "$LOGINSRC/sddm-theme/bg.mp4" ] && { [ ! -f "$LOGINSRC/sddm-theme/fallback.jpg" ] || [ "$LOGINSRC/sddm-theme/bg.mp4" -nt "$LOGINSRC/sddm-theme/fallback.jpg" ]; }; then
+    ffmpeg -y -loglevel error -i "$LOGINSRC/sddm-theme/bg.mp4" -frames:v 1 -q:v 3 "$LOGINSRC/sddm-theme/fallback.jpg" >/dev/null 2>&1 \
+      && ok "greeter fallback frame extracted → fallback.jpg" \
+      || warn "could not extract a fallback frame |::| gpu-less decks get a flat greeter"
+  fi
+  SDDM_THEME_DIR="/usr/share/sddm/themes/${SDDM_THEME_NAME}"
   if sudo install -d -m 755 "$SDDM_THEME_DIR" && sudo cp -rf "$LOGINSRC/sddm-theme"/. "$SDDM_THEME_DIR"/; then
     ok "sddm theme deployed → $SDDM_THEME_DIR"
   else
-    fatal "the netwatch sddm theme could not be deployed." \
-      "sddm.conf now points Current=netwatch at a theme dir that is not there." \
-      "Booting that combo gives you a black greeter, so this stops here." \
+    sudo rm -f "$SDDM_DROPIN"
+    fatal "the ${SDDM_THEME_NAME} sddm theme could not be deployed." \
+      "the netwatch drop-in was pulled back out, so no config points at a missing theme." \
       "Deploy it by hand:" \
       "  sudo install -d -m 755 $SDDM_THEME_DIR" \
       "  sudo cp -rf '$LOGINSRC/sddm-theme'/. $SDDM_THEME_DIR/" \
       "Your greeter was NOT switched yet, so nothing about your login changed."
   fi
-  if sudo install -d -m 755 -o "$(id -un)" -g "$(id -gn)" "$SDDM_THEME_DIR/current"; then
+  step "configuring sddm → ${SDDM_THEME_NAME} theme…"
+  if sudo install -d -m 755 /etc/sddm.conf.d \
+     && printf '[Theme]\nCurrent=%s\n' "$SDDM_THEME_NAME" | sudo tee "$SDDM_DROPIN" >/dev/null; then
+    ok "sddm configured → $SDDM_DROPIN"
+  else
+    warn "could not write $SDDM_DROPIN |::| the greeter may come up stock"
+  fi
+  SDDM_X11_FIX="/etc/sddm.conf.d/20-greeter-x11.conf"
+  if sudo install -d -m 755 /etc/sddm.conf.d \
+     && printf '[General]\nDisplayServer=x11\n' | sudo tee "$SDDM_X11_FIX" >/dev/null; then
+    ok "greeter pinned to x11 → $SDDM_X11_FIX |::| dodges the kwin_wayland HELPER_TTY_ERROR loop"
+  else
+    warn "could not pin the greeter to x11 |::| wayland greeters may loop on HELPER_TTY_ERROR"
+  fi
+  if sudo install -d -m 755 -o "${SUDO_USER:-$(id -un)}" -g "$(id -gn "${SUDO_USER:-$(id -un)}")" "$SDDM_THEME_DIR/current"; then
     if ! ls "$SDDM_THEME_DIR/current"/image.* >/dev/null 2>&1 && ! ls "$SDDM_THEME_DIR/current"/video.* >/dev/null 2>&1; then
       SEED_WP=""
       if [ -r "$USER_DIR/wallpaper.lua" ]; then
         SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
       fi
       [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
-      SEED_EXT="${SEED_WP##*.}"
-      if [ -n "$SEED_EXT" ] && [ "$SEED_EXT" != "$SEED_WP" ] && [ -r "$SEED_WP" ]; then
+      SEED_EXT="$(printf '%s' "${SEED_WP##*.}" | tr '[:upper:]' '[:lower:]')"
+      case "$SEED_WP" in
+        *.*) ;;
+        *) SEED_EXT="" ;;
+      esac
+      if [ -n "$SEED_EXT" ] && [ -r "$SEED_WP" ]; then
         case "$SEED_EXT" in
           mp4|webm|mkv|mov) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/video.$SEED_EXT" ;;
-          *) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/image.$SEED_EXT" ;;
+          png|jpg|jpeg|webp|gif) cp -f "$SEED_WP" "$SDDM_THEME_DIR/current/image.$SEED_EXT" ;;
+          *) SEED_EXT="" ;;
         esac
-        chmod 644 "$SDDM_THEME_DIR/current"/image.* "$SDDM_THEME_DIR/current"/video.* 2>/dev/null
-        ok "sddm current wallpaper seeded → $SDDM_THEME_DIR/current"
+        [ -n "$SEED_EXT" ] && chmod 644 "$SDDM_THEME_DIR/current"/image.* "$SDDM_THEME_DIR/current"/video.* 2>/dev/null
+        if [ -n "$SEED_EXT" ]; then
+          ok "sddm current wallpaper seeded → $SDDM_THEME_DIR/current"
+        else
+          warn "unsupported wallpaper type |::| sddm falls back to the theme's bg.mp4"
+        fi
       else
         warn "could not seed sddm current wallpaper |::| first theme load will deploy it"
       fi
@@ -486,11 +652,11 @@ SDDMCNF
   case "$DMLINK" in
     */sddm.service) ok "sddm is already the default display manager" ;;
     *)
-      if [ -n "$DM_OLD" ]; then
-        step "switching off $DM_OLD…"
-        DM_ERR="$(sudo systemctl disable "$DM_OLD.service" 2>&1)" \
-          && ok "$DM_OLD disabled" \
-          || warn "could not disable $DM_OLD |::| ${DM_ERR:-no output} |::| enable --force below overrides the alias anyway"
+      step "releasing the seat from the old greeter…"
+      if release_seat; then
+        ok "old greeter ghosted for next boot |::| the live one gets put down at the logout handoff"
+      else
+        warn "some old greeter bits wouldnt ghost |::| enable --force below muscles the alias anyway"
       fi
       step "enabling sddm as default display manager…"
       SDDM_ERR="$(sudo systemctl enable --force sddm 2>&1)"
@@ -519,7 +685,11 @@ CACHE_SCRIPT="$LOGINSRC/sddm-theme/cache-news.sh"
 if [ -f "$CACHE_SCRIPT" ]; then
   chmod +x "$CACHE_SCRIPT"
   CRON_LINE="*/10 * * * * $CACHE_SCRIPT"
-  (crontab -l 2>/dev/null | grep -v "cache-news.sh"; echo "$CRON_LINE") | crontab - 2>/dev/null
+  if [ "$(id -u)" = 0 ]; then
+    (crontab -u "${SUDO_USER:-root}" -l 2>/dev/null | grep -v "cache-news.sh"; echo "$CRON_LINE") | crontab -u "${SUDO_USER:-root}" -
+  else
+    (crontab -l 2>/dev/null | grep -v "cache-news.sh"; echo "$CRON_LINE") | crontab -
+  fi
   ok "news cache cron installed (every 10 min)"
 else
   warn "cache-news.sh missing |::| skipping cron install"
@@ -552,19 +722,19 @@ qs_ok() { command -v qs >/dev/null 2>&1 && qs --version >/dev/null 2>&1; }
 
 
 lock_proto_state() {
-  if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wayland-info >/dev/null 2>&1; then
-    probe="$(wayland-info 2>/dev/null)"
-    if printf '%s' "$probe" | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; return 0; fi
-    if wayland-info >/dev/null 2>&1; then printf 'no'; return 0; fi
-  fi
-  if command -v hyprctl >/dev/null 2>&1; then
-    local hv maj min
-    hv="$(hyprctl version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)"
-    if [ -n "$hv" ]; then
-      maj="$((10#${hv%%.*}))"; min="$((10#${hv#*.}))"
-      if [ "$maj" -gt 0 ] || [ "$min" -ge 35 ]; then printf 'yes'; else printf 'no'; fi
+  if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v wayland-info >/dev/null 2>&1; then
+    probe="$(as_user_env wayland-info 2>/dev/null)"
+    if [ -n "$probe" ]; then
+      if printf '%s' "$probe" | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; else printf 'no'; fi
       return 0
     fi
+  fi
+  local hv maj min
+  hv="$(pacman -Q hyprland 2>/dev/null | awk '{print $2}' | grep -oE '^[0-9]+\.[0-9]+' | head -1 || true)"
+  if [ -n "$hv" ]; then
+    maj="$((10#${hv%%.*}))"; min="$((10#${hv#*.}))"
+    if [ "$maj" -gt 0 ] || [ "$min" -ge 35 ]; then printf 'yes'; else printf 'no'; fi
+    return 0
   fi
   printf 'unknown'
 }
@@ -678,16 +848,16 @@ CRT_URL="https://github.com/Swordfish90/cool-retro-term/releases/download/2.0.0-
 if [ -x "$CRT_BIN" ]; then
   ok "cool-retro-term AppImage already present ($CRT_BIN)"
 elif command -v wget >/dev/null 2>&1; then
-  mkdir -p "$HOME/.local/bin"
+  as_user mkdir -p "$HOME/.local/bin"
   step "downloading cool-retro-term AppImage…"
-  if wget -q --show-progress -O "$CRT_BIN" "$CRT_URL"; then chmod +x "$CRT_BIN"; ok "installed cool-retro-term → $CRT_BIN"
+  if as_user wget -q --show-progress -O "$CRT_BIN" "$CRT_URL"; then as_user chmod +x "$CRT_BIN" && ok "installed cool-retro-term → $CRT_BIN"
   else rm -f "$CRT_BIN"; warn "download failed |::| grab it manually: $CRT_URL"; fi
 else
   warn "wget not found |::| install wget or download manually to $CRT_BIN: $CRT_URL"
 fi
 CRT_DESKTOP="$HOME/.local/share/applications/cool-retro-term.desktop"
-mkdir -p "$(dirname "$CRT_DESKTOP")"
-cat > "$CRT_DESKTOP" <<EOF
+as_user mkdir -p "$(dirname "$CRT_DESKTOP")"
+as_user bash -c "cat > '$CRT_DESKTOP'" <<EOF
 [Desktop Entry]
 Type=Application
 Name=cool-retro-term
@@ -701,11 +871,11 @@ CRTJSON="$THEME/assets/cool-retro-term/netrunner.json"
 if command -v jq >/dev/null 2>&1 && [ -f "$CRTJSON" ]; then
   CRTDIR="$HOME/.config/cool-retro-term"; CRTCONF="$CRTDIR/cool-retro-term.conf"
   pgrep -x cool-retro-term >/dev/null && warn "cool-retro-term is running |::| close it so settings stick."
-  mkdir -p "$CRTDIR"
-  [ -f "$CRTCONF" ] && cp -f "$CRTCONF" "$CRTCONF.bak.$(date +%s)" && ok "backed up existing conf"
+  as_user mkdir -p "$CRTDIR"
+  [ -f "$CRTCONF" ] && as_user cp -f "$CRTCONF" "$CRTCONF.bak.$(date +%s)" && ok "backed up existing conf"
   { echo "[General]"
     jq -r 'to_entries[] | select(.key!="name" and .key!="version") | "\(.key)=\(.value)"' "$CRTJSON"
-  } > "$CRTCONF"
+  } | as_user bash -c "cat > '$CRTCONF'"
   ok "netrunner set as the default cool-retro-term appearance"
 else
   warn "skipped (need cool-retro-term + jq + netrunner.json). Import it via the app's Load button if needed."
@@ -715,11 +885,11 @@ hdr "COOL-RETRO-TERM · netrunner profile install"
 if [ -x "$CRT_BIN" ] && [ -f "$THEME/scripts/netrunner-terminal" ]; then
   if [ ! -d "$HOME/.local/share/cool-retro-term" ]; then
     step "first-run cool-retro-term to generate its profile database"
-    "$CRT_BIN" >/dev/null 2>&1 & CRTPID=$!
+    as_user_env "$CRT_BIN" >/dev/null 2>&1 & CRTPID=$!
     sleep 6
     kill "$CRTPID" 2>/dev/null; pkill -x cool-retro-term 2>/dev/null
   fi
-  bash "$THEME/scripts/netrunner-terminal" && ok "netrunner profile installed" || warn "netrunner-terminal failed |::| run cool-retro-term once, then: scripts/netrunner-terminal"
+  as_user_env bash "$THEME/scripts/netrunner-terminal" && ok "netrunner profile installed" || warn "netrunner-terminal failed |::| run cool-retro-term once, then: scripts/netrunner-terminal"
 fi
 
 hdr "CYBERSPACE · net client"
@@ -1275,6 +1445,7 @@ gt_vendor_icd() {
     case "$ven" in
       0x1002) case " $out " in *" vulkan-radeon "*) ;; *) out="$out vulkan-radeon" ;; esac ;;
       0x8086) case " $out " in *" vulkan-intel "*) ;; *) out="$out vulkan-intel" ;; esac ;;
+      0x10de) case " $out " in *" nvidia-utils "*) ;; *) out="$out nvidia-utils" ;; esac ;;
     esac
   done
   printf '%s' "$out"
@@ -1364,6 +1535,25 @@ else
       # the colors and shaders/ has the .slangp chain per look. rio-style copies the style over
       # config.toml when u switch theme
       mkdir -p "$GTCFG/themes" "$GTCFG/shaders" "$GTCFG/styles" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
+      FONT_DIR="$HOME/.local/share/fonts"
+      mkdir -p "$FONT_DIR"
+      if ! fc-list -q "Share Tech Mono" 2>/dev/null; then
+        if wget -q -O "$FONT_DIR/ShareTechMono-Regular.ttf" "https://github.com/google/fonts/raw/main/ofl/sharetechmono/ShareTechMono-Regular.ttf"; then
+          ok "Share Tech Mono landed in $FONT_DIR |::| ARCTIC stops falling back"
+        else
+          rm -f "$FONT_DIR/ShareTechMono-Regular.ttf"
+          warn "Share Tech Mono wouldnt download |::| ARCTIC rides on a fallback font"
+        fi
+      fi
+      if ! fc-list -q "VT323" 2>/dev/null; then
+        if wget -q -O "$FONT_DIR/VT323-Regular.ttf" "https://github.com/phoikoi/VT323/raw/master/fonts/ttf/VT323-Regular.ttf"; then
+          ok "VT323 landed in $FONT_DIR |::| GHOST stops falling back"
+        else
+          rm -f "$FONT_DIR/VT323-Regular.ttf"
+          warn "VT323 wouldnt download |::| GHOST rides on a fallback font"
+        fi
+      fi
+      fc-cache -f "$FONT_DIR" >/dev/null 2>&1 || true
       if [ -f "$GTCFG/config.toml" ] && [ ! -f "$GTCFG/config.toml.pre-cyberpunk" ]; then
         cp "$GTCFG/config.toml" "$GTCFG/config.toml.pre-cyberpunk" && ok "previous terminal config backed up"
       fi
@@ -1431,7 +1621,6 @@ sudo pacman -S --needed $MESA_PKGS
 step "re-asserting qt6-multimedia (quickshell lock screen needs it)…"
 sudo pacman -S --needed qt6-multimedia
 
-clear
 printf "${RED}${B}"
 cat <<'EOF'
 
@@ -1478,12 +1667,9 @@ read -r ans </dev/tty
 if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
   PREV_DM="$(dm_current)"
    if [ "$LOCK_STACK" = 1 ]; then
-     if [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ]; then
-       step "dumping $PREV_DM out the window…"
-        sudo systemctl disable "$PREV_DM.service" 2>/dev/null \
-          && ok "$PREV_DM flatlined by choice |::| ghosted, not deleted" \
-          || warn "$PREV_DM wont budge |::| enable --force further down muscles the alias anyway"
-     fi
+     step "releasing the seat from the old greeter…"
+     release_seat && ok "old greeter ghosted for next boot |::| the live one gets put down by the handoff" \
+       || warn "some old greeter bits wouldnt ghost |::| enable --force further down muscles the alias anyway"
       step "cutting sddm in as the default display manager…"
      sudo systemctl enable --force sddm >/dev/null 2>&1 || true
        DMLINK="$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)"
@@ -1496,31 +1682,142 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
        exit 1
         ;;
      esac
-      if ls /etc/sddm.conf.d/*.conf >/dev/null 2>&1 && sudo grep -rqE '^[[:space:]]*Current[[:space:]]*=|^\[Theme\]' /etc/sddm.conf.d/ 2>/dev/null; then
-       warn "Theme/Current overrides found in /etc/sddm.conf.d |::| drop-ins beat /etc/sddm.conf, eyeball them:  sudo grep -rn Current /etc/sddm.conf.d/"
+     drm_groups_fix || warn "gpu clearance recheck came back dirty |::| if the greeter black-screens:  sudo usermod -aG video,render sddm"
+      if ls /etc/sddm.conf.d/*.conf >/dev/null 2>&1 && sudo grep -rqE --exclude="$(basename "${SDDM_DROPIN:-10-netwatch.conf}")" '^[[:space:]]*Current[[:space:]]*=|^\[Theme\]' /etc/sddm.conf.d/ 2>/dev/null; then
+       warn "other Theme/Current overrides found in /etc/sddm.conf.d |::| drop-ins beat drop-ins, eyeball them:  sudo grep -rn Current /etc/sddm.conf.d/"
         fi
      if ! systemctl is-active --quiet sddm; then
         sudo systemctl reset-failed sddm 2>/dev/null || true
-       if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
-          sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
-        if sudo systemd-run --unit=cyber-sddm-start --on-active=6 /usr/bin/systemctl start sddm >/dev/null 2>&1 \
-           && systemctl list-timers cyber-sddm-start.timer --no-legend 2>/dev/null | grep -q cyber-sddm-start; then
-            ok "sddm start scheduled |::| the greeter jacks in right after your session flatlines"
+       SESS_ID="${XDG_SESSION_ID:-}"
+        if [ -z "$SESS_ID" ] && [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+         SESS_ID="$(loginctl list-sessions --no-legend 2>/dev/null | awk -v u="$SUDO_USER" '$3==u {print $1; exit}')"
+       fi
+        if [ -z "$SESS_ID" ]; then
+          SESS_ID="$(loginctl list-sessions --no-legend 2>/dev/null | awk -v u="$(id -u)" '$2==u {print $1; exit}')"
+        fi
+       SESS_TYPE="$(loginctl show-session "${SESS_ID:-none}" -p Type --value 2>/dev/null || true)"
+        if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ] || [ "$SESS_TYPE" = "wayland" ] || [ "$SESS_TYPE" = "x11" ]; then
+        if [ -z "$SESS_ID" ]; then
+          err "cant lock onto this session |::| holding the logout, choom"
+           warn "log out yourself, then from a TTY:  sudo systemctl start sddm"
+          exit 1
+        fi
+        HANDOFF="$(sudo mktemp /tmp/cyber-sddm-handoff.XXXXXX.sh)"
+        if [ -z "$HANDOFF" ]; then
+          err "mktemp couldnt create the handoff script |::| holding the logout, choom"
+          warn "check the deck:  df -h /tmp   ls -ld /tmp"
+          exit 1
+        fi
+        if sudo tee "$HANDOFF" >/dev/null <<'HANDOFFSH'
+#!/usr/bin/env bash
+DM_UNITS="plasmalogin plasma-login plasma-login-manager sddm gdm gdm3 lightdm ly greetd lxdm cosmic-greeter xdm"
+SESS="$1"
+GR_ME="${2:-}"
+gr_other() {
+  local sid user cls
+  while read -r sid _ user _; do
+    [ -z "$sid" ] && continue
+    case "$user" in sddm|root|""|"${GR_ME:-__none__}") continue ;; esac
+    cls="$(loginctl show-session "$sid" -p Class --value 2>/dev/null || true)"
+    [ "$cls" = "greeter" ] && printf '%s %s\n' "$sid" "$user"
+  done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
+}
+gr_kill() {
+  local sid user leader unit w
+  for w in 1 2 3; do
+    [ -z "$(gr_other)" ] && return 0
+    while read -r sid user; do
+      [ -z "$sid" ] && continue
+      leader="$(loginctl show-session "$sid" -p Leader --value 2>/dev/null || true)"
+      unit="$(sed -n 's|.*/\([^/]*\.service\).*|\1|p' "/proc/${leader}/cgroup" 2>/dev/null || true)"
+      case "$unit" in ""|sddm.service|user@*) ;; *) systemctl stop "$unit" 2>/dev/null || true ;; esac
+      loginctl terminate-session "$sid" 2>/dev/null || true
+      loginctl terminate-user "$user" 2>/dev/null || true
+    done < <(gr_other)
+    for w in $(seq 1 10); do
+      [ -z "$(gr_other)" ] && return 0
+      sleep 1
+    done
+  done
+  while read -r sid user; do
+    [ -n "$user" ] && pkill -KILL -u "$user" 2>/dev/null || true
+  done < <(gr_other)
+  sleep 1
+  return 0
+}
+for i in $(seq 1 90); do
+  loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "$SESS" || break
+  sleep 1
+done
+if loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}' | grep -qx "$SESS"; then
+  rm -f "$0"
+  exit 1
+fi
+gr_kill
+act=""
+for u in $DM_UNITS; do
+  [ "$u" = sddm ] && continue
+  systemctl is-active --quiet "$u.service" 2>/dev/null || continue
+  act="$act $u"
+  systemctl stop "$u.service" 2>/dev/null || true
+done
+systemctl reset-failed sddm 2>/dev/null || true
+systemctl start sddm
+sleep 5
+if systemctl is-active --quiet sddm && pgrep -x sddm-greeter >/dev/null 2>&1; then
+  rm -f "$0"
+  exit 0
+fi
+systemctl stop sddm 2>/dev/null || true
+for u in $act; do
+  systemctl start "$u.service" 2>/dev/null || true
+done
+rm -f "$0"
+exit 1
+HANDOFFSH
+        then
+          sudo chmod 755 "$HANDOFF"
+           sudo systemctl stop cyber-sddm-handoff.service 2>/dev/null || true
+          if sudo systemd-run --unit=cyber-sddm-handoff "$HANDOFF" "$SESS_ID" "$(id -un)" >/dev/null 2>&1 \
+             && systemctl is-active --quiet cyber-sddm-handoff.service; then
+            ok "handoff armed |::| the greeter jacks in the second your session flatlines"
           else
-            err "couldnt schedule the sddm wakeup |::| holding the logout, choom"
+            err "couldnt arm the sddm handoff |::| holding the logout, choom"
              warn "start it yourself from a TTY once youre out:  sudo systemctl start sddm"
-              sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+              sudo systemctl stop cyber-sddm-handoff.service 2>/dev/null || true
+            sudo rm -f "$HANDOFF"
             exit 1
           fi
+        else
+          err "couldnt write the handoff script |::| holding the logout, choom"
+           warn "start it yourself from a TTY once youre out:  sudo systemctl start sddm"
+          sudo rm -f "$HANDOFF"
+          exit 1
+        fi
        else
+        mapfile -t OTH_SESS < <(graphical_sessions_other)
+        if [ "${#OTH_SESS[@]}" -gt 0 ]; then
+           err "another graphical session is still jacked in |::| not pulling the plug on someone elses ride"
+            warn "log that session out first, then:  sudo systemctl start sddm"
+          exit 1
+        fi
         step "waking sddm up…"
+        greeter_kill
+         ACT_DMS=()
+        mapfile -t ACT_DMS < <(dm_active_list | grep -vx sddm || true)
+         for d in "${ACT_DMS[@]}"; do
+          sudo systemctl stop "$d.service" 2>/dev/null || true
+        done
          if sudo systemctl start sddm; then
-           sleep 2
+           sleep 5
           if systemctl is-active --quiet sddm && pgrep -x sddm-greeter >/dev/null 2>&1; then
              ok "sddm is jacked in |::| it grabs the login screen the second you flatline your session"
             else
            err "sddm flatlined |::| jackin ${PREV_DM:-the old greeter} back in so you can delta safely"
              [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+             for d in "${ACT_DMS[@]}"; do
+              sudo systemctl start "$d.service" 2>/dev/null || true
+            done
                warn "sddm corpse log:  journalctl -b -u sddm --no-pager | tail -50"
          warn "wake it yourself, choom:  sudo systemctl start sddm"
             exit 1
@@ -1529,20 +1826,29 @@ if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
         err "sddm refused the wakeup call |::| holding the logout"
            warn "journalctl -b -u sddm --no-pager | tail -50"
             [ -n "$PREV_DM" ] && [ "$PREV_DM" != "sddm" ] && sudo systemctl start "$PREV_DM.service" 2>/dev/null || true
+             for d in "${ACT_DMS[@]}"; do
+              sudo systemctl start "$d.service" 2>/dev/null || true
+            done
        exit 1
         fi
       fi
     else
       ok "sddm never slept |::| log out and you drop straight into the netwatch greeter"
+      mapfile -t DM_ACT2 < <(dm_active_list | grep -vx sddm || true)
+      [ "${#DM_ACT2[@]}" -gt 0 ] && warn "${DM_ACT2[*]} still squatting on the seat |::| eyeball:  systemctl list-units --type=service | grep -E '(sddm|gdm|lightdm|greetd|ly|lxdm|login)'"
        fi
    fi
   printf "${CYAN} > Flatlining session. . . . ${R}\n"
    if command -v hyprctl >/dev/null 2>&1 && hyprctl dispatch exit >/dev/null 2>&1; then
     :
+  elif command -v qdbus >/dev/null 2>&1 && qdbus org.kde.Shutdown /Shutdown org.kde.Shutdown.logout >/dev/null 2>&1; then
+    :
+  elif command -v qdbus-qt6 >/dev/null 2>&1 && qdbus-qt6 org.kde.Shutdown /Shutdown org.kde.Shutdown.logout >/dev/null 2>&1; then
+    :
   elif [ -n "${XDG_SESSION_ID:-}" ]; then
-      loginctl terminate-session "$XDG_SESSION_ID" 2>/dev/null || true
+      loginctl kill-session "$XDG_SESSION_ID" --signal=SIGINT 2>/dev/null || loginctl terminate-session "$XDG_SESSION_ID" 2>/dev/null || true
   else
-     sudo systemctl stop cyber-sddm-start.timer 2>/dev/null || true
+     sudo systemctl stop cyber-sddm-handoff.service 2>/dev/null || true
      warn "no session to flatline |::| wake the greeter yourself:  sudo systemctl start sddm"
    fi
 else
