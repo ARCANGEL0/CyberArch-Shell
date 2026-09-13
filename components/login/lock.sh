@@ -4,7 +4,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-$(loginctl show-session $(loginctl | grep $(whoami) | awk '{print $1}') -p Type --value 2>/dev/null || echo wayland)}"
 export QT_MEDIA_BACKEND=ffmpeg
-export QS_THEME="netwatch"
+QS_USER_THEME=""
+[ -r "$HOME/.config/qylock/theme" ] && read -r QS_USER_THEME < "$HOME/.config/qylock/theme"
+if [ -n "$QS_USER_THEME" ] && [ -d "$DIR/themes/$QS_USER_THEME" ]; then
+    export QS_THEME="$QS_USER_THEME"
+else
+    export QS_THEME="netwatch"
+fi
 export QS_THEME_PATH="$DIR/themes/$QS_THEME"
 export QS_PAM_CONFIG="qs-lock"
 export XCURSOR_THEME="neurodance"

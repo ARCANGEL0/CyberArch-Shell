@@ -11,39 +11,59 @@ Item {
     property int imgIdx: 0
     property bool imageMiss: false
 
-    Image {
-        anchors.fill: parent
-        fillMode: Image.PreserveAspectCrop
-        visible: status === Image.Ready
-        source: Qt.resolvedUrl("current/image." + root.imgExts[root.imgIdx])
-        onStatusChanged: {
-            if (status !== Image.Error) return
-            if (root.imgIdx < root.imgExts.length - 1) root.imgIdx++
-            else root.imageMiss = true
+    function nextImage() {
+        if (imgIdx < imgExts.length) {
+            bgImage.source = Qt.resolvedUrl("current/image." + imgExts[imgIdx])
+            imgIdx++
+        } else if (!imageMiss) {
+            imageMiss = true
+            nextVideo()
         }
     }
 
-    property var vidSrcs: ["current/video.mp4", "current/video.webm", "current/video.mkv"]
+    Image {
+        id: bgImage
+        anchors.fill: parent
+        fillMode: Image.PreserveAspectCrop
+        visible: status === Image.Ready
+        onStatusChanged: {
+            if (status === Image.Error) root.nextImage()
+        }
+    }
+
+    property var vidSrcs: ["current/video.mp4", "current/video.webm", "current/video.mkv", "current/video.mov", "bg.mp4"]
     property int vidIdx: 0
+    property bool videoMiss: false
+
+    function nextVideo() {
+        if (vidIdx >= vidSrcs.length) {
+            if (videoMiss) return
+            videoMiss = true
+            mediaplayer.stop()
+            bgImage.source = Qt.resolvedUrl("fallback.jpg")
+            return
+        }
+        mediaplayer.source = Qt.resolvedUrl(vidSrcs[vidIdx])
+        vidIdx++
+    }
 
     VideoOutput {
         id: videoOutput
         anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectCrop
-        visible: root.imageMiss
+        visible: root.imageMiss && !root.videoMiss
     }
 
     MediaPlayer {
         id: mediaplayer
-        source: root.imageMiss
-            ? (root.vidIdx < root.vidSrcs.length ? Qt.resolvedUrl(root.vidSrcs[root.vidIdx]) : Qt.resolvedUrl("bg.mp4"))
-            : ""
         autoPlay: true
         loops: MediaPlayer.Infinite
         videoOutput: videoOutput
         onErrorChanged: {
             if (error === MediaPlayer.NoError) return
-            if (root.vidIdx < root.vidSrcs.length - 1) root.vidIdx++
+            root.nextVideo()
         }
     }
+
+    Component.onCompleted: nextImage()
 }
