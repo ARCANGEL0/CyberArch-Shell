@@ -724,7 +724,7 @@ qs_ok() { command -v qs >/dev/null 2>&1 && qs --version >/dev/null 2>&1; }
 lock_proto_state() {
   if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v wayland-info >/dev/null 2>&1; then
     probe="$(as_user_env wayland-info 2>/dev/null)"
-    if [ -n "$probe" ]; then
+    if [ -n "$probe" ] && printf '%s' "$probe" | grep -q "hyprland_"; then
       if printf '%s' "$probe" | grep -q "ext_session_lock_manager_v1"; then printf 'yes'; else printf 'no'; fi
       return 0
     fi
@@ -1761,14 +1761,27 @@ for u in $DM_UNITS; do
   act="$act $u"
   systemctl stop "$u.service" 2>/dev/null || true
 done
-systemctl reset-failed sddm 2>/dev/null || true
-systemctl start sddm
-sleep 5
-if systemctl is-active --quiet sddm && pgrep -x sddm-greeter >/dev/null 2>&1; then
-  rm -f "$0"
-  exit 0
-fi
-systemctl stop sddm 2>/dev/null || true
+sleep 3
+tries=0
+while [ "$tries" -lt 3 ]; do
+  tries=$((tries + 1))
+  systemctl reset-failed sddm 2>/dev/null || true
+  systemctl start sddm 2>/dev/null || true
+  up=0
+  for i in $(seq 1 10); do
+    sleep 1
+    if systemctl is-active --quiet sddm 2>/dev/null && pgrep -x sddm-greeter >/dev/null 2>&1; then up=1; break; fi
+  done
+  if [ "$up" = 1 ]; then
+    sleep 4
+    if systemctl is-active --quiet sddm 2>/dev/null && pgrep -x sddm-greeter >/dev/null 2>&1; then
+      rm -f "$0"
+      exit 0
+    fi
+  fi
+  systemctl stop sddm 2>/dev/null || true
+  sleep 2
+done
 for u in $act; do
   systemctl start "$u.service" 2>/dev/null || true
 done

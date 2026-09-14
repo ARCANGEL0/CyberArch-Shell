@@ -303,6 +303,23 @@ rc=$?
 check "unit-less greeter: session and user terminated" 'grep -q "loginctl:terminate-session:c6" "$SYSTEMD_LOG" && grep -q "loginctl:terminate-user:plasmalogin" "$SYSTEMD_LOG"'
 check "unit-less greeter: competitor unit still stopped" 'grep -q "stop:plasma-login-manager" "$SYSTEMD_LOG"'
 check "unit-less greeter: sddm takes the seat" '[ "$rc" = "0" ] && grep -qx "active:sddm" "$SYSTEMD_STATE"'
+extract_handoff
+: > "$SYSTEMD_STATE"
+: > "$SYSTEMD_LOG"
+: > "$WORK/sessions"
+mkdir -p "$WORK/flaky"
+cat > "$WORK/flaky/pgrep" <<'EOF'
+#!/usr/bin/env bash
+c="${GREETER_FLAKY_FILE:?}"
+n="$(cat "$c" 2>/dev/null || echo 0)"
+if [ "$n" -gt 0 ]; then echo $((n - 1)) > "$c"; exit 1; fi
+exit 0
+EOF
+chmod +x "$WORK/flaky/pgrep"
+echo 2 > "$WORK/flaky.count"
+SESSIONS_FILE="$WORK/sessions" GREETER_FLAKY_FILE="$WORK/flaky.count" PATH="$WORK/flaky:$PATH" "$WORK/handoff.sh" 7 >/dev/null 2>&1
+rc=$?
+check "greeter crash on first start recovers on retry" '[ "$rc" = "0" ] && grep -qx "active:sddm" "$SYSTEMD_STATE" && ! grep -q "^start:ly" "$SYSTEMD_LOG"'
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

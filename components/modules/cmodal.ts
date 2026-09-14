@@ -907,7 +907,7 @@ const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
 const PwrCtrl = () => {
     const items = [
         [ch(0xf023), "LOCK", "loginctl lock-session"],
-        [ch(0xf2f5), "LOGOUT", "hyprctl dispatch exit"],
+        [ch(0xf2f5), "LOGOUT", "hyprctl dispatch 'hl.dsp.exit()' || hyprctl dispatch exit || loginctl kill-session ${XDG_SESSION_ID:-} --signal=SIGINT"],
         [ch(0xf021), "REBOOT", "systemctl reboot"],
         [ch(0xf011), "SHUTDOWN", "systemctl poweroff"],
     ]
