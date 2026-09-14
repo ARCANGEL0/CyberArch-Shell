@@ -71,6 +71,7 @@ const RENDER: any[] = []
 const GLYPH = "0123456789ABCDEFGHJKLMNPRSTUVWXYZ#%@/<>*"
 
 const applyFilter = () => {
+ if (wheelCfg.masked) { filtered = apps.slice(); scroll = 0; scrollTarget = 0; animate(); return }
  const q = query.toLowerCase().trim()
  if (!q) filtered = apps.slice()
  else filtered = apps.map((a) => [a, (a.label || "").toLowerCase()] as [any, string])
@@ -234,13 +235,14 @@ const drawContent = (ctx) => {
  if (wheelCfg.searchable) {
      ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(13)
      const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
-     ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], query ? 0.95 : 0.4); ctx.moveTo(LIST_X + titleW + 24, top - 16); ctx.showText("› " + (query ? query.toUpperCase() + cur : "SEARCH…"))
+     const shown = wheelCfg.masked ? "*".repeat(query.length) : query.toUpperCase()
+     ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], query ? 0.95 : 0.4); ctx.moveTo(LIST_X + titleW + 24, top - 16); ctx.showText("› " + (query ? shown + cur : wheelCfg.masked ? "PASSWORD…" : "SEARCH…"))
  }
  ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(LIST_X, top - 8); ctx.lineTo(LIST_X + ROW_W, top - 8); ctx.stroke()
 
  if (n === 0) {
      ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.85)
-     ctx.moveTo(LIST_X + 30, cy); ctx.showText(query ? "// NO MATCH" : wheelCfg.emptyText)
+     ctx.moveTo(LIST_X + 30, cy); ctx.showText(query && apps.length > 0 ? "// NO MATCH" : wheelCfg.emptyText)
  } else {
 
 
@@ -307,7 +309,8 @@ export const updateWheel = (entries) => {
   if (!active) return
   apps = entries
   const q = query.toLowerCase().trim()
-  filtered = q ? apps.filter((a) => (a.label || "").toLowerCase().includes(q)) : apps.slice()
+  if (wheelCfg.masked) filtered = apps.slice()
+  else filtered = q ? apps.filter((a) => (a.label || "").toLowerCase().includes(q)) : apps.slice()
   const n = filtered.length
   if (n <= VISIBLE) scrollTarget = Math.max(0, Math.min(n - 1, scrollTarget))
   menuArea?.queue_draw()
@@ -373,10 +376,10 @@ export const AppsMenuWindow = () => {
  menuWin.connect("key-press-event", (_w, e) => {
      let k = 0; try { const r = e.get_keyval?.(); k = r ? r[1] : e.keyval } catch { k = e.keyval }
      const n = filtered.length
-     if (k === Gdk.KEY_Escape) { if (query) { query = ""; applyFilter() } else closeWheel(); return true }
+     if (k === Gdk.KEY_Escape) { if (query && !wheelCfg.masked) { query = ""; applyFilter() } else closeWheel(); return true }
       if (k === Gdk.KEY_Up) { scrollTarget -= 1; const n = filtered.length; if (n <= VISIBLE) scrollTarget = Math.max(0, scrollTarget); beep(); animate(); return true }
       if (k === Gdk.KEY_Down) { scrollTarget += 1; const n = filtered.length; if (n <= VISIBLE) scrollTarget = Math.min(n - 1, scrollTarget); beep(); animate(); return true }
-     if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { if (n) activate(filtered[mod(Math.round(scroll), n)]); return true }
+     if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { if (wheelCfg.onSubmit) { wheelCfg.onSubmit(query); return true } if (n) activate(filtered[mod(Math.round(scroll), n)]); return true }
      if (k === Gdk.KEY_BackSpace) { if (wheelCfg.searchable && query) { query = query.slice(0, -1); applyFilter() } return true }
 
      const uni = Gdk.keyval_to_unicode(k)

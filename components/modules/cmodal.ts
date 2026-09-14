@@ -737,15 +737,16 @@ const drawMenu = (ctx, push, fx, fy, items, onDismiss, X, Y, W, H) => {
 const WifiCtrl = () => {
     const st: any = { on: false, nets: [], saved: [], selected: null }
     let ctrl
+    const shq = (s) => s.replace(/[\\"$`]/g, "\\$&")
     const refresh = () => sh("nmcli radio wifi 2>/dev/null").then((o) => {
         st.on = /enabled/i.test(o)
-        if (!st.on) { st.nets = []; if (ctrl.isOpen()) updateWheel([]); ctrl.requestDraw(); return }
-        sh("nmcli -t -f ACTIVE,SSID,SIGNAL dev wifi 2>/dev/null | awk -F: 'NF>=3 && $2!=\"\"' | head -80").then((l) => {
-            const raw = l.trim().split("\n").filter(Boolean).map((line) => { const p = line.split(":"); return { active: p[0] === "yes", ssid: p[1], sig: parseInt(p[p.length - 1]) || 0 } })
+        if (!st.on) { st.nets = []; if (ctrl.isOpen() && !pwMode) updateWheel([]); ctrl.requestDraw(); return }
+        sh("nmcli -t -f ACTIVE,SSID,SECURITY,SIGNAL dev wifi 2>/dev/null | awk -F: 'NF>=3 && $2!=\"\"' | head -80").then((l) => {
+            const raw = l.trim().split("\n").filter(Boolean).map((line) => { const p = line.split(":"); return { active: p[0] === "yes", ssid: p[1], sec: p.length >= 4, sig: parseInt(p[p.length - 1]) || 0 } })
             const by = new Map()
             for (const n of raw) { const e = by.get(n.ssid); if (!e) by.set(n.ssid, { ...n }); else { e.active = e.active || n.active; e.sig = Math.max(e.sig, n.sig) } }
             st.nets = [...by.values()].sort((a, b) => (Number(b.active) - Number(a.active)) || (b.sig - a.sig))
-            if (ctrl.isOpen()) updateWheel(wheelList())
+            if (ctrl.isOpen() && !pwMode) updateWheel(wheelList())
             ctrl.requestDraw()
         })
         sh("nmcli -t -f NAME con show 2>/dev/null | head -10").then((o) => {
@@ -754,10 +755,35 @@ const WifiCtrl = () => {
         })
     })
     const toggle = () => { sh(`nmcli radio wifi ${st.on ? "off" : "on"}`).then(() => timeout(900, refresh)) }
-    const wheelList = () => st.nets.map((n) => ({ label: n.ssid, badge: n.active ? "CONNECTED" : `${n.sig}%`, glyph: null, data: n }))
+    const wheelList = () => st.nets.map((n) => ({ label: n.ssid, badge: n.active ? "CONNECTED" : n.sec ? `${n.sig}% KEY` : `${n.sig}%`, glyph: null, data: n }))
+    let pwMode = false
+    const netWheel = () => { pwMode = false; openWheel({ title: "NETWORK", subtitle: "// NETWATCH :: TRACING FOR CONNECTIONS", footer: "[ SCROLL / ARROWS ] NAVIGATE   [ ENTER / CLICK ] CONNECT   [ ESC ] CLOSE", searchable: true, reserveX: 600, onActivate: tryConnect, onFocus: (n) => { st.selected = n; ctrl.requestDraw() }, onReset: () => ctrl.close(), emptyText: "// NO NETWORKS" }, wheelList()) }
+    const askPassword = (n, failed) => {
+        pwMode = true
+        openWheel({ title: "PASSWORD", subtitle: `// NETWATCH :: ${failed ? "AUTH REJECTED // RETRY" : "AUTH"} :: ${n.ssid}`, footer: "[ TYPE ] PASSWORD   [ ENTER ] CONNECT   [ ESC ] BACK", searchable: true, masked: true, reserveX: 600,
+            onSubmit: (pw) => {
+                if (!pw) return
+                closeWheel()
+                sh(`nmcli dev wifi connect "${shq(n.ssid)}" password "${shq(pw)}" 2>/dev/null && echo OK`).then((o) => {
+                    if (o && o.includes("OK")) timeout(1200, refresh)
+                    else askPassword(n, true)
+                })
+            },
+            onFocus: (d) => { st.selected = d; ctrl.requestDraw() },
+            onReset: () => netWheel(), emptyText: "// TYPE PASSWORD + ENTER" }, [{ label: n.ssid, badge: "KEY", glyph: null, data: n }])
+    }
+    const tryConnect = (n) => {
+        if (!n || n.active) return
+        if (n.sec && !st.saved.some((s) => s === n.ssid)) { askPassword(n, false); return }
+        sh(`nmcli dev wifi connect "${shq(n.ssid)}" 2>/dev/null && echo OK`).then((o) => {
+            if (o && o.includes("OK")) timeout(1200, refresh)
+            else if (n.sec) askPassword(n, true)
+            else timeout(1200, refresh)
+        })
+    }
     ctrl = createModal({
         name: "wifi", tabTitle: "NETWORK", W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
-        onOpen: () => { st.selected = null; st.scroll = 0; refresh(); openWheel({ title: "NETWORK", subtitle: "// NETWATCH :: TRACING FOR CONNECTIONS", footer: "[ SCROLL / ARROWS ] NAVIGATE   [ ENTER / CLICK ] CONNECT   [ ESC ] CLOSE", searchable: true, reserveX: 600, onActivate: (n) => { if (!n.active) sh(`nmcli dev wifi connect "${n.ssid}"`).then(() => timeout(2200, refresh)) }, onFocus: (n) => { st.selected = n; ctrl.requestDraw() }, onReset: () => ctrl.close(), emptyText: "// NO NETWORKS" }, wheelList()) },
+        onOpen: () => { st.selected = null; st.scroll = 0; refresh(); netWheel() },
         onClose: () => { closeWheel(); st.selected = null },
         poll: () => refresh(), pollMs: 5000,
         draw: (ctx, g) => {
@@ -778,7 +804,7 @@ const WifiCtrl = () => {
                 const btnH = 24, gap = 8
                 const isActive = st.selected.active
                 drawBtn(ctx, g.push, px, ty, 130, btnH, isActive ? "DISCONNECT" : "CONNECT",
-                    () => sh(isActive ? `nmcli con down id "${st.selected.ssid}"` : `nmcli dev wifi connect "${st.selected.ssid}"`).then(() => timeout(2200, refresh)),
+                    () => isActive ? sh(`nmcli con down id "${shq(st.selected.ssid)}"`).then(() => timeout(1200, refresh)) : tryConnect(st.selected),
                     false, g.col)
                 const forgetW = panelW - 28 - 130 - gap
                 const isSaved = st.saved.some((s) => s === st.selected.ssid)
