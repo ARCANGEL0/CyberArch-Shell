@@ -82,14 +82,12 @@ export const ThemesCtrl = () => {
                 else if (k === Gdk.KEY_Return) { commitWmApps() }
                 else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); ctrl.requestDraw() }
                 else {
-                    const name = Gdk.keyval_name(k) || ""
-                    if (name.length === 1) { wmAppText += name; ctrl.requestDraw() }
-                    else if (name === "space") { wmAppText += " "; ctrl.requestDraw() }
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); ctrl.requestDraw() }
                 }
                 return true
             }
             if (kbCaptureKind === "newuser" && kbAddStep === "command" && k !== Gdk.KEY_Escape) {
-                const name = Gdk.keyval_name(k) || ""
                 if (k === Gdk.KEY_BackSpace) {
                     kbCommandText = kbCommandText.slice(0, -1)
                     ctrl.requestDraw()
@@ -101,13 +99,9 @@ export const ThemesCtrl = () => {
                     kbAddStep = "capture"
                     ctrl.requestDraw()
                     return
-                } else if (name && name.length === 1) {
-                    kbCommandText += name
-                    ctrl.requestDraw()
-                    return
-                } else if (name === "space") {
-                    kbCommandText += " "
-                    ctrl.requestDraw()
+                } else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { kbCommandText += String.fromCharCode(u); ctrl.requestDraw() }
                     return
                 }
             }
