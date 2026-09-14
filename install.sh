@@ -279,7 +279,7 @@ HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire 
 REPO=(
   gjs grim wf-recorder wl-clipboard networkmanager bluez-utils curl
   wireplumber playerctl brightnessctl power-profiles-daemon upower
-  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget fuse2 sqlite3 pacman-contrib awww cronie
+  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget fuse2 sqlite3 pacman-contrib awww cronie dolphin
   base-devel pkgconf cmake cpio gcc lib32-libelf lib32-glibc glibc
   python python-pillow imagemagick $MESA_PKGS
   pipewire pipewire-audio pipewire-pulse libpulse mpv ffmpeg sox
@@ -1165,6 +1165,8 @@ hl.define_submap("kill", function()
     hl.bind("mouse:272", app("scripts/overkill kill"))
     hl.bind("escape",    app("scripts/overkill exit"))
 end)
+
+hl.bind("SUPER + E", hl.dsp.exec_cmd("dolphin"))
 
 USEREOF
     ok "created user.lua template at $USERLUA"
