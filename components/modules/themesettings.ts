@@ -2,6 +2,7 @@ import { execAsync, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import GLib from "gi://GLib"
+import GdkPixbuf from "gi://GdkPixbuf"
 import { Keymode } from "./widget.ts"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
@@ -11,7 +12,7 @@ import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
 } from "./wmconfig.ts"
-import { USER_DIR, CYBER_DIR } from "../../env.ts"
+import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA } from "../../env.ts"
 import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
@@ -50,7 +51,7 @@ export const ThemesCtrl = () => {
     ctrl = createModal({
         name: "themesettings", tabTitle: "THEME", ss: 2, W: 560, H: 860, yaw: 15, pitch: 0, roll: 0,
         anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
-        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; cfgOpen = null; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; cfgOpen = null; ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
+        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; cfgOpen = null; wallOpen = null; wallScroll = 0; openWheel({ title: "THEME SETTINGS", subtitle: "// RICE.CTL :: COLOUR & WM TUNING", footer: "[ SCROLL ] SWITCH TAB   [ ESC ] CLOSE", searchable: false, onActivate: (d) => { tab = d; kbScroll = 0; cfgOpen = null; if (d !== "wall") { wallOpen = null; wallScroll = 0 } ctrl.requestDraw() }, onFocus: (d) => { if (tab !== d) { tab = d; kbScroll = 0; cfgOpen = null; if (d !== "wall") { wallOpen = null; wallScroll = 0 } ctrl.requestDraw() } }, onReset: () => ctrl.close(), emptyText: "// NO TABS" }, wheelEntries()) },
         onClose: () => {
             closeWheel()
             releaseKeys()
@@ -69,10 +70,26 @@ export const ThemesCtrl = () => {
             wmExpand = {}
             wmColorPick = null
             wmAppText = ""
+            wallOpen = null
+            wallScroll = 0
+            wallUploading = false
         },
         onKeyRaw: onKbKeyRaw,
-        onScroll: (d) => { cfgOpen = null; kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw() },
+        onScroll: (d) => {
+            cfgOpen = null
+            if (tab === "wall") {
+                if (wallOpen) { wallScroll = Math.max(0, Math.min(wallMaxScroll, wallScroll + d * 40)); ctrl.requestDraw() }
+                return
+            }
+            kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw()
+        },
         onKey: (k: number) => {
+            if (k === Gdk.KEY_Escape && tab === "wall" && wallOpen) {
+                wallOpen = null
+                wallScroll = 0
+                ctrl.requestDraw()
+                return true
+            }
             if (wmColorPick) {
                 if (k === Gdk.KEY_Escape) { closeWmPicker(); return true }
                 return true
@@ -134,6 +151,10 @@ export const ThemesCtrl = () => {
         },
         draw: (ctx, g) => {
             const panelX = g.X, panelW = g.w, panelY = g.Y, panelH = g.h
+            if (tab === "wall" && !wallOpen) {
+                drawWallRing(ctx, g, panelX, panelY, panelW)
+                return
+            }
             drawGlass(ctx, panelX, panelY, panelW, panelH, g.col)
             txt(ctx, panelX + 16, panelY + 27, "THEME SETTINGS", TITLE, 14, g.accent, 0.98, 1, 0.45)
             ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.32); ctx.setLineWidth(1)
@@ -143,7 +164,7 @@ export const ThemesCtrl = () => {
             else if (tab === "keybinds") drawKeybinds(ctx, g, x, panelY + HEADER + 12, w)
             else if (tab === "anim") drawConfig(ctx, g, x, panelY + HEADER + 12, w)
             else if (tab === "wm") drawWm(ctx, g, x, panelY + HEADER + 12, w)
-            else drawWip(ctx, g, x, panelY + HEADER + 12, w)
+            else drawWallBrowse(ctx, g, x, panelY + HEADER + 12, w)
         },
     })
     return ctrl
@@ -1077,14 +1098,446 @@ const drawKeybinds = (ctx, g, x, y, w) => {
     }
 }
 
-const drawWip = (ctx, g, x, y, w) => {
+const WALL_THEMES: [string, string][] = [
+    ["NETWATCH", "netwatch"], ["SYNTHWAVE", "synthwave"], ["JOHNNY", "johnny"], ["KITTY", "kitty"],
+    ["BLADE", "blade_runner"], ["BLOODMOON", "bloodmoon"], ["GHOST", "ghost"], ["ARCTIC", "arctic"],
+]
+
+const WALL_EXTS = ["mp4", "webm", "mkv", "mov", "png", "jpg", "jpeg", "webp", "gif"]
+const isVideoExt = (e: string) => ["mp4", "webm", "mkv", "mov"].includes(e)
+let wallOpen: string | null = null
+let wallFiles: { name: string; path: string; ext: string }[] = []
+let wallFilesLoading = false
+let wallScroll = 0
+let wallMaxScroll = 0
+let wallUploading = false
+
+const THUMB_W = 160, THUMB_H = 90, THUMB_GAP = 10
+const thumbCache: Record<string, GdkPixbuf.Pixbuf | null> = {}
+
+const strHash = (s: string): string => {
+    let h = 5381
+    for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0
+    return h.toString(36)
+}
+
+const readCurrentWallpaper = (): string => {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(WALLPAPER_LUA)
+        if (!ok) return ""
+        const m = String(new TextDecoder().decode(bytes)).match(/wallpaper\s*=\s*"([^"]*)"/)
+        return m ? m[1] : ""
+    } catch { return "" }
+}
+
+const loadWallFiles = (folder: string) => {
+    wallFiles = []
+    wallScroll = 0
+    wallFilesLoading = true
+    sh(`find "${WALLPAPERS_PATH}/${folder}" -maxdepth 1 -type f 2>/dev/null | sort`).then((o) => {
+        wallFilesLoading = false
+        const out = String(o || "").trim()
+        if (!out) { ctrl?.requestDraw(); return }
+        wallFiles = out.split("\n").map((p) => p.trim()).filter(Boolean).map((p) => {
+            const name = p.slice(p.lastIndexOf("/") + 1)
+            const ext = (name.slice(name.lastIndexOf(".") + 1) || "").toLowerCase()
+            return { name, path: p, ext }
+        }).filter((f) => WALL_EXTS.includes(f.ext))
+        ctrl?.requestDraw()
+    })
+}
+
+const openWallTheme = (folder: string) => {
+    wallOpen = folder
+    loadWallFiles(folder)
+    ctrl.requestDraw()
+}
+
+const getThumb = (path: string): GdkPixbuf.Pixbuf | null => {
+    if (path in thumbCache) return thumbCache[path]
+    thumbCache[path] = null
+    const cacheDir = `${GLib.get_user_cache_dir()}/cyberpunk/thumbs`
+    GLib.mkdir_with_parents(cacheDir, 0o755)
+    const key = `${strHash(path)}.png`
+    const cached = `${cacheDir}/${key}`
+    const deliver = (p: string) => {
+        try {
+            const pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(p, THUMB_W * 2, THUMB_H * 2, true)
+            thumbCache[path] = pb
+            ctrl?.requestDraw()
+        } catch { }
+    }
+    let have = false
+    try { have = GLib.file_test(cached, GLib.FileTest.EXISTS) } catch { }
+    if (have) { deliver(cached); return null }
+    if (isVideoExt(path.slice(path.lastIndexOf(".") + 1).toLowerCase())) {
+        sh(`mkdir -p "${cacheDir}" && ffmpeg -y -ss 1 -i "${path}" -vframes 1 -vf "scale=${THUMB_W * 2}:-2" "${cached}" 2>/dev/null`).then(() => deliver(cached))
+    } else {
+        try {
+            const pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, THUMB_W * 2, THUMB_H * 2, true)
+            pb.savev(cached, "png", [], [])
+            deliver(cached)
+        } catch { }
+    }
+    return null
+}
+
+const applyWallpaper = (f: { name: string; path: string; ext: string }) => {
+    execAsync(["bash", `${CYBER_DIR}/scripts/set-wallpaper`, f.path]).then((o) => {
+        const out = String(o || "").trim()
+        if (out) {
+            const line = out.split("\n").pop() || ""
+            wallStatusSet(false, `// ${line.replace(/\|::\|.*$/, "").slice(0, 60)}`)
+        } else {
+            GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${f.path}"\nreturn wallpaper\n`))
+            wallStatusSet(true, `// SET ${f.name.toUpperCase()}`)
+        }
+        ctrl.requestDraw()
+    }).catch((e) => {
+        wallStatusSet(false, `// SET FAILED: ${String(e).slice(0, 60)}`)
+        ctrl.requestDraw()
+    })
+}
+
+const wallStatusSet = (ok: boolean, msg: string) => { wallState.status = { ok, msg } }
+const wallState: { status: { ok: boolean; msg: string } | null } = { status: null }
+
+const pickWallpaper = () => {
+    if (wallUploading) return
+    try {
+        const dlg = new Gtk.FileChooserDialog({ title: "SELECT WALLPAPER", action: Gtk.FileChooserAction.OPEN, modal: true })
+        dlg.add_button("CANCEL", Gtk.ResponseType.CANCEL); dlg.add_button("SELECT", Gtk.ResponseType.ACCEPT)
+        const flt = new Gtk.FileFilter(); flt.set_name("WALLPAPER")
+        for (const p of ["*.mp4", "*.webm", "*.mkv", "*.mov", "*.png", "*.jpg", "*.jpeg", "*.webp", "*.gif"]) flt.add_pattern(p)
+        dlg.add_filter(flt)
+        try { dlg.set_current_folder(GLib.get_home_dir()) } catch { }
+        const res = dlg.run(), file = res === Gtk.ResponseType.ACCEPT ? dlg.get_filename() : null
+        dlg.destroy()
+        if (file) importWallpaper(file)
+    } catch (e) { wallStatusSet(false, `// PICKER ERROR: ${String(e).slice(0, 50)}`); ctrl.requestDraw() }
+}
+
+const importWallpaper = (src: string) => {
+    const name = src.slice(src.lastIndexOf("/") + 1)
+    const ext = (name.slice(name.lastIndexOf(".") + 1) || "").toLowerCase()
+    if (!WALL_EXTS.includes(ext)) {
+        wallStatusSet(false, `// UNSUPPORTED TYPE: .${ext || "UNKNOWN"}`)
+        ctrl.requestDraw()
+        return
+    }
+    let size = 0
+    try { size = GLib.stat(src).size } catch {
+        wallStatusSet(false, "// FILE NOT READABLE")
+        ctrl.requestDraw()
+        return
+    }
+    if (size < 1024) {
+        wallStatusSet(false, "// FILE TOO SMALL / EMPTY")
+        ctrl.requestDraw()
+        return
+    }
+    wallUploading = true
+    wallStatusSet(true, `// IMPORTING ${name.toUpperCase()}…`)
+    ctrl.requestDraw()
+    const dst = `${WALLPAPERS_PATH}/others/${name}`
+    const finishImport = () => {
+        GLib.file_set_contents(WALLPAPER_LUA, new TextEncoder().encode(`wallpaper = "${dst}"\nreturn wallpaper\n`))
+        wallStatusSet(true, `// IMPORTED + SET ${name.toUpperCase()}`)
+        if (wallOpen === "others") loadWallFiles("others")
+        execAsync(["bash", `${CYBER_DIR}/scripts/set-wallpaper`, dst]).catch(() => { })
+        ctrl.requestDraw()
+    }
+    if (src === dst) { finishImport(); return }
+    const probe = isVideoExt(ext)
+        ? sh(`ffprobe -v error -show_entries format=duration -of csv=p=0 "${src}" 2>/dev/null`)
+        : Promise.resolve("")
+    probe.then((dur) => {
+        if (isVideoExt(ext) && !(parseFloat(String(dur || "").trim()) > 0)) {
+            wallUploading = false
+            wallStatusSet(false, "// NOT A VALID VIDEO FILE")
+            ctrl.requestDraw()
+            return
+        }
+        sh(`mkdir -p "${WALLPAPERS_PATH}/others" && cp -f -- "${src}" "${dst}"`).then((o) => {
+            wallUploading = false
+            const err = String(o || "").trim()
+            if (err) {
+                wallStatusSet(false, `// COPY FAILED`)
+                ctrl.requestDraw()
+                return
+            }
+            finishImport()
+        })
+    })
+}
+
+const TILE_W = 174, TILE_H = 74, TILE_CH = 12
+const WALL_RED = [0.87, 0.26, 0.3]
+const WALL_CYAN = [0.28, 0.82, 0.86]
+
+const octTilePath = (ctx, cx, cy, w, h, ch) => {
+    const hw = w / 2, hh = h / 2
+    const sideVert = 6
+    const dockW = 18, dockH = 3
+    const horizLen = hw / 2 - dockW / 2
+    ctx.newPath()
+    ctx.moveTo(cx - horizLen - dockW / 2, cy - hh)
+    ctx.lineTo(cx - dockW / 2, cy - hh)
+    ctx.lineTo(cx - dockW / 2, cy - hh + dockH)
+    ctx.lineTo(cx + dockW / 2, cy - hh + dockH)
+    ctx.lineTo(cx + dockW / 2, cy - hh)
+    ctx.lineTo(cx + horizLen + dockW / 2, cy - hh)
+    ctx.lineTo(cx + hw, cy - hh + ch)
+    ctx.lineTo(cx + hw, cy - sideVert)
+    ctx.lineTo(cx + hw, cy + sideVert)
+    ctx.lineTo(cx + hw, cy + hh - ch)
+    ctx.lineTo(cx + horizLen + dockW / 2, cy + hh)
+    ctx.lineTo(cx + dockW / 2, cy + hh)
+    ctx.lineTo(cx + dockW / 2, cy + hh - dockH)
+    ctx.lineTo(cx - dockW / 2, cy + hh - dockH)
+    ctx.lineTo(cx - dockW / 2, cy + hh)
+    ctx.lineTo(cx - horizLen - dockW / 2, cy + hh)
+    ctx.lineTo(cx - hw, cy + hh - ch)
+    ctx.lineTo(cx - hw, cy + sideVert)
+    ctx.lineTo(cx - hw, cy - sideVert)
+    ctx.lineTo(cx - hw, cy - hh + ch)
+    ctx.closePath()
+}
+
+const octShape = (ctx, cx, cy, r, k) => {
+    ctx.newPath()
+    ctx.moveTo(cx - k, cy - r)
+    ctx.lineTo(cx + k, cy - r)
+    ctx.lineTo(cx + r, cy - k)
+    ctx.lineTo(cx + r, cy + k)
+    ctx.lineTo(cx + k, cy + r)
+    ctx.lineTo(cx - k, cy + r)
+    ctx.lineTo(cx - r, cy + k)
+    ctx.lineTo(cx - r, cy - k)
+    ctx.closePath()
+}
+
+const drawWallTile = (ctx, g, cx, cy, label, folder, active) => {
+    const key = `wtile|${folder}`
+    const hovered = g.push.hoverKey === key
+    const c = hovered ? [1, 0.47, 0.5] : WALL_RED
+    const a = hovered ? 1 : 0.9
+    if (hovered) {
+        ctx.setOperator(12)
+        octTilePath(ctx, cx, cy, TILE_W + 8, TILE_H + 8, TILE_CH + 3)
+        ctx.setSourceRGBA(c[0], c[1], c[2], 0.3); ctx.setLineWidth(4); ctx.stroke()
+        ctx.setOperator(2)
+    }
+    octTilePath(ctx, cx, cy, TILE_W, TILE_H, TILE_CH)
+    ctx.setSourceRGBA(c[0] * 0.22, c[1] * 0.12, c[2] * 0.13, hovered ? 0.62 : 0.42); ctx.fill()
+    ctx.newPath(); ctx.rectangle(cx - 15, cy - TILE_H / 2 - 6, 30, 7)
+    ctx.setSourceRGBA(c[0] * 0.22, c[1] * 0.12, c[2] * 0.13, 0.6); ctx.fill()
+    ctx.setSourceRGBA(c[0], c[1], c[2], a); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
+    octTilePath(ctx, cx, cy, TILE_W, TILE_H, TILE_CH)
+    ctx.setSourceRGBA(c[0], c[1], c[2], a); ctx.setLineWidth(hovered ? 1.6 : 1.2); ctx.stroke()
+    octTilePath(ctx, cx, cy, TILE_W - 9, TILE_H - 9, TILE_CH - 2)
+    ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 0.5 : 0.32); ctx.setLineWidth(0.8); ctx.stroke()
+    let fs = 13
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs)
+    while (ctx.textExtents(label).width > TILE_W - 30 && fs > 8) { fs -= 0.5; ctx.setFontSize(fs) }
+    txt(ctx, cx - ctx.textExtents(label).width / 2, cy + fs * 0.36, label, TITLE, fs, WALL_CYAN, hovered ? 1 : 0.95, 1)
+    g.push({ kind: "btn", hoverable: true, key, bx0: cx - TILE_W / 2, by0: cy - TILE_H / 2 - 6, bx1: cx + TILE_W / 2, by1: cy + TILE_H / 2, on: () => openWallTheme(folder) })
+}
+
+const DIAMOND_R = 78
+
+const drawWallCenter = (ctx, g, cx, cy) => {
+    const R = DIAMOND_R, k = 12
+    const dia = () => {
+        ctx.newPath()
+        ctx.moveTo(cx + k, cy - R + k)
+        ctx.lineTo(cx + R - k, cy - k)
+        ctx.lineTo(cx + R - k, cy + k)
+        ctx.lineTo(cx + k, cy + R - k)
+        ctx.lineTo(cx - k, cy + R - k)
+        ctx.lineTo(cx - R + k, cy + k)
+        ctx.lineTo(cx - R + k, cy - k)
+        ctx.lineTo(cx - k, cy - R + k)
+        ctx.closePath()
+    }
+    dia(); ctx.setSourceRGBA(0.11, 0.13, 0.19, 0.95); ctx.fill()
+    dia(); ctx.setSourceRGBA(0.46, 0.56, 0.7, 0.34); ctx.setLineWidth(1.1); ctx.stroke()
+
+    const upKey = "wupload", otKey = "wothers"
+    const upHov = g.push.hoverKey === upKey
+    const otHov = g.push.hoverKey === otKey
+
+    const pc = upHov ? [0.62, 1, 1] : WALL_CYAN
+    const uy = cy - 12, s = 15
+    if (upHov) {
+        ctx.setOperator(12)
+        ctx.setSourceRGBA(pc[0], pc[1], pc[2], 0.32); ctx.setLineWidth(6)
+        ctx.newPath(); ctx.moveTo(cx - s, uy); ctx.lineTo(cx + s, uy); ctx.stroke()
+        ctx.newPath(); ctx.moveTo(cx, uy - s); ctx.lineTo(cx, uy + s); ctx.stroke()
+        ctx.setOperator(2)
+    }
+    ctx.setSourceRGBA(pc[0], pc[1], pc[2], upHov ? 1 : 0.94); ctx.setLineWidth(3)
+    ctx.newPath(); ctx.moveTo(cx - s, uy); ctx.lineTo(cx + s, uy); ctx.stroke()
+    ctx.newPath(); ctx.moveTo(cx, uy - s); ctx.lineTo(cx, uy + s); ctx.stroke()
+
+    const oy = cy + 32
+    const oc = otHov ? WALL_CYAN : [0.55, 0.64, 0.76]
+    if (otHov) {
+        ctx.setOperator(12)
+        octShape(ctx, cx, oy, 19, 8)
+        ctx.setSourceRGBA(oc[0], oc[1], oc[2], 0.26); ctx.setLineWidth(4); ctx.stroke()
+        ctx.setOperator(2)
+    }
+    octShape(ctx, cx, oy, 16, 7)
+    ctx.setSourceRGBA(0.05, 0.06, 0.09, otHov ? 0.55 : 0.4); ctx.fill()
+    octShape(ctx, cx, oy, 16, 7)
+    ctx.setSourceRGBA(oc[0], oc[1], oc[2], otHov ? 1 : 0.7); ctx.setLineWidth(otHov ? 1.3 : 1); ctx.stroke()
+
+    if (upHov || otHov) {
+        const cap = upHov ? "UPLOAD WALLPAPER" : "BROWSE OTHERS"
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
+        txt(ctx, cx - ctx.textExtents(cap).width / 2, cy + R + 15, cap, MONO, 8.5, WALL_CYAN, 0.95, 1)
+    }
+
+    g.push({ kind: "btn", hoverable: true, key: upKey, bx0: cx - 34, by0: cy - R + 10, bx1: cx + 34, by1: cy + 14, on: () => pickWallpaper() })
+    g.push({ kind: "btn", hoverable: true, key: otKey, bx0: cx - 24, by0: cy + 16, bx1: cx + 24, by1: cy + R - 6, on: () => openWallTheme("others") })
+}
+
+const drawWallRing = (ctx, g, x, y, w) => {
+    const h = g.h - 12
     const cx = x + w / 2
-    const t1 = "WORK IN PROGRESS."
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(16)
-    txt(ctx, cx - ctx.textExtents(t1).width / 2, y + 72, t1, TITLE, 16, g.accent, 0.95, 1, 0.3)
-    const t2 = "COMING SOON :)"
-    ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(11)
-    txt(ctx, cx - ctx.textExtents(t2).width / 2, y + 98, t2, MONO, 11, g.col, 0.6)
+    const cy = y + h / 2 - 4
+    const n = WALL_THEMES.length
+    const R = Math.min(w * 0.5 - TILE_W * 0.5 - 36, h * 0.5 - TILE_H * 0.5 - 76)
+
+    ctx.save()
+    for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + (i / n) * Math.PI * 2
+        const dx = Math.cos(a), dy = Math.sin(a)
+        const px = -dy, py = dx
+        const r0 = DIAMOND_R / (Math.abs(dx) + Math.abs(dy)) + 3, r1 = R - TILE_H * 0.34
+        const x0 = cx + dx * r0, y0 = cy + dy * r0
+        const x1 = cx + dx * r1, y1 = cy + dy * r1
+        ctx.setSourceRGBA(0.86, 0.2, 0.24, 0.5); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke()
+        ctx.setSourceRGBA(0.86, 0.2, 0.24, 0.22); ctx.setLineWidth(1)
+        ctx.newPath(); ctx.moveTo(x0 + px * 3.5, y0 + py * 3.5); ctx.lineTo(x1 + px * 3.5, y1 + py * 3.5); ctx.stroke()
+        ctx.newPath(); ctx.moveTo(x0 - px * 3.5, y0 - py * 3.5); ctx.lineTo(x1 - px * 3.5, y1 - py * 3.5); ctx.stroke()
+        const mx = cx + dx * (r1 - 3), my = cy + dy * (r1 - 3)
+        ctx.setSourceRGBA(0.86, 0.2, 0.24, 0.45); ctx.setLineWidth(1.4)
+        ctx.newPath(); ctx.moveTo(mx - px * 7, my - py * 7); ctx.lineTo(mx + px * 7, my + py * 7); ctx.stroke()
+    }
+    ctx.restore()
+
+    WALL_THEMES.forEach(([label, folder], i) => {
+        const a = -Math.PI / 2 + (i / n) * Math.PI * 2
+        const tx = cx + Math.cos(a) * R, ty = cy + Math.sin(a) * R
+        drawWallTile(ctx, g, tx, ty, label, folder, wallOpen === folder)
+    })
+
+    drawWallCenter(ctx, g, cx, cy)
+
+    const st = (wallState as any).status
+    if (st) {
+        const col = st.ok ? [0.42, 1, 0.6] : [1, 0.4, 0.44]
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
+        const tw = ctx.textExtents(st.msg).width
+        txt(ctx, cx - tw / 2, y + h - 26, st.msg, MONO, 9, col, 0.95, 1)
+    }
+    const cur = readCurrentWallpaper()
+    if (cur) {
+        const bn = cur.slice(cur.lastIndexOf("/") + 1)
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8)
+        const s = `CURRENT: ${fitTxt(ctx, bn, MONO, 8, w - 40)}`
+        const tw = ctx.textExtents(s).width
+        txt(ctx, cx - tw / 2, y + h - 12, s, MONO, 8, g.col, 0.5)
+    }
+}
+
+const drawWallBrowse = (ctx, g, x, y, w) => {
+    drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
+        wallOpen = null
+        wallScroll = 0
+        ctrl.requestDraw()
+    }, false, g.col, "", 10)
+
+    const folderLabel = (WALL_THEMES.find(([, f]) => f === wallOpen) || ["OTHERS", ""])[0]
+    txt(ctx, x + 104, y + 17, `// ${folderLabel}`, MONO, 10, g.accent, 0.9, 1)
+
+    const st = (wallState as any).status
+    if (st) {
+        const col = st.ok ? [0.42, 1, 0.6] : [1, 0.4, 0.44]
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
+        txt(ctx, x + w - ctx.textExtents(st.msg).width - 4, y + 17, st.msg, MONO, 8.5, col, 0.95, 1)
+    }
+
+    const visTop = y + 36, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
+    if (wallFilesLoading) {
+        txt(ctx, x + 10, visTop + 24, "// SCANNING…", MONO, 10, g.col, 0.7)
+        return
+    }
+    if (wallFiles.length === 0) {
+        txt(ctx, x + 10, visTop + 24, "// NO WALLPAPERS IN THIS FOLDER", MONO, 10, g.col, 0.7)
+        return
+    }
+
+    const cols = Math.max(1, Math.floor((w - 8) / (THUMB_W + THUMB_GAP)))
+    const rowH = THUMB_H + 34
+    const cur = readCurrentWallpaper()
+    const totalRows = Math.ceil(wallFiles.length / cols)
+    const contentH = totalRows * rowH
+    wallMaxScroll = Math.max(0, contentH - visHeight)
+    if (wallScroll > wallMaxScroll) wallScroll = wallMaxScroll
+    if (wallScroll < 0) wallScroll = 0
+
+    ctx.save()
+    ctx.rectangle(x - 4, visTop, w + 8, visHeight)
+    ctx.clip()
+    wallFiles.forEach((f, i) => {
+        const col = i % cols, row = Math.floor(i / cols)
+        const tx = x + col * (THUMB_W + THUMB_GAP)
+        const ty = visTop + row * rowH - wallScroll
+        if (ty + rowH < visTop || ty > visBottom) return
+        const active = cur === f.path
+        const key = `wthumb|${i}`
+        const hovered = g.push.hoverKey === key
+        const bc = active ? g.accent : hovered ? [1, 0.62, 0.58] : g.col
+        ctx.save()
+        if (hovered || active) {
+            ctx.setOperator(12)
+            ctx.rectangle(tx - 3, ty - 3, THUMB_W + 6, THUMB_H + 6); ctx.setSourceRGBA(bc[0], bc[1], bc[2], 0.25); ctx.setLineWidth(4); ctx.stroke()
+            ctx.setOperator(2)
+        }
+        ctx.rectangle(tx, ty, THUMB_W, THUMB_H)
+        ctx.setSourceRGBA(bc[0] * 0.12, bc[1] * 0.12, bc[2] * 0.16, 0.5); ctx.fill()
+        const pb = getThumb(f.path)
+        if (pb) {
+            const iw = pb.get_width(), ih = pb.get_height()
+            const s = Math.min(THUMB_W / iw, THUMB_H / ih)
+            const dw = iw * s, dh = ih * s
+            ctx.save()
+            ctx.rectangle(tx, ty, THUMB_W, THUMB_H); ctx.clip()
+            Gdk.cairo_set_source_pixbuf(ctx, pb, tx + (THUMB_W - dw) / 2, ty + (THUMB_H - dh) / 2)
+            ctx.paintWithAlpha(1)
+            ctx.restore()
+        }
+        ctx.setSourceRGBA(bc[0], bc[1], bc[2], active ? 1 : 0.8); ctx.setLineWidth(hovered ? 1.3 : 0.9)
+        ctx.rectangle(tx + 0.5, ty + 0.5, THUMB_W - 1, THUMB_H - 1); ctx.stroke()
+        ctx.restore()
+        const badge = isVideoExt(f.ext) ? "▶" : "▣"
+        txt(ctx, tx + 2, ty + THUMB_H + 14, `${badge} ${fitTxt(ctx, f.name, MONO, 8, THUMB_W - 4)}`, MONO, 8, active ? g.accent : g.col, active ? 1 : 0.72)
+        g.push({ kind: "btn", hoverable: true, key, bx0: tx, by0: ty, bx1: tx + THUMB_W, by1: ty + THUMB_H, on: () => applyWallpaper(f) })
+    })
+    ctx.restore()
+
+    if (wallMaxScroll > 0) {
+        const fillH = visHeight * (wallScroll / wallMaxScroll)
+        const barH = Math.max(20, visHeight - fillH)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.5); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop); ctx.lineTo(x + w + 4, visBottom); ctx.stroke()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
+    }
 }
 
 const commitWmApps = () => {
