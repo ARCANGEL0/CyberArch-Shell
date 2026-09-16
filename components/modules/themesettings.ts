@@ -28,13 +28,13 @@ const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // themeMod is modifiers only so that one saves when u let go, not on a press
 const grabKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("cyberdeck_capture")'`)
 const releaseKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("reset")'`)
-let selPalette = "NETWATCH"
+export let selPalette = "NETWATCH"
 
-const readTune = () => { selPalette = getPaletteName() }
+export const readTune = () => { selPalette = getPaletteName() }
 
-const applyColors = (name: string) => { applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
+export const applyColors = (name: string) => { applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
 
-const TABS: [string, string][] = [
+export const TABS: [string, string][] = [
     ["CONFIGURATION", "anim"], ["COLORS", "colors"], ["KEYBINDS", "keybinds"],
     ["WINDOW MANAGEMENT", "wm"], ["WALLPAPER", "wall"],
 ]
@@ -46,66 +46,68 @@ const wheelEntries = () =>
     TABS.map(([label, id]) => ({ label, badge: TAB_BADGE[id] ?? "", glyph: null, data: id }))
 
 const drawTabBar = (ctx, g, x, y, w) => {
-    const tabW = 180
-    const tabH = 40
-    const spacing = 12
-    const startX = x + 120
+    const totalTabs = TABS.length
+    const tabSpacing = 80
+    const totalWidth = totalTabs * tabSpacing
+    const startX = (w - totalWidth) / 2 + x
+    const tabY = y + 20
     const currentIdx = TABS.findIndex(t => t[1] === tab)
 
-    txt(ctx, x + 30, y + 26, `[${currentIdx + 1}]`, MONO, 10, g.accent, 0.6)
-    txt(ctx, x + 72, y + 26, "<-", MONO, 11, g.accent, 0.75)
+    // Draw navigation indicators
+    txt(ctx, startX - 60, tabY, "[1]", MONO, 10, g.accent, 0.5)
+    txt(ctx, startX - 30, tabY, "<", MONO, 11, g.accent, 0.6)
 
     TABS.forEach(([label, id], i) => {
-        const tx = startX + i * (tabW + spacing)
+        const tx = startX + i * tabSpacing
         const isActive = tab === id
-        const col = isActive ? g.accent : [0.85, 0.3, 0.35]
-        const alpha = isActive ? 1 : 0.72
 
-        if (isActive) {
-            ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.15)
-            ctx.rectangle(tx - 8, y + 8, tabW, tabH - 4)
-            ctx.fill()
-        }
+        // Draw tab label
+        const col = isActive ? g.accent : [0.6, 0.6, 0.6]
+        const alpha = isActive ? 1 : 0.7
+        txt(ctx, tx, tabY, label, TITLE, 10, col, alpha)
 
-        txt(ctx, tx, y + 26, label, TITLE, 9, col, alpha)
-
+        // Draw underline for active tab
         if (isActive) {
             ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.9)
             ctx.setLineWidth(2)
             ctx.newPath()
-            ctx.moveTo(tx - 8, y + tabH + 2)
-            ctx.lineTo(tx + tabW - 8, y + tabH + 2)
+            const labelWidth = ctx.textExtents(label).width + 20
+            ctx.moveTo(tx - 10, tabY + 8)
+            ctx.lineTo(tx + labelWidth, tabY + 8)
             ctx.stroke()
         }
 
+        // Register click area
+        const labelWidth = ctx.textExtents(label).width + 20
         g.push({
             kind: "tab", key: `tab_${id}`, hoverable: true,
-            bx0: tx - 8, by0: y + 8, bx1: tx + tabW, by1: y + tabH + 2,
+            bx0: tx - 10, by0: tabY - 15, bx1: tx + labelWidth, by1: tabY + 10,
             on: () => {
                 if (tab !== id) {
                     tab = id
                     kbScroll = 0
                     cfgOpen = null
                     if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-                    ctrl.requestDraw()
+                    area?.queue_draw()
                 }
             }
         })
     })
 
-    txt(ctx, startX + TABS.length * (tabW + spacing) + 20, y + 26, "->", MONO, 11, g.accent, 0.75)
-    txt(ctx, startX + TABS.length * (tabW + spacing) + 58, y + 26, `[${TABS.length}]`, MONO, 10, g.accent, 0.6)
+    txt(ctx, startX + totalWidth + 30, tabY, ">", MONO, 11, g.accent, 0.6)
+    txt(ctx, startX + totalWidth + 60, tabY, `[${totalTabs}]`, MONO, 10, g.accent, 0.5)
 
-    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.32)
+    // Draw separator line below tabs
+    ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.3)
     ctx.setLineWidth(1)
     ctx.newPath()
-    ctx.moveTo(x + 8, y + tabH + 12)
-    ctx.lineTo(x + w - 8, y + tabH + 12)
+    ctx.moveTo(x + 40, tabY + 20)
+    ctx.lineTo(x + w - 40, tabY + 20)
     ctx.stroke()
 }
 
 const visible = Variable(false)
-let area: any = null
+export let area: any = null
 let mouseX = 0
 let mouseY = 0
 let hoverKey = ""
@@ -372,7 +374,7 @@ const SECTIONS: [string, ColRow[]][] = [
 const CROW_H = 24
 const CSEC_H = 30
 
-const drawColors = (ctx, g, x, y, w) => {
+export const drawColors = (ctx, g, x, y, w) => {
     sectionHeader(ctx, g, x, y, "// PALETTE", w)
     const names = Object.keys(PALETTES), cols = 4, bw = (w - (cols - 1) * 8) / cols, bh = 24, top = y + 12
     names.forEach((name, i) => {
@@ -533,8 +535,11 @@ let kbListening = false
 let kbConflict: { kind: "user" | "theme"; label: string; pending: { actionId?: string; combo: string; rawLine?: number; kind: CaptureKind; label?: string; comboName?: string; victimLine?: number | null } } | null = null
 let kbStatus: { ok: boolean; msg: string } | null = null
 let kbDeleteConfirm: { raw_line: number; combo: string; label: string } | null = null
-let kbScroll = 0
-let kbMaxScroll = 0
+export let kbScroll = 0
+export let kbMaxScroll = 0
+
+export const setKbScroll = (v: number) => { kbScroll = v }
+export const setKbMaxScroll = (v: number) => { kbMaxScroll = v }
 let kbAddStep: "prompt" | "command" | "app" | "capture" | null = null
 let wmOpen: string | null = null
 let wmExpand: Record<string, boolean> = {}
@@ -1117,7 +1122,7 @@ const drawCaptureForm = (ctx, g, x, y, w) => {
     drawBtn(ctx, g.push, x + bw + 6, cy, bw, 28, "CANCEL", () => { cancelCapture() }, false, g.col)
 }
 
-const drawKeybinds = (ctx, g, x, y, w) => {
+export const drawKeybinds = (ctx, g, x, y, w) => {
     const state = readUserLua()
     const themeMod = state.themeMod ?? themeModDefault()
     const userRebinds: Rebind[] = state.rebinds
@@ -1235,10 +1240,10 @@ const WALL_THEMES: [string, string][] = [
 
 const WALL_EXTS = ["mp4", "webm", "mkv", "mov", "png", "jpg", "jpeg", "webp", "gif"]
 const isVideoExt = (e: string) => ["mp4", "webm", "mkv", "mov"].includes(e)
-let wallOpen: string | null = null
+export let wallOpen: string | null = null
 let wallFiles: { name: string; path: string; ext: string }[] = []
 let wallFilesLoading = false
-let wallScroll = 0
+export let wallScroll = 0
 let wallMaxScroll = 0
 let wallUploading = false
 
@@ -1533,7 +1538,7 @@ const drawWallCenter = (ctx, g, cx, cy) => {
     g.push({ kind: "btn", hoverable: true, key: otKey, bx0: cx - 24, by0: cy + 16, bx1: cx + 24, by1: cy + R - 6, on: () => openWallTheme("others") })
 }
 
-const drawWallRing = (ctx, g, x, y, w) => {
+export const drawWallRing = (ctx, g, x, y, w) => {
     const h = g.h - 12
     const cx = x + w / 2
     const cy = y + h / 2 - 4
@@ -1584,7 +1589,7 @@ const drawWallRing = (ctx, g, x, y, w) => {
     }
 }
 
-const drawWallBrowse = (ctx, g, x, y, w) => {
+export const drawWallBrowse = (ctx, g, x, y, w) => {
     drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
         wallOpen = null
         wallScroll = 0
@@ -1858,7 +1863,7 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${labels[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
 }
 
-const drawWm = (ctx, g, x, y, w) => {
+export const drawWm = (ctx, g, x, y, w) => {
     const visTop = y + 16, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; title: string; sec?: { title: string; keys: string[]; rows: any[] }; row?: any }[] = []
@@ -2126,7 +2131,7 @@ const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
     drawBtn(ctx, push, x + w - 266, ry + 3, 264, 20, `${METRIC_LABEL[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 9.5)
 }
 
-const drawConfig = (ctx, g, x, y, w) => {
+export const drawConfig = (ctx, g, x, y, w) => {
     const gate = cfgOpen ? noPush : g.push
     const bh = 28, half = (w - 10) / 2
     drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col)
