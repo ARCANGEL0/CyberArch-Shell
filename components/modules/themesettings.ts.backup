@@ -1,18 +1,19 @@
-import { execAsync, timeout, Variable } from "astal"
+import { execAsync, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import GLib from "gi://GLib"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { Window, DrawingArea, EventBox, Keymode, Layer, Anchor } from "./widget.ts"
+import { Keymode } from "./widget.ts"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha } from "./colors.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo } from "./glass.ts"
-import { drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
+import { createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
 } from "./wmconfig.ts"
 import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { openWheel, closeWheel, buildAppEntries, openAppsMenu } from "./appsmenu.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
     addCustom, removeCustom, updateCustomCombo, reloadHyprland, themeModDefault, setThemeMod,
@@ -104,201 +105,152 @@ const drawTabBar = (ctx, g, x, y, w) => {
     ctx.stroke()
 }
 
-const visible = Variable(false)
-let area: any = null
-let mouseX = 0
-let mouseY = 0
-let hoverKey = ""
-let clickTargets: any[] = []
-
-const pushHandler = (item: any) => {
-    if (item.hoverable && item.bx0 !== undefined) {
-        clickTargets.push(item)
-    }
-}
-
-export const ThemesWindow = () => {
+export const ThemesCtrl = () => {
     readTune()
-
-    const handleMotion = (self: any, event: Gdk.EventMotion) => {
-        mouseX = event.x
-        mouseY = event.y
-        let newHover = ""
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                newHover = t.key
-                break
+    const modalW = Math.floor(SCREEN_WIDTH * 0.85)
+    const modalH = Math.floor(SCREEN_HEIGHT * 0.9)
+    ctrl = createModal({
+        name: "themesettings", tabTitle: "THEME", ss: 2, W: modalW, H: modalH, yaw: 0, pitch: 0, roll: 0,
+        anchorRight: false, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
+        onOpen: () => { readTune(); releaseKeys(); tab = TABS[0][1]; kbScroll = 0; cfgOpen = null; wallOpen = null; wallScroll = 0 },
+        onClose: () => {
+            releaseKeys()
+            kbCaptureKind = null
+            kbCaptureCtx = {}
+            kbCaptureLabel = ""
+            kbHeld = { mods: [], modsMask: 0, key: null }
+            kbCaptured = null
+            kbListening = false
+            kbConflict = null
+            kbDeleteConfirm = null
+            kbScroll = 0
+            cfgOpen = null
+            cfgExpand = {}
+            wmOpen = null
+            wmExpand = {}
+            wmColorPick = null
+            wmAppText = ""
+            wallOpen = null
+            wallScroll = 0
+            wallUploading = false
+        },
+        onKeyRaw: onKbKeyRaw,
+        onScroll: (d) => {
+            cfgOpen = null
+            if (tab === "wall") {
+                if (wallOpen) { wallScroll = Math.max(0, Math.min(wallMaxScroll, wallScroll + d * 40)); ctrl.requestDraw() }
+                return
             }
-        }
-        if (newHover !== hoverKey) {
-            hoverKey = newHover
-            area?.queue_draw()
-        }
-        return false
-    }
-
-    const handleClick = (self: any, event: Gdk.EventButton) => {
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                if (t.on) t.on()
-                break
-            }
-        }
-        return false
-    }
-
-    const handleKey = (self: any, event: Gdk.EventKey) => {
-        const k = event.keyval
-
-        if (k === Gdk.KEY_Escape) {
-            if (tab === "wall" && wallOpen) {
+            kbScroll = Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 32)); ctrl.requestDraw()
+        },
+        onKey: (k: number) => {
+            if (k === Gdk.KEY_Escape && tab === "wall" && wallOpen) {
                 wallOpen = null
                 wallScroll = 0
-                area?.queue_draw()
+                ctrl.requestDraw()
                 return true
             }
             if (wmColorPick) {
-                closeWmPicker()
+                if (k === Gdk.KEY_Escape) { closeWmPicker(); return true }
                 return true
             }
-            if (kbCaptureKind || kbDeleteConfirm) {
-                if (kbDeleteConfirm) kbDeleteConfirm = null
-                else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) kbAddStep = "prompt"
-                else cancelCapture()
-                area?.queue_draw()
-                return true
-            }
-            visible.set(false)
-            releaseKeys()
-            return true
-        }
-
-        if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
-            if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; area?.queue_draw() }
-            else if (k === Gdk.KEY_Return) { commitWmApps() }
-            else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); area?.queue_draw() }
-            else {
-                const u = Gdk.keyval_to_unicode(k)
-                if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); area?.queue_draw() }
-            }
-            return true
-        }
-
-        if (k === Gdk.KEY_Left) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx <= 0 ? TABS.length - 1 : idx - 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        if (k === Gdk.KEY_Right) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx >= TABS.length - 1 ? 0 : idx + 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        return false
-    }
-
-    const draw = (self: any, cr: any) => {
-        const w = SCREEN_WIDTH
-        const h = SCREEN_HEIGHT
-
-        clickTargets = []
-        const g = {
-            accent: CYAN,
-            col: [0.8, 0.8, 0.8],
-            push: pushHandler,
-            hoverKey,
-            X: 0,
-            Y: 0,
-            w,
-            h
-        }
-
-        cr.setSourceRGBA(0, 0, 0, 0.95)
-        cr.rectangle(0, 0, w, h)
-        cr.fill()
-
-        const tabBarH = 60
-        const contentY = tabBarH + 20
-        const contentH = h - contentY - 20
-
-        drawTabBar(cr, g, 40, 10, w - 80)
-
-        const x = 60
-        const cw = w - 120
-
-        if (tab === "colors") drawColors(cr, g, x, contentY, cw)
-        else if (tab === "keybinds") drawKeybinds(cr, g, x, contentY, cw)
-        else if (tab === "anim") drawConfig(cr, g, x, contentY, cw)
-        else if (tab === "wm") drawWm(cr, g, x, contentY, cw)
-        else if (tab === "wall" && !wallOpen) drawWallRing(cr, g, x, contentY, cw)
-        else drawWallBrowse(cr, g, x, contentY, cw)
-    }
-
-    area = DrawingArea({
-        widthRequest: SCREEN_WIDTH,
-        heightRequest: SCREEN_HEIGHT,
-        onDraw: draw
-    })
-
-    return Window({
-        name: "themesettings",
-        layer: Layer.OVERLAY,
-        anchor: Anchor.TOP | Anchor.BOTTOM | Anchor.LEFT | Anchor.RIGHT,
-        keymode: Keymode.ON_DEMAND,
-        visible: visible(),
-        setup: (self) => {
-            visible.subscribe(() => {
-                self.visible = visible.get()
-                if (visible.get()) {
-                    readTune()
-                    releaseKeys()
-                    tab = TABS[0][1]
-                    kbScroll = 0
-                    cfgOpen = null
-                    wallOpen = null
-                    wallScroll = 0
-                    area?.queue_draw()
+            if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
+                if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; ctrl.requestDraw() }
+                else if (k === Gdk.KEY_Return) { commitWmApps() }
+                else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); ctrl.requestDraw() }
+                else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); ctrl.requestDraw() }
                 }
-            })
+                return true
+            }
+            if (kbCaptureKind === "newuser" && kbAddStep === "command" && k !== Gdk.KEY_Escape) {
+                if (k === Gdk.KEY_BackSpace) {
+                    kbCommandText = kbCommandText.slice(0, -1)
+                    ctrl.requestDraw()
+                    return
+                } else if (k === Gdk.KEY_Return) {
+                    kbCaptureKind = "newuser"
+                    kbCaptureCtx = { label: kbCommandText || "exec_cmd" }
+                    kbCaptureLabel = kbCommandText || "exec_cmd"
+                    kbAddStep = "capture"
+                    ctrl.requestDraw()
+                    return
+                } else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { kbCommandText += String.fromCharCode(u); ctrl.requestDraw() }
+                    return
+                }
+            }
+            if (k === Gdk.KEY_Escape && (kbCaptureKind || kbDeleteConfirm)) {
+                if (kbDeleteConfirm) {
+                    kbDeleteConfirm = null
+                } else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) {
+                    kbAddStep = "prompt"
+                } else {
+                    cancelCapture()
+                }
+                ctrl.requestDraw()
+                return
+            }
+            if (kbDeleteConfirm) {
+                const name = Gdk.keyval_name(k) || ""
+                if (name === "y" || name === "Y" || k === Gdk.KEY_Return) {
+                    const r = removeCustom(kbDeleteConfirm.raw_line)
+                    kbStatus = r.ok ? { ok: true, msg: `// DELETED ${kbDeleteConfirm.combo}` } : { ok: false, msg: "// DELETE FAILED" }
+                    kbDeleteConfirm = null
+                    ctrl.requestDraw()
+                    return
+                }
+                if (name === "n" || name === "N") {
+                    kbDeleteConfirm = null
+                    ctrl.requestDraw()
+                    return
+                }
+            }
+            if (k === Gdk.KEY_Left) {
+                const idx = TABS.findIndex(t => t[1] === tab)
+                const next = idx <= 0 ? TABS.length - 1 : idx - 1
+                tab = TABS[next][1]
+                kbScroll = 0
+                cfgOpen = null
+                if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
+                ctrl.requestDraw()
+                return true
+            }
+            if (k === Gdk.KEY_Right) {
+                const idx = TABS.findIndex(t => t[1] === tab)
+                const next = idx >= TABS.length - 1 ? 0 : idx + 1
+                tab = TABS[next][1]
+                kbScroll = 0
+                cfgOpen = null
+                if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
+                ctrl.requestDraw()
+                return true
+            }
         },
-        onKeyPressEvent: handleKey,
-        child: EventBox({
-            onButtonPressEvent: handleClick,
-            onMotionNotifyEvent: handleMotion,
-            child: area
-        })
+        draw: (ctx, g) => {
+            const panelX = g.X, panelW = g.w, panelY = g.Y, panelH = g.h
+            if (tab === "wall" && !wallOpen) {
+                drawGlass(ctx, panelX, panelY, panelW, panelH, g.col)
+                drawTabBar(ctx, g, panelX, panelY + 16, panelW)
+                const contentY = panelY + 80
+                drawWallRing(ctx, g, panelX, contentY, panelW)
+                return
+            }
+            drawGlass(ctx, panelX, panelY, panelW, panelH, g.col)
+            drawTabBar(ctx, g, panelX, panelY + 16, panelW)
+            const contentY = panelY + 80
+            const x = panelX + 18, w = panelW - 36
+            if (tab === "colors") drawColors(ctx, g, x, contentY + 12, w)
+            else if (tab === "keybinds") drawKeybinds(ctx, g, x, contentY + 12, w)
+            else if (tab === "anim") drawConfig(ctx, g, x, contentY + 12, w)
+            else if (tab === "wm") drawWm(ctx, g, x, contentY + 12, w)
+            else drawWallBrowse(ctx, g, x, contentY + 12, w)
+        },
     })
+    return ctrl
 }
-
-export const toggleThemeSettings = () => {
-    visible.set(!visible.get())
-}
-
-export const ThemesCtrl = () => {
-    return {
-        open: () => visible.set(true),
-        close: () => visible.set(false),
-        requestDraw: () => area?.queue_draw()
-    }
-}
-
-const oldCtrl = ThemesCtrl()
-ctrl = oldCtrl
-
-export const openThemeSettings = () => oldCtrl.open()
-export const closeThemeSettings = () => oldCtrl.close()
 
 type ColRow = [string, string, boolean]
 const SECTIONS: [string, ColRow[]][] = [

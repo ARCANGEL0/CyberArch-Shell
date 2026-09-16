@@ -17,7 +17,7 @@ import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar, getThemeUpdate, cachedThemeUpdate, startThemeUpdate, dismissThemeBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
-import { ThemesCtrl } from "./themesettings.ts"
+import { ThemesWindow } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
@@ -1834,7 +1834,8 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemesCtrl())]
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl())]
+export const ThemeSettingsWindow = () => ThemesWindow()
 
 
 export const toggleModal = (name) => {

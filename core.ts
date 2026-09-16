@@ -37,7 +37,7 @@ import {
 import { RegionWindow, triggerRegion, triggerRecordRegion } from "./components/modules/region.ts"
 import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
-import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
+import { CModalWindows, toggleModal, ThemeSettingsWindow } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
 import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
@@ -350,6 +350,7 @@ App.start({
  RegionWindow()
  ToastWindow()
  CModalWindows()
+ ThemeSettingsWindow()
  AppsMenuWindow()
  PlayerWindow()
  registerHudWindows(hudWins)
