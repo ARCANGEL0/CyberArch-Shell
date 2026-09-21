@@ -120,6 +120,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 255, 255],
         glassacc: [196, 248, 255],
         overlay: [255, 42, 58],
+        sysveil: [255, 42, 58],
     },
     // replaced the old dark theme. dusk amber/rust base, pink/purple only on
     // notifications and toasts, terminal interfaces in cyan/teal
@@ -162,7 +163,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         notifphone: [187, 56, 160],
         notifmail: [187, 56, 160],
         notifbg: [13, 66, 72],
-        sysveil: [183, 81, 7],
+        sysveil: [187, 56, 160],
     },
     KITTY: {
         red: [255, 20, 147], cyan: [255, 105, 190], magenta: [255, 0, 128],
@@ -222,6 +223,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 210, 205],
         glassacc: [255, 210, 205],
         overlay: [255, 32, 32],
+        sysveil: [255, 32, 32],
     },
     ARCTIC: {
         red: [255, 255, 255], cyan: [210, 245, 255], magenta: [255, 255, 255],
@@ -251,6 +253,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [255, 255, 255],
         glassacc: [255, 255, 255],
         overlay: [255, 255, 255],
+        sysveil: [255, 255, 255],
     },
     SYNTHWAVE: {
         red: [255, 45, 150], cyan: [45, 220, 210], magenta: [230, 60, 220],
@@ -280,6 +283,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [250, 232, 250],
         glassacc: [80, 255, 140],
         overlay: [255, 60, 190],
+        sysveil: [255, 60, 190],
     },
     JOHNNY: {
         red: [255, 208, 60], cyan: [94, 244, 248], magenta: [110, 90, 220],
@@ -309,6 +313,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [250, 246, 228],
         glassacc: [250, 246, 228],
         overlay: [255, 208, 60],
+        sysveil: [255, 208, 60],
     },
     GHOST: {
         red: [0, 255, 120], cyan: [40, 255, 140], magenta: [40, 200, 120],
@@ -338,6 +343,7 @@ export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
         pure: [200, 255, 220],
         glassacc: [200, 255, 220],
         overlay: [0, 255, 120],
+        sysveil: [0, 255, 120],
     },
 }
 
