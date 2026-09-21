@@ -5,7 +5,7 @@
 set -u
 wallpapers_path="${HOME}/Pictures/Wallpapers"
 wallpaper_lua="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch/wallpaper.lua"
-wallpaper="${wallpapers_path}/netwatch/lucy.mp4"
+wallpaper="${wallpapers_path}/netwatch/main.mp4"
 if [ -r "$wallpaper_lua" ]; then
     lua_wallpaper="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$wallpaper_lua" | tail -n 1)"
     if [ -n "${lua_wallpaper:-}" ]; then

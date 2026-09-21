@@ -492,8 +492,8 @@ if [ "$THEME" != "$CANON" ]; then
 else
   LOGINDST="$LOGINSRC"
 fi
-if [ -f "$THEME/assets/wallpapers/netwatch/lucy.mp4" ]; then
-  cp -f "$THEME/assets/wallpapers/netwatch/lucy.mp4" "$LOGINDST/themes/netwatch/bg.mp4"
+if [ -f "$THEME/assets/wallpapers/netwatch/main.mp4" ]; then
+  cp -f "$THEME/assets/wallpapers/netwatch/main.mp4" "$LOGINDST/themes/netwatch/bg.mp4"
 fi
 USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch"
 WALLPAPERS_PATH="$HOME/Pictures/Wallpapers"
@@ -520,7 +520,7 @@ if [ -d "$THEME/assets/wallpapers" ]; then
   ok "wallpaper pool migrated → $WALLPAPERS_PATH"
 fi
 if [ ! -f "$USER_DIR/wallpaper.lua" ]; then
-  DEFAULT_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
+  DEFAULT_WP="$WALLPAPERS_PATH/netwatch/main.mp4"
   OLD_WP="$HOME/.local/share/cyberdeck/wallpaper"
   if [ -r "$OLD_WP" ]; then
     read -r prev_wp <"$OLD_WP" || prev_wp=""
@@ -621,7 +621,7 @@ if [ "$LOCK_STACK" = 1 ] && command -v sddm >/dev/null 2>&1; then
       if [ -r "$USER_DIR/wallpaper.lua" ]; then
         SEED_WP="$(sed -n 's/^[[:space:]]*wallpaper[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$USER_DIR/wallpaper.lua" | tail -n 1)"
       fi
-      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/lucy.mp4"
+      [ -n "${SEED_WP:-}" ] && [ -r "$SEED_WP" ] || SEED_WP="$WALLPAPERS_PATH/netwatch/main.mp4"
       SEED_EXT="$(printf '%s' "${SEED_WP##*.}" | tr '[:upper:]' '[:lower:]')"
       case "$SEED_WP" in
         *.*) ;;
