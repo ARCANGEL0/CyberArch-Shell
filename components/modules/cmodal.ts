@@ -99,10 +99,14 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
-export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = CYAN) => {
-    const bw = 42, bh = 16, key = `tg|${bx}|${by}`
+// toggle w/ scale
+export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = CYAN, sc = 1, onCol: any = null) => {
+    const bw = Math.round(42*sc), bh = Math.round(16 *sc)
+      const key = `tg|${bx}|${by}`
     const hovered = !dis && push.hoverKey === key
-    const base = dis ? [0.5, 0.54, 0.58] : hovered ? HL : (neonBtn.value ? USER.press : col)
+    let usecol = col
+    if (val && onCol) usecol = onCol   // on color override
+    const base = dis ? [0.5, 0.54, 0.58] : hovered ? HL : (neonBtn.value ? USER.press : usecol)
     const c = val && !dis ? base : [base[0] * 0.62, base[1] * 0.62, base[2] * 0.62]
     const a = dis ? 0.45 : 1
     btnPath(ctx, bx, by, bw, bh)
@@ -113,14 +117,16 @@ export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = C
         ctx.setOperator(2)
     }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], (hovered ? 1 : 0.8) * a); ctx.setLineWidth(hovered ? 1.2 : 0.9); ctx.stroke()
-    const kw = 17, kx = val ? bx + bw - kw - 2 : bx + 2
-    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5, kw, bh - 5); ctx.fill()
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(8)
+    const kw = Math.round(17*sc)   // knob
+      const kx = val ? bx + bw - kw - 2 : bx + 2
+    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5*sc, kw, bh - 5*sc); ctx.fill()
+    ctx.selectFontFace(TITLE, 0, 1)
+    ctx.setFontSize(Math.round(8*sc))
     const lbl = val ? "ON" : "OFF"
     const tw = ctx.textExtents(lbl).width
     const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
-    ctx.moveTo(cx - tw / 2, by + bh / 2 + 3); ctx.showText(lbl)
+    ctx.moveTo(cx - tw / 2, by + bh/2 + 3*sc); ctx.showText(lbl)
     if (!dis) push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
@@ -322,9 +328,9 @@ export const createModal = (spec) => {
 }
 
 
-export const sectionHeader = (ctx, g, x, y, label, w) => {
-    txt(ctx, x, y, label, MONO, 9, g.col, 0.85)
-    ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
+export const sectionHeader = (ctx, g, x, y, label, w, fs=9) => {
+    txt(ctx, x, y, label, MONO, fs, g.col, 0.85)
+      ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(fs)
     const lw = ctx.textExtents(label).width
     ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(x + lw + 10, y - 3, (x + w) - (x + lw + 10), 1.2); ctx.fill()
 }
@@ -1601,8 +1607,9 @@ const KEYBINDS = [
     ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
     ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
 ]
-export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number } = {}) => {
-    const kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
+export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number; col?: any } = {}) => {
+    let kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
+      if (opts.col) kc = opts.col
     const fillA = opts.glow ? 0.45 : (opts.muted ? 0.18 : 0.55)
     const strokeA = opts.glow ? 1.0 : (opts.muted ? 0.4 : 0.85)
     const txtA = opts.muted ? 0.55 : 0.97
@@ -1845,6 +1852,12 @@ const sysGet = () => {
 export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemeSettingsCtrl())]
 export const ThemeSettingsWindow = () => ThemesWindow()
 
+
+export const closeAllModals = () => {
+  for (const k in cregistry) {
+      try { cregistry[k].close() } catch(e) { }
+  }
+}
 
 export const toggleModal = (name) => {
     if (name === "mic") name = "vol"
