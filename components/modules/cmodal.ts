@@ -743,7 +743,14 @@ const WifiCtrl = () => {
         st.on = /enabled/i.test(o)
         if (!st.on) { st.nets = []; if (ctrl.isOpen() && !pwMode) updateWheel([]); ctrl.requestDraw(); return }
         sh("nmcli -t -f ACTIVE,SSID,SECURITY,SIGNAL dev wifi 2>/dev/null | awk -F: 'NF>=3 && $2!=\"\"' | head -80").then((l) => {
-            const raw = l.trim().split("\n").filter(Boolean).map((line) => { const p = line.split(":"); return { active: p[0] === "yes", ssid: p[1], sec: p.length >= 4, sig: parseInt(p[p.length - 1]) || 0 } })
+            const raw = l.trim().split("\n").filter(Boolean).map((line) => {
+              const cols = line.split(":")
+                const wifi_ssid = cols[1]
+              let secfield = (cols[2] || "").trim()
+                const hasKey = secfield != "" && secfield != "--"
+              const sigval = parseInt(cols[cols.length - 1]) || 0
+                return { active: cols[0] === "yes", ssid: wifi_ssid, sec: hasKey, sig: sigval }
+            })
             const by = new Map()
             for (const n of raw) { const e = by.get(n.ssid); if (!e) by.set(n.ssid, { ...n }); else { e.active = e.active || n.active; e.sig = Math.max(e.sig, n.sig) } }
             st.nets = [...by.values()].sort((a, b) => (Number(b.active) - Number(a.active)) || (b.sig - a.sig))
