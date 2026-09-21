@@ -2,19 +2,21 @@ import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
 import { Cairo, TITLE, txt } from "./glass.ts"
 import { createModal } from "./cmodal.ts"
 import { USER } from "./colors.ts"
+import Gdk from "gi://Gdk?version=3.0"
 import {
     readTune, TABS,
-    drawColors, drawKeybinds, drawConfig, drawWm, drawWallRing, drawWallBrowse,
-    wallOpen, kbScroll, kbMaxScroll, setKbScroll
+    drawColors, drawKeybinds, drawConfig, drawWm, drawWallRing, drawWallBrowse, drawWallPicker,
+    wallOpen, wallPickerOpen, wallPickerScroll, setWallPickerScroll, wallPickerKey,
+    kbScroll, kbMaxScroll, setKbScroll
 } from "./themesettings.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 
 const SW = SCREEN_WIDTH, SH = SCREEN_HEIGHT
-const SYSR: [number, number, number] = [1, 0.46, 0.5]
-const SYSC: [number, number, number] = USER.modalhov || [0.28, 0.82, 0.86]
+const tabBase = (): [number, number, number] => USER.sysveil as any
+const tabAcc = (): [number, number, number] => USER.cyan as any
 
 export const ThemeSettingsCtrl = () => {
-    const st: any = { tab: "anim" }
+    const st: any = { tab: TABS[0][1] }
     let ctrl: any
 
     ctrl = createModal({
@@ -24,19 +26,45 @@ export const ThemeSettingsCtrl = () => {
         H: SH,
         noGlass: true,
         pad: 0,
+        idleFrameMs: 70,
+        col: USER.sysveil as any,
+        accent: USER.sysveil as any,
         onOpen: () => {
+            st.tab = TABS[0][1]
+            setKbScroll(0)
             readTune()
         },
         onClose: () => {
             stopModalStats()
         },
         onScroll: (d) => {
+            if (st.tab === "wall" && wallPickerOpen) {
+                setWallPickerScroll(wallPickerScroll + d * 36)
+                ctrl.requestDraw()
+                return
+            }
             if (st.tab === "keybinds" || st.tab === "wm" || st.tab === "anim" || st.tab === "colors") {
-                const newScroll = kbScroll + d
+                const newScroll = kbScroll + d * 36
                 if (newScroll >= 0 && newScroll <= kbMaxScroll) {
                     setKbScroll(newScroll)
                     ctrl.requestDraw()
                 }
+            }
+        },
+        onKey: (k) => {
+            if (st.tab === "wall" && wallPickerOpen) {
+                if (wallPickerKey(k)) return true
+            }
+            if (k === Gdk.KEY_Left || k === Gdk.KEY_Right) {
+                const idx = TABS.findIndex(([, id]) => id === st.tab)
+                if (idx < 0) return
+                const next = k === Gdk.KEY_Left ? idx - 1 : idx + 1
+                if (next >= 0 && next < TABS.length) {
+                    st.tab = TABS[next][1]
+                    setKbScroll(0)
+                    ctrl.requestDraw()
+                }
+                return true
             }
         },
         draw: (ctx, g) => {
@@ -59,7 +87,8 @@ export const ThemeSettingsCtrl = () => {
             ctx.fill()
 
             const hy = Y + 40
-            ctx.setSourceRGBA(SYSR[0], SYSR[1], SYSR[2], 0.55)
+            const base = tabBase(), acc = tabAcc()
+            ctx.setSourceRGBA(base[0], base[1], base[2], 0.3)
             ctx.setLineWidth(1)
             ctx.newPath()
             ctx.moveTo(X + 40, hy + 26)
@@ -76,18 +105,12 @@ export const ThemeSettingsCtrl = () => {
                 const w2 = ctx.textExtents(t).width
                 const active = st.tab === id
                 const hv = g.push.hoverKey === `tab:${id}`
-                const tcol: any = active ? SYSC : (hv ? [1, 0.55, 0.5] : SYSR)
+                const tcol: any = active ? acc : (hv ? acc : base)
 
-                if (hv && !active) {
-                    ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], 0.06 + 0.04 * Math.sin(Date.now() / 130))
-                    ctx.rectangle(tx3 - 8, hy, w2 + 16, 28)
-                    ctx.fill()
-                }
+                txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.6), 1)
 
-                txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
-
-                if (active) {
-                    ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95)
+                if (active || hv) {
+                    ctx.setSourceRGBA(acc[0], acc[1], acc[2], active ? 0.95 : 0.55)
                     ctx.rectangle(tx3, hy + 23, w2, 2)
                     ctx.fill()
                 }
@@ -122,7 +145,9 @@ export const ThemeSettingsCtrl = () => {
             } else if (st.tab === "wm") {
                 drawWm(ctx, g, mx, cy3, mw)
             } else if (st.tab === "wall") {
-                if (wallOpen) {
+                if (wallPickerOpen) {
+                    drawWallPicker(ctx, g, mx, cy3, mw)
+                } else if (wallOpen) {
                     drawWallBrowse(ctx, g, mx, cy3, mw)
                 } else {
                     drawWallRing(ctx, g, mx, cy3, mw)
