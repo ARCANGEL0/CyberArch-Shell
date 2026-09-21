@@ -214,6 +214,17 @@ CD.bind("SUPER + CTRL + Delete", hl.dsp.exec_cmd("hyprctl reload"), "RELOAD HYPR
 CD.bind("SUPER + mouse:272", hl.dsp.window.drag(), "DRAG WINDOW", { mouse = true })
 CD.bind("SUPER + mouse:273", hl.dsp.window.resize(), "MOUSE RESIZE", { mouse = true })
 
+CD.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"), "VOLUME UP")
+CD.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"), "VOLUME DOWN")
+CD.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), "MUTE")
+CD.bind("XF86AudioMicMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"), "MIC MUTE")
+CD.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), "PLAY / PAUSE")
+CD.bind("XF86AudioNext", hl.dsp.exec_cmd("playerctl next"), "NEXT TRACK")
+CD.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), "PREV TRACK")
+CD.bind("XF86AudioStop", hl.dsp.exec_cmd("playerctl stop"), "STOP")
+CD.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("brightnessctl set 5%+"), "BRIGHTNESS UP")
+CD.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl set 5%-"), "BRIGHTNESS DOWN")
+
 once(cyberpunk .. "/scripts/overkill prewarm")
 
 hl.define_submap("kill", function()
