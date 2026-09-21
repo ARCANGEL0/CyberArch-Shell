@@ -1952,7 +1952,7 @@ const openWmPicker = (key: string) => {
 const liveWmPick = () => {
     if (!wmColorPick) return
     const [r, gg, b] = hsvToRgb(wmColorPick.h, wmColorPick.s, wmColorPick.v)
-    setWm(wmColorPick.key, rgbToHex([r, gg, b]))
+    setWm(wmColorPick.key, rgbToHex([r, gg, b]).replace(/^#/, ""))
     ctrl.requestDraw()
 }
 const closeWmPicker = () => { wmColorPick = null; ctrl.requestDraw() }
@@ -2055,7 +2055,7 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
             wmRounding: (v) => `${Math.round(v)}px`,
         }
         const ranges: Record<string, [number, number]> = {
-            wmOpacityVal: [0.4, 1], wmBorderSize: [0, 5], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
+            wmOpacityVal: [0.4, 1], wmBorderSize: [0, 20], wmGlowRange: [0, 30], wmGlowRp: [1, 5],
             wmShadowRange: [0, 40], wmShadowAlpha: [10, 100], wmRounding: [0, 40],
         }
         drawWmSlider(ctx, g, x, ry, w, r.k, ranges[r.k]?.[0] ?? 0, ranges[r.k]?.[1] ?? 1, fmts[r.k] ?? ((v) => `${v}`))
@@ -2070,7 +2070,7 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
         const label = cur ? `#${cur}` : "THEME"
         drawColorCell(ctx, g, x + w - 140, ry + 4, 24, rgb)
         push({ kind: "btn", bx0: x + w - 144, by0: ry + 2, bx1: x + w - 56, by1: ry + 30, on: () => { if (!picking) openWmPicker(r.k) } })
-        txt(ctx, x + w - 132, ry + 21, label, MONO, 11, rgb ? g.accent : g.col, 0.9)
+        txt(ctx, x + w - 110, ry + 21, label, MONO, 11, rgb ? g.accent : g.col, 0.9)
         drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, picking ? "OPEN" : "PICK", () => {
             if (!picking) openWmPicker(r.k)
         }, picking, g.col, "", 11)
@@ -2199,7 +2199,7 @@ export const drawWm = (ctx, g, x, y, w) => {
         ctx.rectangle(px + 222, sy, 62, 156); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.8); ctx.setLineWidth(1)
         ctx.rectangle(px + 222.5, sy + 0.5, 61, 155); ctx.stroke()
-        txt(ctx, px + 222, sy + 176, `#${rgbToHex(ar, ag, ab)}`, MONO, 10.5, g.accent, 0.95)
+        txt(ctx, px + 222, sy + 176, rgbToHex([ar, ag, ab]), MONO, 10.5, g.accent, 0.95)
 
         const ghu = new Cairo.LinearGradient(hx, 0, hx + hw, 0)
         for (let i = 0; i <= 6; i++) { const [r2, g2, b2] = hsvToRgb(i * 60, 1, 1); ghu.addColorStopRGB(i / 6, r2 / 255, g2 / 255, b2 / 255) }
