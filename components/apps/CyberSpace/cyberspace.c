@@ -14,7 +14,7 @@ static const char *boot_html =
 ".bar{font-family:monospace}"
 "</style></head>"
 "<body>"
-"<iframe id='site' src='https://cyberspace.online'></iframe>"
+"<iframe id='site' src='https://terminal.cyberspace.online'></iframe>"
 "<div id='boot'><div id='terminal'></div></div>"
 "<script>"
 "const lines=["
@@ -66,7 +66,7 @@ static const char *boot_html =
 "   write('[ OK ] starting network manager');"
 "   write('[ OK ] starting cyberspace display server');"
 "   write('[ OK ] initializing web renderer');"
-"   write('[ OK ] loading cyberspace.online');"
+"   write('[ OK ] loading terminal.cyberspace.online');"
 "   write('');"
 "   write('CYBERSPACE NETWORK STACK');"
 "   write('----------------------------------------');"
@@ -89,7 +89,7 @@ static const char *boot_html =
 "function finish(){"
 " if(!siteReady||!bootFinished)return;"
 " write('[ OK ] network connection established');"
-" write('[ OK ] cyberspace.online is online');"
+" write('[ OK ] terminal.cyberspace.online is online');"
 " write('');"
 " write('System ready.');"
 " setTimeout(()=>{clearInterval(bootTimer);boot.style.display='none'},250);"
@@ -209,12 +209,12 @@ static void apply_settings(WebKitWebView *view)
 
 static void load_boot(WebKitWebView *view)
 {
-    webkit_web_view_load_html(view, boot_html, "https://cyberspace.online/");
+    webkit_web_view_load_html(view, boot_html, "https://terminal.cyberspace.online/");
 }
 
 int main(int argc, char **argv)
 {
-    const char *uri = argc > 1 ? argv[1] : "https://cyberspace.online";
+    const char *uri = argc > 1 ? argv[1] : "https://terminal.cyberspace.online";
 
     GMainLoop *loop = g_main_loop_new(NULL, FALSE);
 
