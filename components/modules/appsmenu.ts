@@ -4,6 +4,7 @@ import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import Gio from "gi://Gio"
+import GLib from "gi://GLib"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW, monH } from "../../env.ts"
 import { NEON, USER, USER_A, f, onColorChange, menuBg, glassMode } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -321,11 +322,47 @@ export const closeWheel = () => {
   active = false; introTarget = 0; animate()
   const r = wheelCfg.onReset; if (r) r()
 }
+let cachedDisplay: string | undefined
+const resolveDisplay = (): string | null => {
+ if (cachedDisplay) return cachedDisplay
+ const env = GLib.getenv("DISPLAY")
+ if (env && /^[^:]*:\d/.test(env)) { cachedDisplay = env; return env }
+ try {
+     const myWl = GLib.getenv("WAYLAND_DISPLAY") || ""
+     const votes: Record<string, number> = {}
+     const dir = GLib.Dir.open("/proc", 0)
+     let name: string | null
+     while ((name = dir.read_name()) !== null) {
+         if (!/^\d+$/.test(name)) continue
+         let bytes
+         try { const [ok, data] = GLib.file_get_contents(`/proc/${name}/environ`); if (!ok) continue; bytes = data } catch { continue }
+         let disp: string | null = null, wl: string | null = null
+         for (const kv of new TextDecoder().decode(bytes).split("\0")) {
+             if (kv.startsWith("DISPLAY=")) disp = kv.slice(8)
+             else if (kv.startsWith("WAYLAND_DISPLAY=")) wl = kv.slice(16)
+         }
+         if (disp && /^[^:]*:\d/.test(disp) && (!myWl || wl === myWl)) votes[disp] = (votes[disp] || 0) + 1
+     }
+     let best: string | null = null, top = 0
+     for (const k in votes) if (votes[k] > top) { top = votes[k]; best = k }
+     if (best) cachedDisplay = best
+     return best
+ } catch (e) { print("[apps] display:", e); return null }
+}
+const launchApp = (a) => {
+ try {
+     const ctx = new Gio.AppLaunchContext()
+     const disp = resolveDisplay()
+     if (disp) ctx.setenv("DISPLAY", disp)
+     a.launch([], ctx)
+ } catch (e) { print("[apps] launch:", e) }
+ closeWheel()
+}
 export const openAppsMenu = () => {
  if (!menuWin) return
  if (active) { closeWheel(); return }
  appInfoCache = null
- openWheel({ title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: (a) => { try { a.launch([], null) } catch (e) { print("[apps] launch:", e) } closeWheel() }, onSecondary: null, onReset: null, emptyText: "// NO APPS" }, buildAppEntries())
+ openWheel({ title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: launchApp, onSecondary: null, onReset: null, emptyText: "// NO APPS" }, buildAppEntries())
 }
 
 export const AppsMenuWindow = () => {
