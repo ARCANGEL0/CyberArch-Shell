@@ -73,6 +73,8 @@ export const NEON: Record<string, RGB> = {
     aurfg: [232, 255, 240],
     auricon: [255, 20, 45],
     aurlbl: [43, 225, 133],
+    aurtitle: [232, 255, 240],
+    aurline: [43, 225, 133],
     notifphone: [94, 244, 248],
     notifmail: [108, 230, 246],
     notifheads: [255, 214, 46],
@@ -382,6 +384,7 @@ const DERIVE: Record<string, [string, Mul]> = {
     aurbg: ["aurblack", 1],
     aurfg: ["aurwht", 1],
     aurlbl: ["aurgreen", 1],
+    aurline: ["aurgreen", 1],
     notifmail: ["notifcyn", 1],
     notifheads: ["notifyel", 1],
     notiftitle: ["notifcyn", 1],
@@ -594,6 +597,10 @@ const updateNotifIconTint = (name: string) => {
 export const aurTitleTint = { value: null as RGB | null }
 const updateAurTitleTint = (name: string) => {
     aurTitleTint.value = curPalette === "BLADE" ? NEON.aurbrt : null
+    if (!OVR.aurtitle) {
+        const d = neonBtn.value ? NEON.press : (aurTitleTint.value || (glassMode.value ? NEON.aurfg : NEON.aurbg))
+        setColor("aurtitle", [d[0], d[1], d[2]] as RGB, false)
+    }
 }
 
 const changeBus: Array<() => void> = []

@@ -10,7 +10,7 @@ import { CYBER_DIR, USER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
-import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn, aurTitleTint } from "./colors.ts"
+import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn, aurTitleTint, isOvr } from "./colors.ts"
 import { animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
@@ -23,6 +23,7 @@ const CYAN: [number, number, number] = NEON.notifcyn
 const RED: [number, number, number] = NEON.notifred
 const WHT: [number, number, number] = NEON.aurfg
 const LBL: [number, number, number] = NEON.aurlbl
+const AURLN: [number, number, number] = NEON.aurline
 const CAPBG: [number, number, number] = NEON.aurbg
 const ac = (c: [number, number, number]): [number, number, number] => neonBtn.value ? NEON.press : c
 
@@ -266,7 +267,7 @@ const draw = (ctx: any) => {
         if (glassMode.value) {
             pfill(ctx, barPts, BLACK, 0.55 * clamp(V.barW * 4) * glassAlpha.value * USER_A.aurbg)
             ctx.setOperator(12); strokePath(ctx, plane, barPts, GRBRT, 0.12, 2, true); ctx.setOperator(2)
-            strokePath(ctx, plane, barPts, ac(GREEN), 0.9 * clamp(V.barW * 4), 1.4, true)
+            strokePath(ctx, plane, barPts, ac(AURLN), 0.9 * clamp(V.barW * 4), 1.4, true)
         } else {
             pfill(ctx, barPts, GREEN, 0.92 * clamp(V.barW * 4))
         }
@@ -276,7 +277,7 @@ const draw = (ctx: any) => {
         const tcx = BARX + 18
         pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK, 0.92 * V.textA)
         const tfs = cTitle.length > 22 ? 13 : 16
-        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, neonBtn.value ? NEON.press : (aurTitleTint.value || (glassMode.value ? WHT : BLACK)), 0.95 * V.textA, { align: "l", bold: true, glow: (glassMode.value || neonBtn.value || aurTitleTint.value) ? 0.55 : 0 } as any)
+        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, neonBtn.value ? NEON.press : NEON.aurtitle, 0.95 * V.textA, { align: "l", bold: true, glow: (glassMode.value || neonBtn.value || aurTitleTint.value || isOvr("aurtitle")) ? 0.55 : 0 } as any)
         ctx.restore()
 
         if (V.badgeA > 0.01) pimg(ctx, png("updt.png"), BARX + BW - 45, ROWY, 54, 46, V.badgeA, BADGE_ROT, true, (imgTint.value && !glassMode.value) ? BLACK : null)

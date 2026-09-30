@@ -361,6 +361,8 @@ const SECTIONS: [string, ColRow[]][] = [
         ["aurfg", "AUR FRAME FOREGROUND", false],
         ["auricon", "AUR ICON", false],
         ["aurlbl", "AUR LABELS", false],
+        ["aurtitle", "AUR TITLE TEXT", false],
+        ["aurline", "AUR FRAME OUTLINE", false],
         ["notifbadge", "NOTIFICATION BADGE", false],
         ["notifphone", "NOTIFICATION PHONE", false],
         ["notifmail", "NOTIFICATION MAIL", false],
@@ -378,6 +380,35 @@ const SECTIONS: [string, ColRow[]][] = [
         ["radiotrkfg", "TRACKS FOREGROUND", false],
         ["radiotrkbg", "TRACKS BACKGROUND", true],
         ["radioctl", "RADIOPORT CONTROLS", false],
+    ]],
+    ["// CYBERFRAME", [
+        ["sysveil", "FRAME ACCENT", false],
+        ["overlay", "ALERT / REGION FRAME", false],
+        ["f25", "ALERT TEXT", false],
+        ["dock", "HUD MASTER ACCENT", false],
+        ["press", "PRESS ACCENT", false],
+    ]],
+    ["// BASE PALETTE", [
+        ["red", "CORE RED", false],
+        ["magenta", "MAGENTA", false],
+        ["green", "GREEN", false],
+        ["amber", "AMBER", false],
+        ["blue", "BLUE", false],
+        ["white", "TEXT WHITE", false],
+        ["hudcyan", "HUD CYAN", false],
+        ["appsred", "APPS ACCENT", false],
+        ["glyphcol", "GLYPH TEXT", false],
+        ["msggrey", "MESSAGE GREY", false],
+        ["notifgrey", "NOTIF GREY", false],
+        ["dim", "DIM TEXT", false],
+        ["grid", "GRID LINES", false],
+        ["goldf", "GOLD", false],
+        ["dimred", "DEEP RED", false],
+        ["darkred", "DARK RED", false],
+        ["aurbrt", "AUR HIGHLIGHT", false],
+        ["notifred", "NOTIF RED", false],
+        ["notifyel", "NOTIF YELLOW", false],
+        ["notifcyn", "NOTIF CYAN", false],
     ]],
 ]
 
@@ -447,68 +478,70 @@ const drawColorRow = (ctx, g, x, ry, w, key: string, label: string, alp: boolean
     ctx.rectangle(x, ry + 4, 19, 19); ctx.fill()
     ctx.setSourceRGBA(1, 1, 1, 0.28); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, ry + 4.5, 18, 18); ctx.stroke()
     txt(ctx, x + 28, ry + 21, label, TITLE, 12, g.accent, 0.9, 1)
-    txt(ctx, x + 250, ry + 21, rgbToHex(rgb), MONO, 10.5, g.col, 0.72)
-    drawStrip(ctx, push, "hue", key, x + 310, ry + 4, 130, 24)
-    drawStrip(ctx, push, "val", key, x + 450, ry + 4, 80, 24)
+    const ed = !!hexEdit && hexEdit.key === key
+    const hx = x + 238
+    if (ed) {
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.14); ctx.rectangle(hx - 5, ry + 6, 74, 17); ctx.fill()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1); ctx.rectangle(hx - 4.5, ry + 6.5, 73, 16); ctx.stroke()
+    }
+    txt(ctx, hx, ry + 21, ed ? "#" + hexEdit!.buf + "_" : rgbToHex(rgb), MONO, 10.5, ed ? g.accent : g.col, ed ? 0.98 : 0.72)
+    push({ kind: "btn", hoverable: true, key: `hex:${key}`, bx0: hx - 6, by0: ry + 3, bx1: hx + 70, by1: ry + 26, on: () => openHex(key) })
+    if (ed && hexErr) { txt(ctx, x + 322, ry + 21, hexErr, MONO, 9.5, [1, 0.36, 0.4], 0.96); return }
+    drawStrip(ctx, push, "hue", key, x + 320, ry + 4, 104, 24)
+    drawStrip(ctx, push, "sat", key, x + 430, ry + 4, 60, 24)
+    drawStrip(ctx, push, "val", key, x + 496, ry + 4, 60, 24)
     if (alp && hasAlpha(key)) {
-        drawStrip(ctx, push, "alp", key, x + 538, ry + 4, 64, 24)
-        txt(ctx, x + 612, ry + 21, getUserAlpha(key).toFixed(2), MONO, 10, g.col, 0.72)
+        drawStrip(ctx, push, "alp", key, x + 562, ry + 4, 54, 24)
+        txt(ctx, x + 622, ry + 21, getUserAlpha(key).toFixed(2), MONO, 10, g.col, 0.72)
     }
 }
 
-const hueRgb = (t: number): [number, number, number] => {
-    const h = ((t % 1 + 1) % 1) * 6
-    const x = 1 - Math.abs(h % 2 - 1)
-    const [r, gc, b] = h < 1 ? [1, x, 0] : h < 2 ? [x, 1, 0] : h < 3 ? [0, 1, x] : h < 4 ? [0, x, 1] : h < 5 ? [x, 0, 1] : [1, 0, x]
-    return [Math.round(r * 255), Math.round(gc * 255), Math.round(b * 255)]
+const h2rgb = (h: number, s: number, v: number): [number, number, number] => {
+    h = ((h % 1) + 1) % 1
+    const c = v * s, xx = c * (1 - Math.abs((h * 6 % 2) - 1)), m = v - c
+    const seg = Math.floor(h * 6) % 6
+    let r = 0, gg = 0, b = 0
+    if (seg === 0) { r = c; gg = xx } else if (seg === 1) { r = xx; gg = c } else if (seg === 2) { gg = c; b = xx }
+    else if (seg === 3) { gg = xx; b = c } else if (seg === 4) { r = xx; b = c } else { r = c; b = xx }
+    return [Math.round((r + m) * 255), Math.round((gg + m) * 255), Math.round((b + m) * 255)]
 }
-const rgbVal = (c: [number, number, number]) => Math.max(c[0], c[1], c[2]) / 255
-const rgbHue = (c: [number, number, number]): number => {
-    const r = c[0] / 255, gc = c[1] / 255, b = c[2] / 255
-    const mx = Math.max(r, gc, b), mn = Math.min(r, gc, b), d = mx - mn
-    if (d < 0.0005) return 0
-    const h = mx === r ? ((gc - b) / d + 6) % 6 : mx === gc ? (b - r) / d + 2 : (r - gc) / d + 4
-    return h / 6
-}
-const valBase: Record<string, [number, number, number]> = {}
-const baseOf = (key: string, c: [number, number, number]): [number, number, number] => {
-    const mx = Math.max(c[0], c[1], c[2])
-    if (mx >= 1) { valBase[key] = [c[0] * 255 / mx, c[1] * 255 / mx, c[2] * 255 / mx]; return valBase[key] }
-    return valBase[key] ?? [255, 255, 255]
+const toHsv = (c: [number, number, number]): [number, number, number] => {
+    const r = c[0] / 255, gg = c[1] / 255, b = c[2] / 255
+    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), d = mx - mn
+    let h = 0
+    if (d > 0.0004) { h = mx === r ? ((gg - b) / d + 6) % 6 : mx === gg ? (b - r) / d + 2 : (r - gg) / d + 4; h /= 6 }
+    return [h, mx ? d / mx : 0, mx]
 }
 const commit = (key: string, c: [number, number, number]) => {
     setUserColor(key, c)
     saveUserColors()
     ctrl.requestDraw()
 }
-const pickHue = (key: string, t: number) => {
-    const v = Math.max(0.06, rgbVal(getUserColor(key)))
-    const h = hueRgb(t)
-    valBase[key] = h
-    commit(key, [h[0] * v, h[1] * v, h[2] * v])
-}
-const pickVal = (key: string, t: number) => {
-    const n = baseOf(key, getUserColor(key))
-    const v = Math.max(0, Math.min(1, t))
-    commit(key, [n[0] * v, n[1] * v, n[2] * v])
-}
+const pickHue = (key: string, t: number) => { const q = toHsv(getUserColor(key)); commit(key, h2rgb(t, q[1] || 1, Math.max(0.06, q[2]))) }
+const pickSat = (key: string, t: number) => { const q = toHsv(getUserColor(key)); commit(key, h2rgb(q[0], Math.max(0, Math.min(1, t)), Math.max(0.06, q[2]))) }
+const pickVal = (key: string, t: number) => { const q = toHsv(getUserColor(key)); commit(key, h2rgb(q[0], q[1], Math.max(0, Math.min(1, t)))) }
 const pickAlpha = (key: string, t: number) => {
     setUserAlpha(key, Math.max(0, Math.min(1, t)))
     saveUserColors()
     ctrl.requestDraw()
 }
-const drawStrip = (ctx, push, kind: "hue" | "val" | "alp", key: string, x, y, w, h) => {
-    const cur = getUserColor(key)
+const drawStrip = (ctx, push, kind: "hue" | "sat" | "val" | "alp", key: string, x, y, w, h) => {
+    const cur = getUserColor(key), q = toHsv(cur)
     const grad = new Cairo.LinearGradient(x, 0, x + w, 0)
     let mark = 0
     if (kind === "hue") {
-        for (let i = 0; i <= 6; i++) { const [r, gc, b] = hueRgb(i / 6); grad.addColorStopRGBA(i / 6, r / 255, gc / 255, b / 255, 1) }
-        mark = rgbHue(cur)
+        for (let i = 0; i <= 6; i++) { const c = h2rgb(i / 6, 1, 1); grad.addColorStopRGBA(i / 6, c[0] / 255, c[1] / 255, c[2] / 255, 1) }
+        mark = q[0]
+    } else if (kind === "sat") {
+        const a0 = h2rgb(q[0], 0, q[2] || 1), a1 = h2rgb(q[0], 1, q[2] || 1)
+        grad.addColorStopRGBA(0, a0[0] / 255, a0[1] / 255, a0[2] / 255, 1)
+        grad.addColorStopRGBA(1, a1[0] / 255, a1[1] / 255, a1[2] / 255, 1)
+        mark = q[1]
     } else if (kind === "val") {
-        const n = baseOf(key, cur)
+        const a1 = h2rgb(q[0], q[1], 1)
         grad.addColorStopRGBA(0, 0, 0, 0, 1)
-        grad.addColorStopRGBA(1, n[0] / 255, n[1] / 255, n[2] / 255, 1)
-        mark = rgbVal(cur)
+        grad.addColorStopRGBA(1, a1[0] / 255, a1[1] / 255, a1[2] / 255, 1)
+        mark = q[2]
     } else {
         grad.addColorStopRGBA(0, cur[0] / 255, cur[1] / 255, cur[2] / 255, 0)
         grad.addColorStopRGBA(1, cur[0] / 255, cur[1] / 255, cur[2] / 255, 1)
@@ -525,10 +558,43 @@ const drawStrip = (ctx, push, kind: "hue" | "val" | "alp", key: string, x, y, w,
     ctx.setSource(grad); ctx.rectangle(x, y, w, h); ctx.fill()
     ctx.restore()
     ctx.setSourceRGBA(1, 1, 1, 0.4); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, y + 0.5, w - 1, h - 1); ctx.stroke()
-    const mx = x + Math.max(1.2, Math.min(w - 1.2, mark * w))
-    ctx.setSourceRGBA(0, 0, 0, 0.75); ctx.setLineWidth(2.6); ctx.newPath(); ctx.moveTo(mx, y + 1); ctx.lineTo(mx, y + h - 1); ctx.stroke()
-    ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.1); ctx.newPath(); ctx.moveTo(mx, y + 1); ctx.lineTo(mx, y + h - 1); ctx.stroke()
-    push({ kind: "sld", bx0: x, by0: y, bx1: x + w, by1: y + h, u0: x, v0: y, u1: x + w, v1: y, on: (t: number) => kind === "hue" ? pickHue(key, t) : kind === "val" ? pickVal(key, t) : pickAlpha(key, t) })
+    const mm = x + Math.max(1.2, Math.min(w - 1.2, mark * w))
+    ctx.setSourceRGBA(0, 0, 0, 0.75); ctx.setLineWidth(2.6); ctx.newPath(); ctx.moveTo(mm, y + 1); ctx.lineTo(mm, y + h - 1); ctx.stroke()
+    ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.1); ctx.newPath(); ctx.moveTo(mm, y + 1); ctx.lineTo(mm, y + h - 1); ctx.stroke()
+    push({ kind: "sld", hoverable: true, key: `strip:${kind}:${key}`, bx0: x, by0: y, bx1: x + w, by1: y + h, u0: x, v0: y, u1: x + w, v1: y, on: (t: number) => kind === "hue" ? pickHue(key, t) : kind === "sat" ? pickSat(key, t) : kind === "val" ? pickVal(key, t) : pickAlpha(key, t) })
+}
+let hexEdit: { key: string; buf: string; prev: string } | null = null
+let hexErr = ""
+let stash = ""
+const openHex = (kk: string) => { const c = rgbToHex(getUserColor(kk)); hexEdit = { key: kk, buf: c.replace(/^#/, "").toLowerCase(), prev: c }; hexErr = ""; area?.queue_draw() }
+const liveHex = () => { if (!hexEdit || hexEdit.buf.length !== 6) return; const r = hexToRgb(hexEdit.buf); if (r) { setUserColor(hexEdit.key, r); saveUserColors() } }
+const commitHex = () => {
+    if (!hexEdit) return
+    const r = hexToRgb(hexEdit.buf)
+    if (!r) { hexErr = "hex color invalid <!>"; hexEdit.buf = hexEdit.prev.replace(/^#/, ""); area?.queue_draw(); return }
+    setUserColor(hexEdit.key, r); saveUserColors(); hexEdit = null; hexErr = ""; area?.queue_draw()
+}
+const eatPaste = (s: string) => {
+    if (!hexEdit) return
+    const cand = (s || "").trim().replace(/^#/, "").toLowerCase().slice(0, 6)
+    const r = hexToRgb(cand)
+    if (!r) { hexErr = "hex color invalid <!>"; area?.queue_draw(); return }
+    hexEdit.buf = cand; setUserColor(hexEdit.key, r); saveUserColors(); hexErr = ""; area?.queue_draw()
+}
+const copyHex = () => { if (!hexEdit) return; const hh = "#" + hexEdit.buf; stash = hh; execAsync(["wl-copy", "--", hh]).catch(() => {}) }
+const pasteHex = () => { execAsync(["wl-paste", "-n"]).then((s) => eatPaste(s)).catch(() => eatPaste(stash)) }
+export const hexEditing = () => !!hexEdit
+export const colorsHexCancel = () => { if (!hexEdit) return; const b = hexToRgb(hexEdit.prev.replace(/^#/, "")); if (b) { setUserColor(hexEdit.key, b); saveUserColors() } hexEdit = null; hexErr = ""; area?.queue_draw() }
+export const colorsKeyRaw = (k: number, mask: number, pressed: boolean): boolean => {
+    if (!hexEdit || !pressed) return false
+    const ctrlOn = (mask & (Gdk.ModifierType.CONTROL_MASK as any)) !== 0
+    if (ctrlOn && (k === Gdk.KEY_c || k === Gdk.KEY_C)) { copyHex(); return true }
+    if (ctrlOn && (k === Gdk.KEY_v || k === Gdk.KEY_V)) { pasteHex(); return true }
+    if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { commitHex(); return true }
+    if (k === Gdk.KEY_BackSpace) { hexEdit.buf = hexEdit.buf.slice(0, -1); hexErr = ""; area?.queue_draw(); return true }
+    const uu = Gdk.keyval_to_unicode(k)
+    if (uu > 0) { const cc = String.fromCharCode(uu).toLowerCase(); if (/[0-9a-f]/.test(cc) && hexEdit.buf.length < 6) { hexEdit.buf += cc; hexErr = ""; liveHex(); area?.queue_draw() } }
+    return true
 }
 
 type CaptureKind = "theme" | "user" | "thememod" | "newuser"

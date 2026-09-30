@@ -7,7 +7,8 @@ import {
     readTune, TABS,
     drawColors, drawKeybinds, drawConfig, drawWm, drawWallRing, drawWallBrowse, drawWallPicker,
     wallOpen, wallPickerOpen, wallPickerScroll, setWallPickerScroll, wallPickerKey,
-    kbScroll, kbMaxScroll, setKbScroll
+    kbScroll, kbMaxScroll, setKbScroll,
+    hexEditing, colorsKeyRaw, colorsHexCancel
 } from "./themesettings.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 
@@ -51,7 +52,12 @@ export const ThemeSettingsCtrl = () => {
                 }
             }
         },
+        onKeyRaw: (k, m, pressed) => { colorsKeyRaw(k, m, pressed) },
         onKey: (k) => {
+            if (hexEditing()) {
+                if (k === Gdk.KEY_Escape) { colorsHexCancel(); return true }
+                return true
+            }
             if (st.tab === "wall" && wallPickerOpen) {
                 if (wallPickerKey(k)) return true
             }
