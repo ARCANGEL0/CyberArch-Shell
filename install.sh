@@ -280,7 +280,7 @@ REPO=(
   gjs grim wf-recorder wl-clipboard networkmanager bluez-utils curl
   wireplumber playerctl brightnessctl power-profiles-daemon upower
   hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget fuse2 sqlite3 pacman-contrib awww cronie dolphin
-  libcdio libcdio-paranoia
+   libcdio libcdio-paranoia
   base-devel pkgconf cmake cpio gcc lib32-libelf lib32-glibc glibc
   python python-pillow imagemagick $MESA_PKGS
   pipewire pipewire-audio pipewire-pulse libpulse mpv ffmpeg sox
@@ -1463,6 +1463,7 @@ block_comment "$USERCONF"
 hdr "CYBER TERMINAL"
 GTSRC="$THEME/assets/rio"
 GTCFG="$HOME/.config/rio"
+GTRT="$USER_DIR/rio_themes"
 GTBIN="${CARGO_HOME:-$HOME/.cargo}/bin/rio"
 GTVER="0.4.5"
 GTKEY="SUPER + T"
@@ -1569,7 +1570,7 @@ else
       # rio stuff is split in 3 folders, styles/ is a full config.toml for each theme, themes/ is just
       # the colors and shaders/ has the .slangp chain per look. rio-style copies the style over
       # config.toml when u switch theme
-      mkdir -p "$GTCFG/themes" "$GTCFG/shaders" "$GTCFG/styles" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
+      mkdir -p "$GTCFG/themes" "$GTCFG/shaders" "$GTCFG/styles" "$GTRT" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/scalable/apps"
       FONT_DIR="$HOME/.local/share/fonts"
       mkdir -p "$FONT_DIR"
       if ! fc-list -q "Share Tech Mono" 2>/dev/null; then
@@ -1592,18 +1593,19 @@ else
       if [ -f "$GTCFG/config.toml" ] && [ ! -f "$GTCFG/config.toml.pre-cyberpunk" ]; then
         cp "$GTCFG/config.toml" "$GTCFG/config.toml.pre-cyberpunk" && ok "previous terminal config backed up"
       fi
-      cp "$GTSRC/styles/"*.toml "$GTCFG/styles/"
+      cp "$GTSRC/styles/"*.toml "$GTRT/"
+      for f in "$GTSRC/styles/"*.toml; do rm -f "$GTCFG/styles/$(basename "$f")"; done
       cp "$GTSRC/themes/"*.toml "$GTCFG/themes/"
       for d in "$GTSRC/shaders/"*/; do
         n="$(basename "$d")"
         rm -rf "$GTCFG/shaders/$n"
         cp -r "$d" "$GTCFG/shaders/"
       done
-      sed -i "s|__RIO_SHADERS__|$GTCFG/shaders|g" "$GTCFG/styles/"*.toml
+      sed -i "s|__RIO_SHADERS__|$GTCFG/shaders|g" "$GTRT/"*.toml
       for f in "$GTCFG/shaders/"*/*.slangp; do
         [ -f "$f" ] && sed -i "s|__RIO_IMAGES__|$GTSRC/images|g" "$f"
       done
-      cp "$GTCFG/styles/cybercore.toml" "$GTCFG/config.toml"
+      cp "$GTRT/cybercore.toml" "$GTCFG/config.toml"
       printf 'cybercore\n' > "$GTCFG/.rio-style"
       ok "terminal styles installed |::| cybercore active, the GHOST/KITTY/SYNTHWAVE/ARCTIC/BLOODMOON/DARK/JOHNNY palettes swap in their own"
       sed "s|__RIO_BIN__|$GTBIN|g" "$GTSRC/desktop/rio.desktop" > "$HOME/.local/share/applications/rio.desktop"

@@ -164,6 +164,7 @@ const THEME_ACTIONS: ThemeAction[] = [
     { id: "hud.sys",      label: "SYSTEM",              group: "deck", mod: "@themeMod", key: "C" },
     { id: "hud.keys",     label: "KEYBINDS",            group: "deck", mod: "@themeMod", key: "H" },
     { id: "hud.settings", label: "THEME SETTINGS",      group: "deck", mod: "@themeMod", key: "backspace" },
+    { id: "hud.termtheme",label: "TERMINAL THEME",      group: "deck", mod: "@themeMod", key: "TAB" },
     { id: "hud.notifrd",  label: "READ NOTIFICATION",   group: "deck", mod: "@themeMod", key: "E" },
     { id: "hud.notifdis", label: "DISMISS NOTIFICATION",group: "deck", mod: "@themeMod", key: "X" },
     { id: "tool.rec",     label: "SCREEN RECORD",       group: "deck", mod: "@themeMod", key: "R" },

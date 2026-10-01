@@ -257,6 +257,7 @@ CD.actions = {
     { id="hud.sys",      label="SYSTEM",              mod="@themeMod", key="C",         group="deck", run=sock("modal sys") },
     { id="hud.keys",     label="KEYBINDS",            mod="@themeMod", key="H",         group="deck", run=sock("modal keys") },
     { id="hud.settings", label="THEME SETTINGS",      mod="@themeMod", key="backspace", group="deck", run=sock("modal themesettings") },
+    { id="hud.termtheme",label="TERMINAL THEME",      mod="@themeMod", key="TAB",       group="deck", run=sock("modal termtheme") },
     { id="hud.notifrd",  label="READ NOTIFICATION",   mod="@themeMod", key="E",         group="deck", run=sock("notif-read") },
     { id="hud.notifdis", label="DISMISS NOTIFICATION",mod="@themeMod", key="X",         group="deck", run=sock("notif-dismiss") },
     { id="tool.rec",     label="SCREEN RECORD",       mod="@themeMod", key="R",         group="deck", run=app("scripts/screenrecord") },

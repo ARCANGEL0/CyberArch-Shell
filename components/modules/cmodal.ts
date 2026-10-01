@@ -18,6 +18,7 @@ import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar, getThemeUpdate, cachedThemeUpdate, startThemeUpdate, dismissThemeBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 import { ThemesWindow, toggleThemeSettings } from "./themesettings.ts"
+import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings_ctrl.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -1605,7 +1606,7 @@ const KEYBINDS = [
     ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["Q", "CYBERARCH UPDATE"], ["M", "MICROPHONE"],["G", "MARKETS"], ["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
     ["B", "BLUETOOTH"], ["W", "FORECAST"], ["P", "POWER MENU"], ["Y", "BATTERY"],
     ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
-    ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], 
+    ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], ["TAB", "TERMINAL THEME"],
 ]
 export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number; col?: any } = {}) => {
     let kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
@@ -1849,7 +1850,7 @@ const sysGet = () => {
   }
   return sysInst
 }
-export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemeSettingsCtrl())]
+export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemeSettingsCtrl()), register(TerminalThemeCtrl())]
 export const ThemeSettingsWindow = () => ThemesWindow()
 
 

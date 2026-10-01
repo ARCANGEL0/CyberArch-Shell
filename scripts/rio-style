@@ -4,8 +4,12 @@
 # inode and mv makes it lose track of the file
 set -u
 STYLE="${1:-cybercore}"
+EXTRA="${2:-}"
 RIO="${XDG_CONFIG_HOME:-$HOME/.config}/rio"
 SRC="${CYBER_DIR:-$HOME/.config/hypr/themes/cyberpunk}/assets/rio/styles/$STYLE.toml"
+RT="${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch/rio_themes"
+[ -n "$EXTRA" ] || EXTRA="$RT"
+[ -f "$SRC" ] || SRC="$EXTRA/$STYLE.toml"
 [ -f "$SRC" ] || SRC="$RIO/styles/$STYLE.toml"
 [ -f "$SRC" ] || exit 0
 [ -f "$RIO/config.toml" ] && [ "$(cat "$RIO/.rio-style" 2>/dev/null)" = "$STYLE" ] && exit 0
