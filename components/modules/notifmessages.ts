@@ -4,7 +4,7 @@ import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
-import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
+import { CYBER_DIR, winScale } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
 import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -872,7 +872,7 @@ export const toggleNotifHud = () => {
 
 export const NotifHudWindow = () => {
     area = DrawingArea({})
-    area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
+    area.set_size_request(Math.round(plane.width), Math.round(plane.height))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w, ctx) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     try { area.add_events(Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
@@ -971,7 +971,7 @@ export const NotifHudWindow = () => {
     evt.connect("button-release-event", () => { draggingScroll = false; return false })
 
     const wrap = Box({ className: "notifpopups-wrap", child: evt })
-    try { wrap.set_margin_top(Math.round(156 * SCALE)); wrap.set_margin_left(Math.round(18 * SCALE)) } catch {}
+    try { wrap.set_margin_top(156); wrap.set_margin_left(18) } catch {}
     hudWrap = wrap
     win = Window({
         name: "notifhud", className: "aug notifhud",

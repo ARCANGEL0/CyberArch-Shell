@@ -6,7 +6,7 @@ import AstalWp from "gi://AstalWp"
 import { makePlane, tiltBar, tiltText, strokePath } from "./proj.ts"
 import { NEON, onColorChange } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
-import { SCALE, winScale } from "../../env.ts"
+import { winScale } from "../../env.ts"
 const ICONF = "FiraCode Nerd Font"
 const read = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d).trim() : "" } catch { return "" } }
 const exists = (p) => GLib.file_test(p, GLib.FileTest.EXISTS)
@@ -24,7 +24,7 @@ export const OsdWindow = () => {
  let hideTimer = null, brtCtl: any = null
  const area = DrawingArea({})
  onColorChange(() => area.queue_draw())
- area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
+ area.set_size_request(Math.round(plane.width), Math.round(plane.height))
  area.connect("draw", (_w, ctx) => {
  const S = winScale(win)
  ctx.scale(S, S)

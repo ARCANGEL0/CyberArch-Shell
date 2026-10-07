@@ -1662,7 +1662,8 @@ onColorChange(() => { for (const k of Object.keys(wheelTintCache)) delete wheelT
 export const drawWallRing = (ctx, g, x, y, w) => {
     const surf = wheelSurf()
     const topY = y + 4
-    const botLimit = Math.min(y + g.h - 12, SCREEN_HEIGHT - 20) - 26
+    const canvasH = g.canvasH ?? ((g.Y ?? 0) + g.h)
+    const botLimit = Math.min(y + g.h - 12, canvasH - 20) - 26
     const side = Math.max(120, Math.min(w, botLimit - topY))
     const ox = x + (w - side) / 2
     const oy = topY + (botLimit - topY - side) / 2

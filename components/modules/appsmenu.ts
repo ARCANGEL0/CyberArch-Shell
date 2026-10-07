@@ -300,7 +300,11 @@ export const openWheel = (cfg, entries) => {
   wheelCfg = cfg
   apps = entries; query = ""; filtered = apps.slice(); searchFlash = 0; scroll = 0; scrollTarget = 0
   active = true; intro = 1; introTarget = 1; lastFocusIdx = -1
-  try { menuWin.gdkmonitor = activeMonitor() } catch {}
+  try {
+      menuWin.gdkmonitor = activeMonitor()
+      const S = winScale(menuWin)
+      menuArea?.set_size_request(Math.round(monW(menuWin) / S), Math.round(monH(menuWin) / S))
+  } catch {}
   try { menuWin.keymode = cfg.keymode ?? Keymode.ON_DEMAND } catch {}
   menuWin.visible = true; try { menuWin.present?.() } catch {}
   menuArea?.queue_draw()

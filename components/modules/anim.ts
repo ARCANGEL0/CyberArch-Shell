@@ -402,7 +402,7 @@ export const BannerWindow = () => {
 export const triggerBanner = (title, sub, flash = 0, payload = "") => {
  if (!animMaster()) return
  bnTitle = title; bnSub = sub; bnFlash = flash
- try { bnWin.gdkmonitor = geomMonitor(parseGeom(payload)) } catch {}
+ try { bnWin.gdkmonitor = geomMonitor(parseGeom(payload)); const S = winScale(bnWin); bnArea.set_size_request(Math.round(monW(bnWin) / S), Math.round(monH(bnWin) / S)) } catch {}
  try { const S = winScale(bnWin); genBreach(monW(bnWin) / S, monH(bnWin) / S) } catch { genBreach() }
  if (bnTimer) bnTimer.cancel()
  bnProg = 0; bnWin.visible = true
@@ -872,6 +872,7 @@ const setRecMonitor = (g) => {
  recRightArea.set_size_request(Math.round(rightPlane.width * S), Math.round(rightPlane.height * S))
  recBotArea.set_size_request(Math.round(botPlane.width * S), Math.round(botPlane.height * S))
  recTopArea.set_size_request(Math.round(REC_TOP_W * S), Math.round(REC_TOP_H * S))
+ recTransArea.set_size_request(Math.round(monW(recTransWin) / S), Math.round(monH(recTransWin) / S))
  } catch {}
 }
 
@@ -892,7 +893,7 @@ const showRecHud = (g = null) => {
 
 const showRecFrame = (rect, g) => {
  recRegionRect = rect
- try { recFrameWin.gdkmonitor = geomMonitor(g) } catch {}
+ try { recFrameWin.gdkmonitor = geomMonitor(g); const S = winScale(recFrameWin); recFrameArea.set_size_request(Math.round(monW(recFrameWin) / S), Math.round(monH(recFrameWin) / S)) } catch {}
  recFrameFade = 0; recFrameWin.visible = true
  if (recFrameTimer) recFrameTimer.cancel()
  recFrameTimer = interval(16, () => { recFrameFade = Math.min(1, recFrameFade + 0.05); recFrameArea.queue_draw(); if (recFrameFade >= 1) { recFrameTimer.cancel(); recFrameTimer = null } })
@@ -928,7 +929,9 @@ export const toggleHudDuringRec = () => { recHudShown = !recHudShown; setHudHidd
 
 
 const playRecTrans = (dir, msg, done?, g = recGeom) => {
- recTransDir = dir; recBannerMsg = msg; recTransProg = 0; try { recTransWin.gdkmonitor = geomMonitor(g) } catch {} recTransWin.visible = true
+ recTransDir = dir; recBannerMsg = msg; recTransProg = 0
+ try { recTransWin.gdkmonitor = geomMonitor(g); const S = winScale(recTransWin); recTransArea.set_size_request(Math.round(monW(recTransWin) / S), Math.round(monH(recTransWin) / S)) } catch {}
+ recTransWin.visible = true
  if (recTransTimer) recTransTimer.cancel()
  recTransTimer = interval(16, () => {
      recTransProg += 0.014

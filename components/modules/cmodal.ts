@@ -7,7 +7,7 @@ const SS_DEFAULT = 1
 import { execAsync, interval, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
-import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, SCALE, winScale, monW } from "../../env.ts"
+import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, winScale, monW, monitorLayoutSize } from "../../env.ts"
 import { Anchor } from "./widget.ts"
 import {
     Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
@@ -17,7 +17,6 @@ import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
 import { getAurUpdates, cachedAurUpdates, startUpgrade, dismissAurBar, getThemeUpdate, cachedThemeUpdate, startThemeUpdate, dismissThemeBar } from "./aurbar.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
-import { ThemesWindow, toggleThemeSettings } from "./themesettings.ts"
 import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings_ctrl.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
@@ -177,12 +176,14 @@ const drawHudFrame = (ctx, x, y, w, h, title) => {
 
 
 export const createModal = (spec) => {
-    const { name, W, H, tabTitle } = spec
+    const { name, tabTitle } = spec
+    let W = spec.W, H = spec.H
     const col = spec.col || (spec.hud ? HUDRED : CYAN), accent = spec.accent || (spec.hud ? HUDRED : ACC)
     const yaw = spec.yaw ?? 0, pitch = spec.pitch ?? 0, roll = spec.roll ?? 0
-    const plane = (yaw || pitch || roll)
-        ? makePlane({ w: W, h: H, yaw, pitch, roll, focal: spec.focal ?? 1000, dist: spec.dist ?? 1000, pad: 30 })
-        : makePlane({ w: W, h: H, yaw: 0, pitch: 0, roll: 0, focal: 1000, dist: 1000, pad: spec.pad ?? 30 })
+    const makeSizedPlane = (w, h) => (yaw || pitch || roll)
+        ? makePlane({ w, h, yaw, pitch, roll, focal: spec.focal ?? 1000, dist: spec.dist ?? 1000, pad: 30 })
+        : makePlane({ w, h, yaw: 0, pitch: 0, roll: 0, focal: 1000, dist: 1000, pad: spec.pad ?? 30 })
+    let plane = makeSizedPlane(W, H)
     let surf: any = null, sctx: any = null, win: any = null, area: any = null
     let visible = false, intro = 0, introTarget = 0, seed = 0
     let animT: any = null, pollT: any = null, lastFrame = 0
@@ -205,7 +206,7 @@ export const createModal = (spec) => {
         hitRegions = []; push.hoverKey = hoverKey; push.pressKey = pressKey; push.dragKey = dragKey
         HUDC = spec.hud ? HUDRED : null
         const bX = spec.hud ? X + STRIPW : X, bW = spec.hud ? w - STRIPW : w
-        spec.draw(ctx, { push, X: bX, Y, w: bW, h, col, accent, refresh: () => ctrl.requestDraw() })
+        spec.draw(ctx, { push, X: bX, Y, w: bW, h, canvasW: W, canvasH: H, col, accent, refresh: () => ctrl.requestDraw() })
         HUDC = null; setTxtFX(false)
     }
     const draw = (screenCtx) => {
@@ -254,14 +255,36 @@ export const createModal = (spec) => {
             gw.input_shape_combine_region(reg, 0, 0)
         } catch (e) { print("[cyber] modal input shape:", e) }
     }
-    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {}; try { const S = winScale(win); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
+    ctrl.open = () => {
+        if (visible) return
+        // Pick the monitor before sizing the modal.
+        try { win.gdkmonitor = activeMonitor() } catch {}
+        const size = spec.sizeForMonitor?.(win.gdkmonitor)
+        if (size?.width > 0 && size?.height > 0) {
+            W = size.width; H = size.height
+            plane = makeSizedPlane(W, H)
+            surf = null; sctx = null
+        }
+        visible = true; introTarget = 1
+        if (!animOn("animModal")) intro = 1
+        try {
+            const S = winScale(win)
+            area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+            const MW = monW(win)
+            if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25))
+            else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03))
+        } catch {}
+        spec.onOpen?.(); win.visible = true
+        try { win.present?.() } catch {}
+        startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange()
+    }
     ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; if (!animOn("animModal")) intro = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
     ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
     ctrl.hitRegions = () => hitRegions
 
-    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
+    area = DrawingArea({}); area.set_size_request(Math.round(plane.width), Math.round(plane.height))
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
     onColorChange(() => { surf = null; ctrl.requestDraw() })
 
@@ -1408,8 +1431,9 @@ fi`).then(() => timeout(200, fetchInitApps))
     }
     const select = (p) => { st.sel = p.pid; st.selProc = p; st.scroll = 0; ctrl.requestDraw() }
     const killSel = () => { if (st.sel) sh(`kill -9 ${st.sel} 2>/dev/null`).then(() => { st.sel = ""; st.selProc = null; timeout(400, refresh) }) }
+    const layout = monitorLayoutSize(activeMonitor())
     ctrl = createModal({
-        name: "sys", tabTitle: "SYSTEM MONITOR", W: SW, H: SH, noGlass: true, pad: 0,
+        name: "sys", tabTitle: "SYSTEM MONITOR", W: layout.width, H: layout.height, sizeForMonitor: monitorLayoutSize, noGlass: true, pad: 0,
         idleFrameMs: 70,
         onFrame: () => {
             const tc = st.cpu / 100, tm = st.memU / st.memT
@@ -1431,7 +1455,8 @@ fi`).then(() => timeout(200, fetchInitApps))
             const X = g.X, Y = g.Y, W = g.w, H = g.h
             const memF = st.memU / st.memT
 
-            const FW = SW, FH = SH
+            const FW = g.canvasW, FH = g.canvasH
+            const narrow = FW < 1500
             ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42); ctx.rectangle(0, 0, FW, FH); ctx.fill()
             const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
             const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
@@ -1462,7 +1487,9 @@ fi`).then(() => timeout(200, fetchInitApps))
             hx = pair(hx, `${Math.round(memF * 100)}`, "MEM", SYSC) + 34
             const tabs = [["PROC_LIST", "task"], ["SYS_INFO", "system"], ["INIT_DAEMON", "init"], ["INFO_LOGS", "logs"]]
             ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
-            let tw2 = tabs.reduce((a2, [t]) => a2 + ctx.textExtents(t).width + 30, 0)
+            const tabGap = narrow ? 16 : 30
+            const tabY = hy + (narrow ? 44 : 0)
+            let tw2 = tabs.reduce((a2, [t]) => a2 + ctx.textExtents(t).width + tabGap, 0)
             let tx3 = X + W / 2 - tw2 / 2
             tabs.forEach(([t, id]) => {
               const w2 = ctx.textExtents(t).width, active = st.tab === id
@@ -1470,12 +1497,12 @@ fi`).then(() => timeout(200, fetchInitApps))
               const tcol: any = active ? SYSC : (hv ? [1, 0.55, 0.5] : SYSR)
                 if (hv && !active) {
               ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], 0.06 + 0.04 * Math.sin(Date.now() / 130))
-                    ctx.rectangle(tx3 - 8, hy, w2 + 16, 28); ctx.fill()
+                    ctx.rectangle(tx3 - 8, tabY, w2 + 16, 28); ctx.fill()
                 }
-                txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
-              if (active) { ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95); ctx.rectangle(tx3, hy + 23, w2, 2); ctx.fill() }
-                g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: tx3 - 10, by0: hy, bx1: tx3 + w2 + 10, by1: hy + 28, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
-              tx3 += w2 + 30
+                txt(ctx, tx3, tabY + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
+              if (active) { ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95); ctx.rectangle(tx3, tabY + 23, w2, 2); ctx.fill() }
+                g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: tx3 - 10, by0: tabY, bx1: tx3 + w2 + 10, by1: tabY + 28, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
+              tx3 += w2 + tabGap
             })
             const rt = `${st.temp ? st.temp + "°C" : "—"}    ${st.mhz ? (st.mhz / 1000).toFixed(2) + "GHz" : "—"}    ${kbToG(st.memU).toFixed(1)}/${kbToG(st.memT).toFixed(1)}G`
             ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(15)
@@ -1485,11 +1512,14 @@ fi`).then(() => timeout(200, fetchInitApps))
             txt(ctx, X + W - ctx.textExtents(lt).width - 46, hy + 40, lt, MONO, 9, SYSDIM, 0.6)
 
             const gTop = Y + 190, gH = H - 400
-            ladder(ctx, X + 70, gTop, 30, gH, st.aCpu, SYSY, ch(0xf2db), "CPU", `${st.cpu}`, "r")
-            ladder(ctx, X + W - 100, gTop, 30, gH, st.aMem, SYSC, ch(0xefc5), "MEM", `${Math.round(memF * 100)}`, "l")
+            if (!narrow) {
+                ladder(ctx, X + 70, gTop, 30, gH, st.aCpu, SYSY, ch(0xf2db), "CPU", `${st.cpu}`, "r")
+                ladder(ctx, X + W - 100, gTop, 30, gH, st.aMem, SYSC, ch(0xefc5), "MEM", `${Math.round(memF * 100)}`, "l")
+            }
 
-            const mx = X + 350, mw = W - 700
-            let cy3 = Y + 150
+            // Stack the dashboard on portrait monitors so it fits.
+            const mx = X + (narrow ? 32 : 350), mw = W - (narrow ? 64 : 700)
+            let cy3 = Y + (narrow ? 190 : 150)
 
             if (st.tab === "task") {
                 groupLabel(ctx, mx, cy3, "// CORE ARRAY")
@@ -1506,20 +1536,21 @@ fi`).then(() => timeout(200, fetchInitApps))
                 slotSq(ctx, mx + m3 + 14, cy3 + 10, m3, 62, "CACHE", `${kbToG(st.memCache).toFixed(1)}G`, st.memCache / st.memT, SYSC, false)
                 slotSq(ctx, mx + (m3 + 14) * 2, cy3 + 10, m3, 62, "SWAP", st.swapT ? `${kbToG(st.swapU).toFixed(1)}G` : "—", st.swapT ? st.swapU / st.swapT : 0, SYSC, false)
 
-                const nx = mx + mw / 2 + 20
-                groupLabel(ctx, nx, cy3, "// NETWORK")
-                const n2 = (mw / 2 - 20 - 14) / 2
-                slotSq(ctx, nx, cy3 + 10, n2, 62, "UPLINK", `${st.up}`, -1, SYSY, false)
-                slotSq(ctx, nx + n2 + 14, cy3 + 10, n2, 62, "DOWNLINK", `${st.down}`, -1, SYSC, false)
-                drawGraph(ctx, nx, cy3 + 78, n2, 44, st.upHist, Math.max(1, ...st.upHist), SYSY)
-                drawGraph(ctx, nx + n2 + 14, cy3 + 78, n2, 44, st.downHist, Math.max(1, ...st.downHist), SYSC)
+                const nx = narrow ? mx : mx + mw / 2 + 20
+                const networkY = cy3 + (narrow ? 150 : 0)
+                groupLabel(ctx, nx, networkY, "// NETWORK")
+                const n2 = narrow ? (mw - 14) / 2 : (mw / 2 - 20 - 14) / 2
+                slotSq(ctx, nx, networkY + 10, n2, 62, "UPLINK", `${st.up}`, -1, SYSY, false)
+                slotSq(ctx, nx + n2 + 14, networkY + 10, n2, 62, "DOWNLINK", `${st.down}`, -1, SYSC, false)
+                drawGraph(ctx, nx, networkY + 78, n2, 44, st.upHist, Math.max(1, ...st.upHist), SYSY)
+                drawGraph(ctx, nx + n2 + 14, networkY + 78, n2, 44, st.downHist, Math.max(1, ...st.downHist), SYSC)
 
                 groupLabel(ctx, mx, cy3 + 92, "// STORAGE")
                 st.disks.slice(0, 2).forEach((d, i) => {
                     slotSq(ctx, mx + i * (m3 + 14), cy3 + 102, m3, 44, d.mount.slice(0, 10), `${Math.round(d.frac * 100)}%`, d.frac, d.frac > 0.9 ? SYSR : SYSC, d.frac > 0.9)
                 })
 
-                const py = cy3 + 172
+                const py = cy3 + (narrow ? 300 : 172)
                 groupLabel(ctx, mx, py, "// PROCESSES")
                 drawBtn(ctx, g.push, mx + mw - 150, py - 16, 150, 26, st.sel ? "FORCE KILL" : "SELECT A PROC", killSel, !!st.sel, SYSR, st.sel ? ch(0xf011) : "")
                 const ly = py + 14, lh = (Y + H) - ly - 46
@@ -1851,9 +1882,6 @@ const sysGet = () => {
   return sysInst
 }
 export const CModalWindows = () => [register(VolCtrl()), register(BrtCtrl()), register(WifiCtrl()), register(BtCtrl()), register(PwrCtrl()), register(BatCtrl()), register(KeysCtrl()), register(AurCtrl()), register(UpdCtrl()), register(ThemeSettingsCtrl()), register(TerminalThemeCtrl())]
-export const ThemeSettingsWindow = () => ThemesWindow()
-
-
 export const closeAllModals = () => {
   for (const k in cregistry) {
       try { cregistry[k].close() } catch(e) { }

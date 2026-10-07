@@ -1,4 +1,4 @@
-import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { LAYOUT_WIDTH, LAYOUT_HEIGHT, monitorLayoutSize } from "../../env.ts"
 import { Cairo, TITLE, txt } from "./glass.ts"
 import { createModal } from "./cmodal.ts"
 import { USER } from "./colors.ts"
@@ -12,7 +12,6 @@ import {
 } from "./themesettings.ts"
 import { startModalStats, stopModalStats } from "./sys.ts"
 
-const SW = SCREEN_WIDTH, SH = SCREEN_HEIGHT
 const tabBase = (): [number, number, number] => USER.sysveil as any
 const tabAcc = (): [number, number, number] => USER.cyan as any
 
@@ -23,8 +22,9 @@ export const ThemeSettingsCtrl = () => {
     ctrl = createModal({
         name: "themesettings",
         tabTitle: "THEME SETTINGS",
-        W: SW,
-        H: SH,
+        W: LAYOUT_WIDTH,
+        H: LAYOUT_HEIGHT,
+        sizeForMonitor: monitorLayoutSize,
         noGlass: true,
         pad: 0,
         idleFrameMs: 70,
@@ -75,7 +75,7 @@ export const ThemeSettingsCtrl = () => {
         },
         draw: (ctx, g) => {
             const X = g.X, Y = g.Y, W = g.w, H = g.h
-            const FW = SW, FH = SH
+            const FW = g.canvasW, FH = g.canvasH
 
             ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42)
             ctx.rectangle(0, 0, FW, FH)
@@ -139,7 +139,8 @@ export const ThemeSettingsCtrl = () => {
                 tx3 += w2 + 30
             })
 
-            const mx = X + 350, mw = W - 700
+            const inset = Math.min(350, Math.max(32, Math.round(FW * 0.12)))
+            const mx = X + inset, mw = W - inset * 2
             const cy3 = Y + 150
 
             if (st.tab === "colors") {
