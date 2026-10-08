@@ -1567,7 +1567,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 gtxt(ctx,detailX+12,bodyY+94,providerText(tab==="crypto"?"CoinGecko prices":"Yahoo prices").slice(0,70),GMONO,7,RACC,.8)
                 const cc: any = q.chg >= 0 ? UP : DOWN
                 gtxt(ctx, detailX + detailW - 12 - ctx.textExtents(chgFmt(q.chg)).width, bodyY + 80, chgFmt(q.chg), GTITLE, 12, cc, 0.95, 1)
-                const hist = q.hist && q.hist.length > 1 ? q.hist : [q.price || 0, q.price || 0]
+                const hist = q.hist && q.hist.length > 1 ? q.hist : []
                 const chartH = Math.max(128, Math.floor(bodyH * 0.38))
                 drawChart(ctx, detailX + 12, bodyY + 98, detailW - 24, chartH, hist, cc, q.histTs || [])
                 const statsY = bodyY + 98 + chartH + 16
