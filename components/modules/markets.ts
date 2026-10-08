@@ -8,6 +8,8 @@ import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colo
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
 import { TITLE, MONO, ENIXE, FROSTBITE_WIDE, GUNSHIP_ITAL } from "./fonts.ts"
+import { requestProvider, jsonProvider, providerText, providerResults } from "./providers.ts"
+import { deduplicateNews } from "./provider-client.js"
 
 const Cairo = (imports as any).cairo
 
@@ -101,6 +103,7 @@ let newsBusy = false
 let newsHint = "GLOBAL / LOCAL FEEDS"
 let newsCity = "LOCAL"
 let newsUpdated = 0
+const newsProviders=()=>Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(providerText).join(" | ")||"RSS: NOT REQUESTED"
 const pendingSeries = new Set<string>()
 const ICONS: any = {}
 const DEFAULT_MARKETS: Record<string, any[]> = {
@@ -148,7 +151,17 @@ const savePins = () => {
     catch (e) { print("[cyber] markets save:", e) }
 }
 
-const curl = (url: string) => execAsync(["curl", "-sfL", "--max-time", "10", "-H", "User-Agent: Mozilla/5.0", url])
+const curl = async (url: string) => {
+ const provider=url.includes("coingecko")?"CoinGecko":"Yahoo"
+ const history=url.includes("market_chart")||url.includes("interval=5m")
+ const validate=(value:any)=>{
+  if(url.includes("market_chart"))return Array.isArray(value?.prices)&&value.prices.some(p=>Array.isArray(p)&&Number.isFinite(p[1]))
+  if(url.includes("/coins/markets"))return Array.isArray(value)&&value.every(p=>typeof p.id==="string"&&Number.isFinite(p.current_price))
+  if(url.includes("/chart/"))return Boolean(value?.chart?.result?.[0]?.meta)&&Number.isFinite(value.chart.result[0].meta.regularMarketPrice)
+  return value&&typeof value==="object"&&!value.error
+ }
+ return JSON.stringify(await jsonProvider(`${provider} ${history?"history":"prices"}`,url,{group:provider,maxAge:history?300:60,validate}))
+}
 const openUrl = (url: string) => execAsync(["xdg-open", url]).catch((e) => print("[cyber] open url:", e))
 
 const decodeHtml = (s: string) => String(s || "")
@@ -431,7 +444,11 @@ const parseFeed = (xml: string, feed: string, region: string) => {
 }
 
 const fetchFeed = async (url: string, feed: string, region: string) => {
-    try { return parseFeed(await curl(url), feed, region) }
+    try {
+      const result=await requestProvider(`RSS:${new URL(url).hostname}`,url,{maxAge:900,parse:(body:string)=>{
+        if(!/<(?:rss|feed)\b/i.test(body))throw Error("Invalid RSS response");return parseFeed(body,feed,region)},validate:Array.isArray})
+      return result.value||[]
+    }
     catch (e) { print("[cyber] news feed:", feed, e); return [] }
 }
 
@@ -507,6 +524,7 @@ const fetchCrypto = async () => {
             quotes[key].name = c.name || c.id
             quotes[key].price = c.current_price
             quotes[key].chg = c.price_change_percentage_24h ?? 0
+            quotes[key].unavailable=false
             quotes[key].meta = {
                 market_cap_rank: c.market_cap_rank,
                 market_cap: c.market_cap,
@@ -518,9 +536,9 @@ const fetchCrypto = async () => {
                 atl: c.atl,
             }
         }
+        for(const id of ids)if(!j.some(row=>row.id===id))quotes[`c:${id}`]={...(quotes[`c:${id}`]||{}),unavailable:true}
         redraw(); mkModal?.requestDraw()
     } catch (e) { print("[cyber] crypto list:", e) }
-    for (const id of ids) await fetchCryptoHistory(id).catch(() => { })
 }
 
 const fetchStockHistory = async (sym: string) => {
@@ -551,7 +569,7 @@ const fetchStockHistory = async (sym: string) => {
             fiftyTwoWeekLow: m.fiftyTwoWeekLow,
         }
         redraw(); mkModal?.requestDraw()
-    } catch (e) { print("[cyber] stock:", e) }
+    } catch (e) { quotes[key]={...(quotes[key]||{}),unavailable:true,error:String(e)};print("[cyber] stock:", e) }
     finally { pendingSeries.delete(key) }
 }
 
@@ -657,8 +675,15 @@ const loadNextBrowse = async (kind: string) => {
 
 const refreshAll = () => {
     fetchCrypto().catch(() => { })
-    for (const s of pins.stocks.filter(Boolean)) fetchStockHistory(s).catch(() => { })
+    for (const s of pins.stocks.filter(Boolean)) fetchStockPrice(s).catch(() => { })
 }
+const fetchStockPrice=async(sym:string)=>{
+ const key=`s:${sym}`
+ try{const j=JSON.parse(await curl(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=1d`));const m=j.chart.result[0].meta;
+  quotes[key]={...(quotes[key]||{}),price:m.regularMarketPrice,sym:m.symbol||sym,name:m.shortName||sym,chg:m.chartPreviousClose?100*(m.regularMarketPrice-m.chartPreviousClose)/m.chartPreviousClose:0,unavailable:false};redraw();mkModal?.requestDraw()
+ }catch(error){quotes[key]={...(quotes[key]||{}),unavailable:true,error:String(error)};redraw();mkModal?.requestDraw()}
+}
+const refreshHistory=()=>{pins.crypto.filter(Boolean).forEach(id=>fetchCryptoHistory(id).catch(()=>{}));pins.stocks.filter(Boolean).forEach(sym=>fetchStockHistory(sym).catch(()=>{}))}
 
 const newsKey = (r: any) => clean(String(r?.url || r?.title || "")).replace(/[?#].*$/, "").toLowerCase()
 
@@ -685,7 +710,7 @@ const appendNewsBatch = async (city: any) => {
         newsAllRows = newsAllRows.concat(fresh).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0))
         added += fresh.length
     }
-    newsRows = newsAllRows
+    newsAllRows=deduplicateNews(newsAllRows);newsRows = newsAllRows
     newsHasMore = true
     return added
 }
@@ -704,7 +729,7 @@ const refreshNews = async () => {
         await appendNewsBatch(city)
         newsSel = newsRows.some((r: any) => r.id === newsSel) ? newsSel : (newsRows[0]?.id || "")
         newsUpdated = Date.now()
-        newsHint = newsRows.length ? `UPDATED ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}  ${newsRows.length} LOADED` : "NO NEWS"
+        newsHint = newsRows.length ? `${newsRows.length} HEADLINES · LIVE/CACHED BY FEED` : "NO NEWS"
     } catch (e) {
         newsHint = "NEWS FEEDS FAILED"
         print("[cyber] news:", e)
@@ -731,11 +756,15 @@ const setSeries = (key: string, price: number, chg: number, name: string, sym: s
     if (quotes[key].histTs.length > 80) quotes[key].histTs = quotes[key].histTs.slice(-80)
 }
 
-const togglePin = (kind: string, id: string) => {
+const togglePin = async (kind: string, id: string) => {
     const i = pins[kind].indexOf(id)
     if (i >= 0) pins[kind].splice(i, 1)
     else {
         if (pins[kind].length >= MAXPIN) return false
+        try{
+         const value=JSON.parse(await curl(kind==="crypto"?`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(id)}`:`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(id)}?interval=1d&range=1d`))
+         if(kind==="crypto"?!value.some(row=>row.id===id):!value.chart?.result?.[0]?.meta)throw Error("Symbol unavailable")
+        }catch(error){mHint=`Cannot validate ${id}: ${error}`;mkModal?.requestDraw();return false}
         pins[kind].push(id)
     }
     savePins(); refreshAll(); redraw(); mkModal?.requestDraw()
@@ -990,6 +1019,8 @@ export const MarketsPanel = (mon?: any) => {
     fetchBrowse("crypto").catch(() => { })
     refreshAll()
     interval(60000, refreshAll)
+    refreshHistory();interval(300000,refreshHistory)
+    interval(900000,()=>{if(tab==="news"&&mkModal?.isOpen())refreshNews().catch(()=>{})})
     const area = DrawingArea({})
     areas.push(area)
     const RX0 = 6, RX1 = 300
@@ -1012,6 +1043,8 @@ export const MarketsPanel = (mon?: any) => {
             ? (newsMini.length >= 5 ? newsMini : newsRows).slice(0, 5)
             : (pins[viewTab] || [])
         tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.mktacc, 0.95, { bold: true, glow: 0.3 })
+        area.set_tooltip_text([providerText("CoinGecko prices"),providerText("CoinGecko history"),providerText("Yahoo prices"),providerText("Yahoo history")].join("\n"))
+        tiltText(ctx,MARKET_PLANE,RX0,190,(viewTab==="news"?newsProviders():providerText(viewTab==="crypto"?"CoinGecko prices":"Yahoo prices")).slice(0,54),MONO,6,NEON.dim,.8)
         const tabs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
         let tx = RX1 - 162
         for (const [label, id] of tabs) {
@@ -1053,7 +1086,7 @@ export const MarketsPanel = (mon?: any) => {
                     tiltText(ctx, MARKET_PLANE, priceX, y, priceFmt(q.price), MONO, 11, NEON.white, 1, { align: "r", bold: true, glow: 0.24, bloom: 0.1, shadow: 0.3 })
                     triP(ctx, triX, y - 3, up, col, 1)
                     tiltText(ctx, MARKET_PLANE, changeX, y, chgFmt(q.chg), MONO, 10, col, 1, { align: "r", bold: true, glow: 0.55, bloom: 0.22, shadow: 0.35 })
-                    const sparkHist = q.hist && q.hist.length > 1 ? q.hist : miniHist(id, q.price, q.chg)
+                    const sparkHist = q.hist && q.hist.length > 1 ? q.hist : []
                     if (sparkHist.length > 1) spark(ctx, sparkX0, y - 8, sparkX1, y + 4, sparkHist, col)
                 } else {
                     tiltText(ctx, MARKET_PLANE, priceX, y, "--", MONO, 10, NEON.dim, 0.8, { align: "r", bold: true })
@@ -1255,6 +1288,7 @@ const drawMarketModal = (ctx: any, g: any) => {
     } else {
         gtxt(ctx, x + w - 214, navY + 55, newsBusy ? "FETCHING" : "LIVE FEEDS", GMONO, 9, RACC, 0.68)
         gtxt(ctx, x + w - 214, navY + 42, newsHint, GMONO, 8, RACC, 0.42)
+        gtxt(ctx,x,navY+54,newsProviders().slice(0,120),GMONO,7,RACC,.7)
     }
 
     if (tab !== "news") {
@@ -1470,7 +1504,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             gtxt(ctx, x + 14, ry + 34, String(r.name).slice(0, 34), GMONO, 8.5, RACC, 0.58)
             if (q) {
                 const cc: any = q.chg >= 0 ? UP : DOWN
-                gtxt(ctx, x + listW - 214, ry + 21, priceFmt(q.price), GMONO, 11, ACC, 0.96, 1)
+                gtxt(ctx, x + listW - 214, ry + 21, q.unavailable?"UNAVAILABLE":priceFmt(q.price), GMONO, 11, ACC, 0.96, 1)
                 gtxt(ctx, x + listW - 126, ry + 21, chgFmt(q.chg), GMONO, 10, cc, 0.98, 1)
             }
             const btnX = x + listW - 86
@@ -1497,7 +1531,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                     by0: btnY,
                     bx1: btnX + 72,
                     by1: btnY + 22,
-                    on: () => { if (!togglePin(tab, r.id)) mHint = `LIMIT ${MAXPIN} PER TAB`; mkModal.requestDraw() },
+                    on: () => { togglePin(tab,r.id).then(()=>mkModal.requestDraw()) },
                 })
             }
             g.push({
@@ -1529,7 +1563,8 @@ const drawMarketModal = (ctx: any, g: any) => {
             gtxt(ctx, detailX + 12, bodyY + 50, name, GTITLE, 13, RACC, 0.7)
             if (!q || !q.hist || q.hist.length < 2) ensureSeries(tab, current.id)
             if (q) {
-                gtxt(ctx, detailX + 12, bodyY + 80, `${String(current.sym).toUpperCase()} - ${usdFmt(q.price)} $USD`, GTITLE, 12, ACC, 0.95, 1)
+                gtxt(ctx, detailX + 12, bodyY + 80, `${String(current.sym).toUpperCase()} - ${q.unavailable?"UNAVAILABLE":usdFmt(q.price)} $USD`, GTITLE, 12, ACC, 0.95, 1)
+                gtxt(ctx,detailX+12,bodyY+94,providerText(tab==="crypto"?"CoinGecko prices":"Yahoo prices").slice(0,70),GMONO,7,RACC,.8)
                 const cc: any = q.chg >= 0 ? UP : DOWN
                 gtxt(ctx, detailX + detailW - 12 - ctx.textExtents(chgFmt(q.chg)).width, bodyY + 80, chgFmt(q.chg), GTITLE, 12, cc, 0.95, 1)
                 const hist = q.hist && q.hist.length > 1 ? q.hist : [q.price || 0, q.price || 0]
@@ -1593,7 +1628,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                         by0: by,
                         bx1: bx + bw,
                         by1: by + 24,
-                        on: () => { togglePin(tab, current.id); mkModal.requestDraw() },
+                        on: () => { togglePin(tab,current.id).then(()=>mkModal.requestDraw()) },
                     })
                 }
             }
