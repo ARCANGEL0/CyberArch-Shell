@@ -12,6 +12,8 @@ import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
+import { readNetworkSnapshot } from "./network.ts"
+import { networkState, trafficRate } from "./network-policy.js"
 
 const Cairo = (imports).cairo
 
@@ -69,23 +71,22 @@ let mapCachePath = ""
 let wxLat = 40.7128, wxLon = -74.006, wxName = "NEW YORK", wxFull = "NEW YORK"
 let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "--"
 let netName = "OFFLINE"
-const refreshNet = () => {
-
- execAsync(["sh", "-c", "iwgetid -r 2>/dev/null | sed 's/^/WiFi: /' | grep . || nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"ethernet\" && $2==\"connected\"{c++; print \"Ethernet \" c; exit}' | grep . || echo OFFLINE"])
-     .then((o) => { const s = (o || "").trim(); netName = s || "OFFLINE"; areas.forEach(a => a?.queue_draw()) })
-     .catch(() => { netName = "OFFLINE" })
-}
+let network=networkState(),netBusy=false
+export const networkSnapshot=()=>({...network})
+const refreshNet = async () => {if(netBusy)return;netBusy=true;try{network=await readNetworkSnapshot();netName=network.label;areas.forEach(a=>a?.queue_draw())}finally{netBusy=false}}
 let netUp = "0.0", netDown = "0.0"
 let _prx = -1, _ptx = 0, _pnt = 0
+let previousTraffic:any=null
 const readProc = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d) : "" } catch { return "" } }
 const netIface = () => { for (const l of readProc("/proc/net/route").split("\n").slice(1)) { const p = l.split(/\s+/); if (p[1] === "00000000" && p[0]) return p[0] } return "" }
 const netCounters = (iface) => { const l = readProc("/proc/net/dev").split("\n").find(x => x.trim().startsWith(iface + ":")); if (!l) return [0, 0]; const p = l.split(":")[1].trim().split(/\s+/).map(Number); return [p[0], p[8]] }
 const mbpsFmt = (bps) => { const m = bps * 8 / 1e6; return m >= 100 ? m.toFixed(0) : m.toFixed(1) }
 const refreshNetSpeed = () => {
- const iface = netIface()
+ const iface = network.interface
  const now = GLib.get_monotonic_time()
  const [rx, tx] = iface ? netCounters(iface) : [0, 0]
- if (_prx >= 0 && _pnt > 0) { const dt = Math.max(1e-6, (now - _pnt) / 1e6); netDown = mbpsFmt(Math.max(0, (rx - _prx) / dt)); netUp = mbpsFmt(Math.max(0, (tx - _ptx) / dt)) }
+ const next={interface:iface,rx,tx,at:now/1000},rate=trafficRate(previousTraffic,next);previousTraffic=next
+ netDown=mbpsFmt(rate.down);netUp=mbpsFmt(rate.up)
  _prx = rx; _ptx = tx; _pnt = now
  areas.forEach(a => a?.queue_draw())
 }
@@ -294,7 +295,7 @@ const drawOverlay = (ctx, now) => {
 
 
  const ny = fy + 121, dx = 72
- const off = !netName || netName === "OFFLINE"
+ const off = !network.link
  const stxt = off ? "OFFLINE!" : netName
  tiltText(ctx, connPlane, MX0 - 16 + dx, ny, "NETWORK STATUS", TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
  alertChip(ctx, iconPlane, MX0 + 6 + dx, ny + 11, NETCHIP, 0.8)
