@@ -444,7 +444,15 @@ case "${1:-enter}" in
     hyprctl dispatch "hl.dsp.submap('kill')"
     ;;
   kill)
-    PID=$(hyprctl clients -j | jq -r --argjson x "$(hyprctl cursorpos -j | jq '.x // 0')" --argjson y "$(hyprctl cursorpos -j | jq '.y // 0')" '[.[] | select(.pid > 1 and .at[0] <= $x and $x < (.at[0]+.size[0]) and .at[1] <= $y and $y < (.at[1]+.size[1]))] | sort_by(.focusHistoryID) | .[0].pid // empty')
+    MONS=$(hyprctl monitors -j) || exit 1
+    CURSOR=$(hyprctl cursorpos -j) || exit 1
+    PID=$(hyprctl clients -j | jq -r --argjson mons "$MONS" --argjson cursor "$CURSOR" '
+      [.[] | . as $c |
+        select(.pid > 1 and .mapped and (.hidden | not)) |
+        select(any($mons[]; .id == $c.monitor and
+          (if (.specialWorkspace.id // 0) != 0 then .specialWorkspace.id else .activeWorkspace.id end) == $c.workspace.id)) |
+        select(.at[0] <= $cursor.x and $cursor.x < (.at[0]+.size[0]) and .at[1] <= $cursor.y and $cursor.y < (.at[1]+.size[1])) |
+        select(.focusHistoryID >= 0)] | sort_by(.focusHistoryID) | .[0].pid // empty')
     [ -z "$PID" ] || [ "$PID" -le 1 ] && exit 1
     APP=$(ps -p "$PID" -o comm= 2>/dev/null | tr -d ' ')
     [ -z "$APP" ] && exit 1

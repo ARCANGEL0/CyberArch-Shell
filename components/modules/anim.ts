@@ -920,8 +920,8 @@ const hideRecHud = () => {
 
 let _hudWins: any[] = []
 export const registerHudWindows = (wins) => { _hudWins = wins || [] }
-const setHudHidden = (hidden, g = recGeom) => { for (const w of _hudWins) { try { if (sameMonitor(w, g)) w.visible = !hidden } catch {} } }
-const showAllHud = () => { for (const w of _hudWins) { try { w.visible = true } catch {} } }
+const setHudHidden = (hidden, g = recGeom) => { for (const w of _hudWins) { try { if (sameMonitor(w, g)) w.visible = !hidden && !w._monitorDetached } catch {} } }
+const showAllHud = () => { for (const w of _hudWins) { try { w.visible = !w._monitorDetached } catch {} } }
 export const isRecording = () => recOn
 
 export const toggleHudDuringRec = () => { recHudShown = !recHudShown; setHudHidden(!recHudShown); return recHudShown }

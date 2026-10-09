@@ -16,14 +16,24 @@ let _phoneIcon: any = null
 const phoneIcon = () => { if (!_phoneIcon) try { _phoneIcon = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/icons/phone.png`) } catch { _phoneIcon = null } return _phoneIcon }
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
-const shBool = (c) => sh(c).then(o => /\b(on|yes|true|1|enabled|RUNNING)\b/i.test(o.trim()))
+const statePolls = new Map<string, { promise: Promise<string>, until: number }>()
+const pollState = (cmd: string): Promise<string> => {
+ const old = statePolls.get(cmd)
+ if (old && Date.now() < old.until) return old.promise
+ const entry = { promise: null as any, until: Infinity }
+ entry.promise = execAsync(["timeout", "--kill-after=1s", "4s", "sh", "-c", cmd])
+ .catch(() => "").then(out => { entry.until = Date.now() + 1000; return out })
+ statePolls.set(cmd, entry)
+ return entry.promise
+}
+const shBool = (c) => pollState(c).then(o => /\b(on|yes|true|1|enabled|RUNNING)\b/i.test(o.trim()))
 import { TITLE, ICONF } from "./fonts.ts"
 
 const VERT_TILES = [
- { key: "vol", icon: "", label: "", sc: "V", state: () => sh("wpctl get-volume @DEFAULT_AUDIO_SINK@").then(o => !/MUTED/.test(o)) },
+ { key: "vol", icon: "", label: "", sc: "V", state: () => pollState("wpctl get-volume @DEFAULT_AUDIO_SINK@").then(o => !/MUTED/.test(o)) },
  { key: "brt", icon: "", label: "", sc: "I", state: () => Promise.resolve(true) },
  { key: "notification", icon: "", label: "", sc: "M", state: () => Promise.resolve(isNotifHudOpen()) },
- { key: "music", icon: "", label: "", sc: "O", eq: true, state: () => sh("playerctl -a status 2>/dev/null").then(o => /playing/i.test(o)) },
+ { key: "music", icon: "", label: "", sc: "O", eq: true, state: () => pollState("playerctl -a status 2>/dev/null").then(o => /playing/i.test(o)) },
 ]
 const HORIZ_TILES = [
  { key: "rec", icon: "", label: "", sc: "R", state: () => shBool("[ -f /tmp/hypr-record.pid ] && echo 1 || echo 0") },
@@ -228,7 +238,7 @@ const VertDock = (mon?: any) => {
      area.queue_draw()
      if (!mTick) mTick = interval(110, eqPump)
  }
- const musicPoll = () => sh("playerctl -a status 2>/dev/null").then(o => { const p = /playing/i.test(o); musicPlaying = p; if (p !== on["music"]) { on["music"] = p; area.queue_draw() } eqPump() }).catch(() => {})
+ const musicPoll = () => pollState("playerctl -a status 2>/dev/null").then(o => { const p = /playing/i.test(o); musicPlaying = p; if (p !== on["music"]) { on["music"] = p; area.queue_draw() } eqPump() }).catch(() => {})
  musicPoll()
  openRefresh()
  onModalChange(openRefresh); onPlayerChange(openRefresh); onNotifHudChange(openRefresh)

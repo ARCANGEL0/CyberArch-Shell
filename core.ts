@@ -1,14 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
 // Dropped hybrars, too flaky to keep updating and targeting for build, besides alot of issue report
 
 import { App, Window, Box } from "./components/modules/widget.ts"
@@ -168,7 +158,10 @@ const deferShape = (win) => {
 const refreshWins = () => Promise.all([execAsync(["hyprctl", "clients", "-j"]), execAsync(["hyprctl", "monitors", "-j"])]).then(([co, mo]) => {
  try {
  const active = new Set<number>()
- for (const m of JSON.parse(mo)) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
+ const monitors = JSON.parse(mo)
+ const power = new Map<string, boolean>(monitors.map(m => [m.name, m.dpmsStatus !== false && !m.disabled]))
+ if (JSON.stringify([...power]) !== JSON.stringify([...monitorPower])) { monitorPower = power; queueMonitorSync() }
+ for (const m of monitors) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
  const next = JSON.parse(co).filter((c: any) => {
  if (!c || !c.mapped || c.hidden || !c.size || !(c.size[0] > 0) || !c.at) return false
  return !!(c.workspace && active.has(c.workspace.id))
@@ -183,31 +176,46 @@ const pickRefresh = () => {
  if (holdOn) { GLib.source_remove(holdOn); holdOn = null }
  holdOn = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => { holdOn = null; refreshWins(); return false })
 }
+let socketRetry = null
+const retrySocket = () => {
+ if (socketRetry) return
+ socketRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+ socketRetry = null; wireSocket(); return GLib.SOURCE_REMOVE
+ })
+}
 const wireSocket = () => {
+ let conn = null, stream = null
+ const disconnect = () => {
+ try { stream?.close(null) } catch {}
+ try { conn?.close(null) } catch {}
+ retrySocket()
+ }
  try {
- const base = `${GLib.getenv("XDG_RUNTIME_DIR") || `/run/user/${GLib.get_user_name()}`}/hypr`
- const dir = GLib.Dir.open(base, 0); if (!dir) return
- let sock = null, nm
- while ((nm = dir.read_name())) { const p = `${base}/${nm}/.socket2.sock`; if (GLib.file_test(p, GLib.FileTest.EXISTS)) { sock = p; break } }
- if (!sock) { print("[cyberpunk] hypr socket2 not found"); return }
+ const signature = GLib.getenv("HYPRLAND_INSTANCE_SIGNATURE")
+ if (!signature) { retrySocket(); return }
+ const sock = `${GLib.get_user_runtime_dir()}/hypr/${signature}/.socket2.sock`
  const client = new Gio.SocketClient()
- const conn = client.connect(new Gio.UnixSocketAddress({ path: sock }), null)
- const stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
+ client.connect_async(new Gio.UnixSocketAddress({ path: sock }), null, (_client, result) => {
+ try {
+ conn = client.connect_finish(result)
+ stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
  const pump = () => stream.read_line_async(0, null, (_src, res) => {
   try {
   const [bytes] = stream.read_line_finish(res)
-  if (bytes) {
-  const line = bytes.toString(), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
+  if (!bytes) { disconnect(); return }
+  const line = new TextDecoder().decode(bytes), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
   if (ev === "workspace") setWorkspaceBadge(data.trim())
   else if (ev === "workspacev2") setWorkspaceBadge(data.split(",")[1]?.trim() || data.split(",")[0]?.trim())
   else if (ev === "focusedmon") setWorkspaceBadge(data.split(",")[1]?.trim())
+  if (ev.startsWith("monitoradded") || ev.startsWith("monitorremoved")) { queueMonitorSync(); pickRefresh() }
   if (EVENT_HITS.has(ev)) pickRefresh()
-  }
   pump()
-  } catch { try { pump() } catch {} }
+  } catch { disconnect() }
  })
- pump()
- } catch (e) { print("[cyberpunk] hypr socket:", e) }
+ refreshWins(); pump()
+ } catch { disconnect() }
+ })
+ } catch { disconnect() }
 }
 
 
@@ -228,16 +236,73 @@ const toggleHudTop = () => {
 
 
 
+const monitorHuds = new Map<string, { mon: any, wins: any[], online: boolean, geometry: string }>()
+let monitorPower = new Map<string, boolean>()
+let monitorSync = null
+const queueMonitorSync = () => {
+ if (monitorSync) monitorSync.cancel()
+ monitorSync = timeout(200, () => { monitorSync = null; syncMonitorHud() })
+}
+const createMonitorHud = (mon) => {
+ const first = hudWins.length
+ const S = scaleOf(mon)
+ surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
+ { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
+ { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
+ { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
+ { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
+ { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
+ for (const w of hudWins.slice(first)) {
+ w.connect("size-allocate", () => deferShape(w))
+ w.connect("map", () => deferShape(w))
+ }
+ return hudWins.slice(first)
+}
+
+const syncMonitorHud = () => {
+ const present = new Set<string>()
+ const mons = (App as any).get_monitors()
+ for (let i = 0; i < mons.length; i++) {
+ const mon = mons[i]
+ const name = Gdk.Screen.get_default().get_monitor_plug_name(i) || `${mon.get_manufacturer()}:${mon.get_model()}:${i}`
+ present.add(name)
+ const geo = mon.get_geometry()
+ const geometry = `${geo.x},${geo.y},${geo.width},${geo.height},${mon.get_scale_factor()}`
+ let group = monitorHuds.get(name)
+ if (!group) {
+ group = { mon, wins: createMonitorHud(mon), online: false, geometry: "" }
+ monitorHuds.set(name, group)
+ }
+ const online = monitorPower.get(name) !== false
+ if (online !== group.online || mon !== group.mon || geometry !== group.geometry) {
+ for (const w of group.wins) {
+ w.visible = false
+ w._monitorDetached = !online
+ w.gdkmonitor = mon
+ w.layer = hudOnTop ? Layer.TOP : Layer.BOTTOM
+ if (online && !isRecording()) w.visible = true
+ deferShape(w)
+ }
+ }
+ group.mon = mon; group.online = online; group.geometry = geometry
+ }
+ for (const [name, group] of monitorHuds) if (!present.has(name)) {
+ group.online = false
+ for (const w of group.wins) { w._monitorDetached = true; w.visible = false }
+ }
+}
+
+
 App.start({
  instanceName: "cyberpunk",
  requestHandler(request, res) {
+ request = request.trim()
  const reply = (r) => { try { res(r) } catch {} }
  if (request === "launcher") {
  execAsync(["sh", "-c", "rofi -show drun || rofi -show run"]).catch(print)
  reply("ok")
  } else if (request === "apps-menu") {
- try { openAppsMenu() } catch (e) { print(e) }
- reply("ok")
+ try { openAppsMenu(); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request === "player") {
  try { togglePlayer() } catch (e) { print(e) }
  reply("ok")
@@ -264,8 +329,7 @@ App.start({
  try { triggerShutter(request.slice(7).trim()) } catch (e) { print(e) }
  reply("ok")
  } else if (request.startsWith("region-shot")) {
- try { triggerRegion(request.slice(11).trim()) } catch (e) { print(e) }
- reply("ok")
+ try { triggerRegion(request.slice(11).trim()); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request.startsWith("modal ")) {
  try { toggleModal(request.slice(6).trim()) } catch (e) { print(e) }
  reply("ok")
@@ -328,15 +392,11 @@ App.start({
  applyWmRules()
  applyWmFromTheme()
 
- for (const mon of (App as any).get_monitors()) {
- const S = scaleOf(mon)
- surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
- { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
- { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
- { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
- { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
- }
+ syncMonitorHud()
+ const display = Gdk.Display.get_default()
+ display.connect("monitor-added", queueMonitorSync)
+ display.connect("monitor-removed", queueMonitorSync)
+ Gdk.Screen.get_default().connect("monitors-changed", queueMonitorSync)
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  passthrough(AurBarWindow())
@@ -355,12 +415,7 @@ App.start({
  PlayerWindow()
  registerHudWindows(hudWins)
  execAsync(["sh", "-c", `'${CYBER_DIR}/scripts/appvol-keeper'`]).catch(() => {})
- for (const w of hudWins) {
- try {
- w.connect("size-allocate", () => deferShape(w))
- w.connect("map", () => deferShape(w))
- } catch {}
- }
+
  timeout(400, applyHudInputAll); timeout(1200, applyHudInputAll)
  refreshWins(); wireSocket()
  execAsync(["hyprctl", "activeworkspace", "-j"]).then((s) => { try { setWorkspaceBadge(JSON.parse(s).name) } catch {} }).catch(() => {})
