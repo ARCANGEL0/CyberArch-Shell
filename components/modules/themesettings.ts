@@ -1,27 +1,26 @@
-import { execAsync, timeout, Variable } from "astal"
+import { execAsync, timeout } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import Gtk from "gi://Gtk?version=3.0"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { Window, DrawingArea, EventBox, Keymode, Layer, Anchor } from "./widget.ts"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha, USER, onColorChange } from "./colors.ts"
-import { closeAllModals } from "./cmodal.ts"
+import { closeAllModals, createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
-import { drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
 } from "./wmconfig.ts"
-import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
+import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA, LAYOUT_WIDTH, LAYOUT_HEIGHT, monitorLayoutSize } from "../../env.ts"
 import {
     readUserLua, readThemeActions, resolveCombo, checkConflict, ensureRebind, removeRebind,
     addCustom, removeCustom, updateCustomCombo, reloadHyprland, themeModDefault, setThemeMod,
     type UserBind, type Rebind, type CustomAdd,
 } from "./userbinds.ts"
 import { isModKey, modsFrom, keyName, modNameOf, orderMods, canon } from "./cyberdeck.ts"
+import { stopModalStats } from "./sys.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // hyprland has to be out of the way while the modal is listening for a combo,
@@ -46,271 +45,9 @@ export const applyColors = (name: string) => { closeAllModals(); applyPalette(na
 
 export const TABS: [string, string][] = [
     ["CONFIGURATION", "anim"], ["COLORS", "colors"], ["KEYBINDS", "keybinds"],
-    ["WINDOW MANAGEMENT", "wm"], ["WALLPAPER", "wall"],
+    ["WINDOW MANAGEMENT", "wm"], ["WALLPAPER", "wall"], ["UNINSTALL", "uninstall"],
 ]
-const TAB_BADGE: Record<string, string> = { colors: "PAL", wm: "TUNE", anim: "CFG" }
-let tab = "anim"
 let ctrl: any = null
-
-const wheelEntries = () =>
-    TABS.map(([label, id]) => ({ label, badge: TAB_BADGE[id] ?? "", glyph: null, data: id }))
-
-const drawTabBar = (ctx, g, x, y, w) => {
-    const totalTabs = TABS.length
-    const tabSpacing = 150
-    const totalWidth = totalTabs * tabSpacing
-    const startX = (w - totalWidth) / 2 + x
-    const tabY = y + 20
-    const currentIdx = TABS.findIndex(t => t[1] === tab)
-
-    // Draw navigation indicators
-    txt(ctx, startX - 60, tabY, "[1]", MONO, 13, g.accent, 0.5)
-    txt(ctx, startX - 30, tabY, "<", MONO, 14.5, g.accent, 0.6)
-
-    TABS.forEach(([label, id], i) => {
-        const tx = startX + i * tabSpacing
-        const isActive = tab === id
-
-        // Draw tab label
-        const col = isActive ? (USER.cyan as any) : g.accent
-        const alpha = isActive ? 1 : 0.65
-        txt(ctx, tx, tabY, label, TITLE, 13, col, alpha)
-
-        // Draw underline for active tab
-        if (isActive) {
-            ctx.setSourceRGBA(USER.cyan[0], USER.cyan[1], USER.cyan[2], 0.9)
-            ctx.setLineWidth(2)
-            ctx.newPath()
-            const labelWidth = ctx.textExtents(label).width + 20
-            ctx.moveTo(tx - 10, tabY + 11)
-            ctx.lineTo(tx + labelWidth, tabY + 11)
-            ctx.stroke()
-        }
-
-        // Register click area
-        const labelWidth = ctx.textExtents(label).width + 20
-        g.push({
-            kind: "tab", key: `tab_${id}`, hoverable: true,
-            bx0: tx - 10, by0: tabY - 20, bx1: Math.min(tx + labelWidth, startX + (i + 1) * tabSpacing - 8), by1: tabY + 16,
-            on: () => {
-                if (tab !== id) {
-                    tab = id
-                    kbScroll = 0
-                    cfgOpen = null
-                    if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-                    area?.queue_draw()
-                }
-            }
-        })
-    })
-
-    txt(ctx, startX + totalWidth + 30, tabY, ">", MONO, 14.5, g.accent, 0.6)
-    txt(ctx, startX + totalWidth + 60, tabY, `[${totalTabs}]`, MONO, 13, g.accent, 0.5)
-
-    // Draw separator line below tabs
-    ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.3)
-    ctx.setLineWidth(1)
-    ctx.newPath()
-    ctx.moveTo(x + 40, tabY + 26)
-    ctx.lineTo(x + w - 40, tabY + 26)
-    ctx.stroke()
-}
-
-const visible = Variable(false)
-export let area: any = null
-let mouseX = 0
-let mouseY = 0
-let hoverKey = ""
-let clickTargets: any[] = []
-
-const pushHandler = (item: any) => {
-    if (item.hoverable && item.bx0 !== undefined) {
-        clickTargets.push(item)
-    }
-}
-
-export const ThemesWindow = () => {
-    readTune()
-
-    const handleMotion = (self: any, event: Gdk.EventMotion) => {
-        mouseX = event.x
-        mouseY = event.y
-        let newHover = ""
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                newHover = t.key
-                break
-            }
-        }
-        if (newHover !== hoverKey) {
-            hoverKey = newHover
-            area?.queue_draw()
-        }
-        return false
-    }
-
-    const handleClick = (self: any, event: Gdk.EventButton) => {
-        for (const t of clickTargets) {
-            if (mouseX >= t.bx0 && mouseX <= t.bx1 && mouseY >= t.by0 && mouseY <= t.by1) {
-                if (t.on) t.on()
-                break
-            }
-        }
-        return false
-    }
-
-    const handleKey = (self: any, event: Gdk.EventKey) => {
-        const k = event.keyval
-
-        if (k === Gdk.KEY_Escape) {
-            if (tab === "wall" && wallOpen) {
-                wallOpen = null
-                wallScroll = 0
-                area?.queue_draw()
-                return true
-            }
-            if (wmColorPick) {
-                closeWmPicker()
-                return true
-            }
-            if (kbCaptureKind || kbDeleteConfirm) {
-                if (kbDeleteConfirm) kbDeleteConfirm = null
-                else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) kbAddStep = "prompt"
-                else cancelCapture()
-                area?.queue_draw()
-                return true
-            }
-            visible.set(false)
-            releaseKeys()
-            return true
-        }
-
-        if (wmAppText !== "" || (tab === "wm" && wmAppEditing)) {
-            if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; area?.queue_draw() }
-            else if (k === Gdk.KEY_Return) { commitWmApps() }
-            else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); area?.queue_draw() }
-            else {
-                const u = Gdk.keyval_to_unicode(k)
-                if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); area?.queue_draw() }
-            }
-            return true
-        }
-
-        if (k === Gdk.KEY_Left) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx <= 0 ? TABS.length - 1 : idx - 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        if (k === Gdk.KEY_Right) {
-            const idx = TABS.findIndex(t => t[1] === tab)
-            const next = idx >= TABS.length - 1 ? 0 : idx + 1
-            tab = TABS[next][1]
-            kbScroll = 0
-            cfgOpen = null
-            if (tab !== "wall") { wallOpen = null; wallScroll = 0 }
-            area?.queue_draw()
-            return true
-        }
-
-        return false
-    }
-
-    const draw = (self: any, cr: any) => {
-        const w = SCREEN_WIDTH
-        const h = SCREEN_HEIGHT
-
-        clickTargets = []
-        const g = {
-            accent: USER.sysveil as any,
-            col: USER.sysveil as any,
-            push: pushHandler,
-            hoverKey,
-            X: 0,
-            Y: 0,
-            w,
-            h
-        }
-
-        cr.setSourceRGBA(0, 0, 0, 0.95)
-        cr.rectangle(0, 0, w, h)
-        cr.fill()
-
-        const tabBarH = 78
-        const contentY = tabBarH + 20
-        const contentH = h - contentY - 20
-
-        drawTabBar(cr, g, 40, 10, w - 80)
-
-        const x = 60
-        const cw = w - 120
-
-        if (tab === "colors") drawColors(cr, g, x, contentY, cw)
-        else if (tab === "keybinds") drawKeybinds(cr, g, x, contentY, cw)
-        else if (tab === "anim") drawConfig(cr, g, x, contentY, cw)
-        else if (tab === "wm") drawWm(cr, g, x, contentY, cw)
-        else if (tab === "wall" && !wallOpen) drawWallRing(cr, g, x, contentY, cw)
-        else drawWallBrowse(cr, g, x, contentY, cw)
-    }
-
-    area = DrawingArea({
-        widthRequest: SCREEN_WIDTH,
-        heightRequest: SCREEN_HEIGHT,
-        onDraw: draw
-    })
-
-    return Window({
-        name: "themesettings",
-        layer: Layer.OVERLAY,
-        anchor: Anchor.TOP | Anchor.BOTTOM | Anchor.LEFT | Anchor.RIGHT,
-        keymode: Keymode.ON_DEMAND,
-        visible: visible(),
-        setup: (self) => {
-            visible.subscribe(() => {
-                self.visible = visible.get()
-                if (visible.get()) {
-                    readTune()
-                    releaseKeys()
-                    tab = TABS[0][1]
-                    kbScroll = 0
-                    cfgOpen = null
-                    wallOpen = null
-                    wallScroll = 0
-                    area?.queue_draw()
-                }
-            })
-        },
-        onKeyPressEvent: handleKey,
-        child: EventBox({
-            onButtonPressEvent: handleClick,
-            onMotionNotifyEvent: handleMotion,
-            child: area
-        })
-    })
-}
-
-export const toggleThemeSettings = () => {
-    visible.set(!visible.get())
-}
-
-export const ThemesCtrl = () => {
-    return {
-        open: () => visible.set(true),
-        close: () => visible.set(false),
-        requestDraw: () => area?.queue_draw()
-    }
-}
-
-const oldCtrl = ThemesCtrl()
-ctrl = oldCtrl
-
-export const openThemeSettings = () => oldCtrl.open()
-export const closeThemeSettings = () => oldCtrl.close()
 
 type ColRow = [string, string, boolean]
 const SECTIONS: [string, ColRow[]][] = [
@@ -566,34 +303,34 @@ const drawStrip = (ctx, push, kind: "hue" | "sat" | "val" | "alp", key: string, 
 let hexEdit: { key: string; buf: string; prev: string } | null = null
 let hexErr = ""
 let stash = ""
-const openHex = (kk: string) => { const c = rgbToHex(getUserColor(kk)); hexEdit = { key: kk, buf: c.replace(/^#/, "").toLowerCase(), prev: c }; hexErr = ""; area?.queue_draw() }
+const openHex = (kk: string) => { const c = rgbToHex(getUserColor(kk)); hexEdit = { key: kk, buf: c.replace(/^#/, "").toLowerCase(), prev: c }; hexErr = ""; ctrl?.requestDraw() }
 const liveHex = () => { if (!hexEdit || hexEdit.buf.length !== 6) return; const r = hexToRgb(hexEdit.buf); if (r) { setUserColor(hexEdit.key, r); saveUserColors() } }
 const commitHex = () => {
     if (!hexEdit) return
     const r = hexToRgb(hexEdit.buf)
-    if (!r) { hexErr = "hex color invalid <!>"; hexEdit.buf = hexEdit.prev.replace(/^#/, ""); area?.queue_draw(); return }
-    setUserColor(hexEdit.key, r); saveUserColors(); hexEdit = null; hexErr = ""; area?.queue_draw()
+    if (!r) { hexErr = "hex color invalid <!>"; hexEdit.buf = hexEdit.prev.replace(/^#/, ""); ctrl?.requestDraw(); return }
+    setUserColor(hexEdit.key, r); saveUserColors(); hexEdit = null; hexErr = ""; ctrl?.requestDraw()
 }
 const eatPaste = (s: string) => {
     if (!hexEdit) return
     const cand = (s || "").trim().replace(/^#/, "").toLowerCase().slice(0, 6)
     const r = hexToRgb(cand)
-    if (!r) { hexErr = "hex color invalid <!>"; area?.queue_draw(); return }
-    hexEdit.buf = cand; setUserColor(hexEdit.key, r); saveUserColors(); hexErr = ""; area?.queue_draw()
+    if (!r) { hexErr = "hex color invalid <!>"; ctrl?.requestDraw(); return }
+    hexEdit.buf = cand; setUserColor(hexEdit.key, r); saveUserColors(); hexErr = ""; ctrl?.requestDraw()
 }
 const copyHex = () => { if (!hexEdit) return; const hh = "#" + hexEdit.buf; stash = hh; execAsync(["wl-copy", "--", hh]).catch(() => {}) }
 const pasteHex = () => { execAsync(["wl-paste", "-n"]).then((s) => eatPaste(s)).catch(() => eatPaste(stash)) }
 export const hexEditing = () => !!hexEdit
-export const colorsHexCancel = () => { if (!hexEdit) return; const b = hexToRgb(hexEdit.prev.replace(/^#/, "")); if (b) { setUserColor(hexEdit.key, b); saveUserColors() } hexEdit = null; hexErr = ""; area?.queue_draw() }
+export const colorsHexCancel = () => { if (!hexEdit) return; const b = hexToRgb(hexEdit.prev.replace(/^#/, "")); if (b) { setUserColor(hexEdit.key, b); saveUserColors() } hexEdit = null; hexErr = ""; ctrl?.requestDraw() }
 export const colorsKeyRaw = (k: number, mask: number, pressed: boolean): boolean => {
     if (!hexEdit || !pressed) return false
     const ctrlOn = (mask & (Gdk.ModifierType.CONTROL_MASK as any)) !== 0
     if (ctrlOn && (k === Gdk.KEY_c || k === Gdk.KEY_C)) { copyHex(); return true }
     if (ctrlOn && (k === Gdk.KEY_v || k === Gdk.KEY_V)) { pasteHex(); return true }
     if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) { commitHex(); return true }
-    if (k === Gdk.KEY_BackSpace) { hexEdit.buf = hexEdit.buf.slice(0, -1); hexErr = ""; area?.queue_draw(); return true }
+    if (k === Gdk.KEY_BackSpace) { hexEdit.buf = hexEdit.buf.slice(0, -1); hexErr = ""; ctrl?.requestDraw(); return true }
     const uu = Gdk.keyval_to_unicode(k)
-    if (uu > 0) { const cc = String.fromCharCode(uu).toLowerCase(); if (/[0-9a-f]/.test(cc) && hexEdit.buf.length < 6) { hexEdit.buf += cc; hexErr = ""; liveHex(); area?.queue_draw() } }
+    if (uu > 0) { const cc = String.fromCharCode(uu).toLowerCase(); if (/[0-9a-f]/.test(cc) && hexEdit.buf.length < 6) { hexEdit.buf += cc; hexErr = ""; liveHex(); ctrl?.requestDraw() } }
     return true
 }
 
@@ -2507,4 +2244,217 @@ export const drawConfig = (ctx, g, x, y, w) => {
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
     }
+}
+
+let uninstallConfirm = false
+let uninstallStatus = ""
+
+const drawUninstall = (ctx, g, x, y, w) => {
+    sectionHeader(ctx, g, x, y, "// UNINSTALL", w)
+    txt(ctx, x, y + 48, "REMOVE CYBERARCH", TITLE, 16, g.accent, 0.98, 1)
+    txt(ctx, x, y + 72, "This removes the CyberArch shell and its startup hooks.", MONO, 10, g.col, 0.82)
+    txt(ctx, x, y + 92, "Personal files and installed packages are kept.", MONO, 10, g.col, 0.82)
+
+    if (!uninstallConfirm) {
+        drawBtn(ctx, g.push, x, y + 124, Math.min(w, 280), 36, "UNINSTALL CYBERARCH", () => {
+            uninstallConfirm = true
+            uninstallStatus = ""
+            ctrl.requestDraw()
+        }, false, [1, 0.35, 0.4], "", 12)
+    } else {
+        txt(ctx, x, y + 126, "Are you sure you want to uninstall?", TITLE, 12, [1, 0.48, 0.5], 0.98, 1)
+        drawBtn(ctx, g.push, x, y + 150, 112, 34, "CANCEL", () => {
+            uninstallConfirm = false
+            ctrl.requestDraw()
+        }, false, g.col, "", 11)
+        drawBtn(ctx, g.push, x + 122, y + 150, Math.min(w - 122, 220), 34, "UNINSTALL", () => {
+            uninstallConfirm = false
+            uninstallStatus = "OPENING TERMINAL…"
+            ctrl.requestDraw()
+            execAsync(["bash", `${CYBER_DIR}/scripts/uninstall-terminal`]).then(() => {
+                uninstallStatus = "TERMINAL OPENED"
+                ctrl?.requestDraw()
+            }).catch(() => {
+                uninstallStatus = "NO TERMINAL FOUND"
+                ctrl?.requestDraw()
+            })
+        }, true, [1, 0.35, 0.4], "", 11)
+    }
+
+    if (uninstallStatus) txt(ctx, x, y + 202, `// ${uninstallStatus}`, MONO, 9, g.col, 0.78)
+}
+
+const themeTabColors = () => [USER.sysveil[0], USER.sysveil[1], USER.sysveil[2]] as [number, number, number]
+const themeTabAccent = () => [USER.cyan[0], USER.cyan[1], USER.cyan[2]] as [number, number, number]
+
+export const ThemeSettingsCtrl = () => {
+    const st: { tab: string } = { tab: TABS[0][1] }
+    let modal: any
+
+    modal = createModal({
+        name: "themesettings",
+        tabTitle: "THEME SETTINGS",
+        W: LAYOUT_WIDTH,
+        H: LAYOUT_HEIGHT,
+        sizeForMonitor: monitorLayoutSize,
+        noGlass: true,
+        pad: 0,
+        idleFrameMs: 70,
+        col: USER.sysveil as any,
+        accent: USER.sysveil as any,
+        onOpen: () => {
+            st.tab = TABS[0][1]
+            setKbScroll(0)
+            uninstallConfirm = false
+            uninstallStatus = ""
+            releaseKeys()
+            readTune()
+        },
+        onClose: () => {
+            if (kbCaptureKind || kbListening) cancelCapture()
+            else releaseKeys()
+            stopModalStats()
+        },
+        onScroll: (d) => {
+            if (st.tab === "wall" && wallPickerOpen) {
+                setWallPickerScroll(wallPickerScroll + d * 36)
+                modal.requestDraw()
+                return
+            }
+            if (["keybinds", "wm", "anim", "colors"].includes(st.tab)) {
+                const next = kbScroll + d * 36
+                if (next >= 0 && next <= kbMaxScroll) {
+                    setKbScroll(next)
+                    modal.requestDraw()
+                }
+            }
+        },
+        onKeyRaw: (k, m, pressed) => { colorsKeyRaw(k, m, pressed) },
+        onKey: (k) => {
+            if (hexEditing()) {
+                if (k === Gdk.KEY_Escape) { colorsHexCancel(); return true }
+                return true
+            }
+            if (st.tab === "wall" && wallPickerOpen && wallPickerKey(k)) return true
+            if (k === Gdk.KEY_Escape) {
+                if (st.tab === "uninstall" && uninstallConfirm) {
+                    uninstallConfirm = false
+                    modal.requestDraw()
+                    return true
+                }
+                if (st.tab === "wall" && wallOpen) {
+                    wallOpen = null
+                    wallScroll = 0
+                    modal.requestDraw()
+                    return true
+                }
+                if (wmColorPick) {
+                    closeWmPicker()
+                    return true
+                }
+                if (kbCaptureKind || kbDeleteConfirm) {
+                    if (kbDeleteConfirm) kbDeleteConfirm = null
+                    else if (kbCaptureKind === "newuser" && (kbAddStep === "command" || kbAddStep === "app")) kbAddStep = "prompt"
+                    else cancelCapture()
+                    modal.requestDraw()
+                    return true
+                }
+            }
+            if (wmAppText !== "" || (st.tab === "wm" && wmAppEditing)) {
+                if (k === Gdk.KEY_Escape) { wmAppText = ""; wmAppEditing = false; modal.requestDraw() }
+                else if (k === Gdk.KEY_Return) commitWmApps()
+                else if (k === Gdk.KEY_BackSpace) { wmAppText = wmAppText.slice(0, -1); modal.requestDraw() }
+                else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) { wmAppText += String.fromCharCode(u); modal.requestDraw() }
+                }
+                return true
+            }
+            if (k === Gdk.KEY_Left || k === Gdk.KEY_Right) {
+                const idx = TABS.findIndex(([, id]) => id === st.tab)
+                const next = idx + (k === Gdk.KEY_Left ? -1 : 1)
+                if (next >= 0 && next < TABS.length) {
+                    st.tab = TABS[next][1]
+                    setKbScroll(0)
+                    cfgOpen = null
+                    if (st.tab !== "wall") { wallOpen = null; wallScroll = 0 }
+                    modal.requestDraw()
+                }
+                return true
+            }
+        },
+        draw: (ctx, g) => {
+            const X = g.X, Y = g.Y, W = g.w, H = g.h
+            const FW = g.canvasW, FH = g.canvasH
+
+            ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42)
+            ctx.rectangle(0, 0, FW, FH)
+            ctx.fill()
+
+            const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
+            const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
+            const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
+            const [ov0, ov1, ov2] = USER.sysveil || USER.overlay
+            vg.addColorStopRGBA(0, ov0 * 0.08, ov1 * 0.08, ov2 * 0.08, 0.46)
+            vg.addColorStopRGBA(0.5, ov0 * 0.2, ov1 * 0.2, ov2 * 0.2, 0.68)
+            vg.addColorStopRGBA(1, ov0 * 0.62, ov1 * 0.62, ov2 * 0.62, 0.92 * pulse)
+            ctx.setSource(vg)
+            ctx.rectangle(0, 0, FW, FH)
+            ctx.fill()
+
+            const hy = Y + 40
+            const base = themeTabColors(), acc = themeTabAccent()
+            ctx.setSourceRGBA(base[0], base[1], base[2], 0.3)
+            ctx.setLineWidth(1)
+            ctx.newPath()
+            ctx.moveTo(X + 40, hy + 26)
+            ctx.lineTo(X + W - 40, hy + 26)
+            ctx.stroke()
+
+            ctx.selectFontFace(TITLE, 0, 1)
+            ctx.setFontSize(13)
+            const tabWidth = TABS.reduce((total, [label]) => total + ctx.textExtents(label).width + 30, 0)
+            let tx = X + W / 2 - tabWidth / 2
+            TABS.forEach(([label, id]) => {
+                const tw = ctx.textExtents(label).width
+                const active = st.tab === id
+                const hovered = g.push.hoverKey === `tab:${id}`
+                const color: any = active || hovered ? acc : base
+                txt(ctx, tx, hy + 16, label, TITLE, 13, color, active ? 0.98 : (hovered ? 0.9 : 0.6), 1)
+                if (active || hovered) {
+                    ctx.setSourceRGBA(acc[0], acc[1], acc[2], active ? 0.95 : 0.55)
+                    ctx.rectangle(tx, hy + 23, tw, 2)
+                    ctx.fill()
+                }
+                g.push({
+                    kind: "tab", key: `tab:${id}`, hoverable: true,
+                    bx0: tx - 10, by0: hy, bx1: tx + tw + 10, by1: hy + 28,
+                    on: () => {
+                        st.tab = id
+                        setKbScroll(0)
+                        cfgOpen = null
+                        if (id !== "wall") { wallOpen = null; wallScroll = 0 }
+                        uninstallConfirm = false
+                        modal.requestDraw()
+                    },
+                })
+                tx += tw + 30
+            })
+
+            const inset = Math.min(350, Math.max(32, Math.round(FW * 0.12)))
+            const mx = X + inset, mw = W - inset * 2
+            const cy = Y + 150
+            if (st.tab === "colors") drawColors(ctx, g, mx, cy, mw)
+            else if (st.tab === "keybinds") drawKeybinds(ctx, g, mx, cy, mw)
+            else if (st.tab === "anim") drawConfig(ctx, g, mx, cy, mw)
+            else if (st.tab === "wm") drawWm(ctx, g, mx, cy, mw)
+            else if (st.tab === "wall") {
+                if (wallPickerOpen) drawWallPicker(ctx, g, mx, cy, mw)
+                else if (wallOpen) drawWallBrowse(ctx, g, mx, cy, mw)
+                else drawWallRing(ctx, g, mx, cy, mw)
+            } else if (st.tab === "uninstall") drawUninstall(ctx, g, mx, cy, mw)
+        },
+    })
+    ctrl = modal
+    return modal
 }

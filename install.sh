@@ -1635,6 +1635,18 @@ sudo pacman -S --needed $MESA_PKGS
 step "re-asserting qt6-multimedia (quickshell lock screen needs it)…"
 sudo pacman -S --needed qt6-multimedia
 
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cyberarch"
+STATE_FILE="$STATE_DIR/install-state"
+if [ ! -f "$STATE_FILE" ]; then
+  mkdir -p "$STATE_DIR"
+  # Keep the original greeter choice across reinstalls; the uninstaller won't guess.
+  DM_CHANGED=no
+  [ "$LOCK_STACK" = 1 ] && [ "$CUR_DM" != sddm ] && DM_CHANGED=yes
+  printf 'display_manager_changed=%s\ndisplay_manager_before=%s\n' "$DM_CHANGED" "${CUR_DM:-none}" > "$STATE_FILE.tmp"
+  chmod 600 "$STATE_FILE.tmp"
+  mv -f -- "$STATE_FILE.tmp" "$STATE_FILE"
+fi
+
 printf "${RED}${B}"
 cat <<'EOF'
 
