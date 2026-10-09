@@ -5,11 +5,14 @@
 import { Box, DrawingArea, EventBox, Keymode } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import GLib from "gi://GLib"
+import Gio from "gi://Gio"
 import { interval, execAsync } from "astal"
 import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
-import { createModal } from "./cmodal.ts"
+import { createModal, drawBtn } from "./cmodal.ts"
+import { normalizeLocation, createCitySearch } from "./location-policy.js"
+import { locateCity } from "./geolocation.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
 
@@ -63,10 +66,12 @@ const wxIcon = (desc) => {
 }
 
 
-let geoCity = "NEW YORK", geoCoords = "40.713°N 74.006°W", geoOK = true
-let geoLat = 40.7128, geoLon = -74.006, mapTile = null, mapVer = 0, mapRequest = 0
+let geoCity = "LOCATION NOT SET", geoCoords = "SELECT A CITY", geoOK = false
+let geoLat = 0, geoLon = 0, mapTile = null, mapVer = 0, mapRequest = 0
 let mapCachePath = ""
-let wxLat = 40.7128, wxLon = -74.006, wxName = "NEW YORK", wxFull = "NEW YORK"
+let wxLat = 0, wxLon = 0, wxName = "LOCATION NOT SET", wxFull = "LOCATION NOT SET", wxMode = "unset"
+const hasLocation = () => wxMode !== "unset"
+export const currentCity=()=>normalizeLocation({mode:wxMode,lat:wxLat,lon:wxLon,name:wxName,full:wxFull})
 let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "--"
 let netName = "OFFLINE"
 const refreshNet = () => {
@@ -107,6 +112,7 @@ const loadMapCache = (path) => {
  return false
 }
 const setMapPoint = (rerandom) => {
+ if (!hasLocation()) return
  if (rerandom) { geoLat = wxLat + ro(); geoLon = wxLon + ro() }
  if (!mapCachePath) mapCachePath = mapCacheForPoint()
  geoCoords = `${Math.abs(geoLat).toFixed(3)}°${geoLat >= 0 ? "N" : "S"} ${Math.abs(geoLon).toFixed(3)}°${geoLon >= 0 ? "E" : "W"}`
@@ -116,28 +122,29 @@ const setMapPoint = (rerandom) => {
 
 
 const WX_STORE = `${USER_DIR}/city.json`
-const WX_DEFAULT = `${CYBER_DIR}/config/city.json`
 const readWxStore = (): Uint8Array | null => {
- for (const p of [WX_STORE, WX_DEFAULT]) {
+ for (const p of [WX_STORE]) {
   try { const [ok, data] = GLib.file_get_contents(p); if (ok) return data } catch {}
  }
  return null
 }
 const saveWxLocation = () => {
  try {
-  GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath }, null, 2) + "\n"))
+  const document=hasLocation()?{version:2,mode:wxMode,name:wxName,full:wxFull,lat:wxLat,lon:wxLon,mapLat:geoLat,mapLon:geoLon,mapCache:mapCachePath}:{version:2,mode:"unset",name:"",full:"",lat:null,lon:null}
+  const file=Gio.File.new_for_path(WX_STORE)
+  file.replace_contents(new TextEncoder().encode(JSON.stringify(document,null,2)+"\n"),null,false,Gio.FileCreateFlags.REPLACE_DESTINATION,null)
  } catch (e) { print("[cyber] wx save:", e) }
 }
 const loadWxLocation = () => {
  try {
  const data = readWxStore()
  if (data) {
- const o = JSON.parse(new TextDecoder().decode(data))
- if (typeof o.lat === "number" && typeof o.lon === "number") {
- wxLat = o.lat; wxLon = o.lon; wxName = String(o.name || wxName); wxFull = String(o.full || o.name || wxName)
- if (typeof o.mapLat === "number" && typeof o.mapLon === "number") {
-  geoLat = o.mapLat; geoLon = o.mapLon
-  mapCachePath = typeof o.mapCache === "string" ? o.mapCache : mapCacheForPoint()
+ const saved = JSON.parse(new TextDecoder().decode(data)), o = normalizeLocation(saved)
+ if (o) {
+ wxMode=o.mode;wxLat=o.lat;wxLon=o.lon;wxName=o.name;wxFull=o.full
+ if (Number.isFinite(saved.mapLat) && Number.isFinite(saved.mapLon)) {
+  geoLat = saved.mapLat; geoLon = saved.mapLon
+  mapCachePath = typeof saved.mapCache === "string" ? saved.mapCache : mapCacheForPoint()
   loadMapCache(mapCachePath)
   setMapPoint(false)
  } else {
@@ -148,7 +155,7 @@ const loadWxLocation = () => {
  }
  }
  } catch {}
- setMapPoint(true)
+ wxMode="unset"
 }
 
 
@@ -157,6 +164,7 @@ const loadWxLocation = () => {
 // tilemap of a random location. chill, the theme does not track your geolocation,
 // but a random place from the city provided.
 const fetchMap = () => {
+ if (!hasLocation()) return
  const out = "/tmp/cyber-map.png"
  const request = ++mapRequest
  const lat = geoLat, lon = geoLon
@@ -179,9 +187,12 @@ const fetchMap = () => {
      })
 }
 const refreshWeather = async () => {
+ if (!hasLocation()) {wxDesc="SELECT A CITY";areas.forEach(a=>a?.queue_draw());return}
+ const locationKey=`${wxMode}|${wxLat}|${wxLon}`
  try {
  const url = `https://api.open-meteo.com/v1/forecast?latitude=${wxLat}&longitude=${wxLon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto`
  const j = JSON.parse(await execAsync(["curl", "-sf", "--max-time", "9", url]))
+ if(locationKey!==`${wxMode}|${wxLat}|${wxLon}`)return
  const c = j.current
  if (c) { wxTemp = `${Math.round(c.temperature_2m)}°`; wxFeels = `${Math.round(c.apparent_temperature)}°`; wxDesc = WMO[c.weather_code] || "—"; wxHum = `${Math.round(c.relative_humidity_2m)}`; wxWind = `${Math.round(c.wind_speed_10m)}` }
  const dd = j.daily; forecast.length = 0
@@ -196,7 +207,7 @@ const refreshWeather = async () => {
  date: `${dt.getDate()} ${MON3[dt.getMonth()]}`,
  })
  }
- } catch (e) { wxDesc = "OFFLINE" }
+ } catch (e) { if(locationKey===`${wxMode}|${wxLat}|${wxLon}`)wxDesc = "OFFLINE" }
  areas.forEach(a => a?.queue_draw())
 }
 
@@ -317,7 +328,7 @@ export const SidePanel = (mon?: any) => {
  refreshNet(); interval(15_000, refreshNet)
  refreshNetSpeed(); interval(1000, refreshNetSpeed)
  const area = DrawingArea({}); areas.push(area); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
- if (!mapTile) try { mapTile = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/img/map-grid.png`); mapVer++ } catch {}
+ if (hasLocation() && !mapTile) try { mapTile = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/img/map-grid.png`); mapVer++ } catch {}
  area.connect("draw", (_w, ctx) => {
  ctx.scale(S, S)
  const now = new Date()
@@ -327,10 +338,10 @@ export const SidePanel = (mon?: any) => {
  cacheKey = key
  cache = new Cairo.ImageSurface(Cairo.Format.ARGB32, plane.width, plane.height)
  const cx = new Cairo.Context(cache)
- drawMapStatic(cx); drawOverlay(cx, now)
+ if(hasLocation())drawMapStatic(cx); drawOverlay(cx, now)
  }
  ctx.setSourceSurface(cache, 0, 0); ctx.paint()
- drawCompassScan(ctx)
+ if(hasLocation())drawCompassScan(ctx)
  drawNetSpeed(ctx)
  return false
  })
@@ -357,6 +368,12 @@ export const SidePanel = (mon?: any) => {
 let wxModal: any = null
 let wxQuery = "", wxResults: any[] = [], wxHint = "TYPE A CITY ▸", wxScroll = 0
 let wxSearchTimer: number | null = null
+let wxDialogGeneration=0
+const citySearch=createCitySearch(async(q:string)=>{
+ const url=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`
+ const data=JSON.parse(await execAsync(["curl","-sf","--max-time","6",url]))
+ return (data.results||[]).map(r=>({lat:r.latitude,lon:r.longitude,name:r.name,full:[r.name,r.admin1,r.country].filter(Boolean).join(", ")}))
+})
 const aPath = (ctx, x, y, w, h, c = 5) => { ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
 
 const wxRunSearch = async () => {
@@ -364,21 +381,23 @@ const wxRunSearch = async () => {
  if (q.length < 2) { wxResults = []; wxHint = "TYPE A CITY ▸"; wxModal?.requestDraw(); return }
  wxHint = "SEARCHING…"; wxModal?.requestDraw()
  try {
- const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`
- const data = JSON.parse(await execAsync(["curl", "-sf", "--max-time", "6", url]))
- wxResults = (data.results || []).map((r) => ({ lat: r.latitude, lon: r.longitude, name: r.name, full: [r.name, r.admin1, r.country].filter(Boolean).join(", ") }))
+ const rows=await citySearch.run(q);if(rows===null)return;wxResults=rows
  wxHint = wxResults.length ? `${wxResults.length} MATCHES — CLICK ONE` : "NO MATCHES"
  } catch (e) { wxHint = "SEARCH FAILED"; print("[cyber] geocode:", e) }
  wxScroll = 0; wxModal?.requestDraw()
 }
 const wxQueueSearch = () => { if (wxSearchTimer !== null) GLib.source_remove(wxSearchTimer); wxSearchTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 340, () => { wxSearchTimer = null; wxRunSearch().catch(print); return false }) }
-const wxPick = (r) => { wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || "").toUpperCase(); wxFull = r.full.toUpperCase(); mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather(); wxModal.close() }
+const wxPick = (r) => { const location=normalizeLocation(r);if(!location)return;wxMode=location.mode;wxLat=location.lat;wxLon=location.lon;wxName=location.name.toUpperCase();wxFull=location.full.toUpperCase();mapCachePath="";setMapPoint(true);saveWxLocation();refreshWeather();wxModal.close() }
+const wxClear=()=>{wxMode="unset";wxName=wxFull=geoCity="LOCATION NOT SET";geoCoords="SELECT A CITY";geoOK=false;mapRequest++;mapTile=null;mapCachePath="";forecast.length=0;wxTemp=wxFeels="--°";wxHum=wxWind="--";saveWxLocation();refreshWeather();wxModal?.requestDraw()}
+let wxAutoBusy=false
+const wxAuto=async()=>{if(wxAutoBusy)return;wxAutoBusy=true;const ticket=wxDialogGeneration;wxHint="REQUESTING GEOCLUE (OPT-IN)…";wxModal?.requestDraw();try{const result=await locateCity(true,()=>ticket===wxDialogGeneration);if(ticket===wxDialogGeneration)wxPick(result)}catch(error){if(ticket===wxDialogGeneration){wxHint=String(error);wxModal?.requestDraw()}}finally{wxAutoBusy=false}}
 
 const ensureWxModal = () => {
  if (wxModal) return
  wxModal = createModal({
- name: "weather", tabTitle: "WEATHER UPLINK", W: 384, H: 312, hud: true,
+ name: "weather", tabTitle: "WEATHER UPLINK", W: 384, H: 352, hud: true,
  onOpen: () => { wxQuery = ""; wxResults = []; wxHint = "TYPE A CITY ▸"; wxScroll = 0 },
+ onClose:()=>{wxDialogGeneration++;citySearch.cancel();if(wxSearchTimer!==null){GLib.source_remove(wxSearchTimer);wxSearchTimer=null}},
  onKey: (k) => {
  if (k === Gdk.KEY_BackSpace) wxQuery = wxQuery.slice(0, -1)
  else { const u = Gdk.keyval_to_unicode(k); if (u >= 32 && u < 0x10000) wxQuery += String.fromCharCode(u); else return }
@@ -389,7 +408,9 @@ const ensureWxModal = () => {
  const x = g.X + 18, w = g.w - 36
  gtxt(ctx, x + w - 4 - ctx.textExtents(`NOW: ${wxName}`).width, g.Y + GHEAD + 22, `NOW: ${wxName}`, GMONO, 9, GCYAN, 0.6)
  gtxt(ctx, x, g.Y + GHEAD + 22, "SEARCH FORECAST CITY", GMONO, 10, GCYAN, 0.85, 1)
- const by = g.Y + GHEAD + 32, bh = 30
+ drawBtn(ctx,g.push,x,g.Y+GHEAD+28,(w-8)/2,24,"CLEAR CITY",wxClear)
+ drawBtn(ctx,g.push,x+(w+8)/2,g.Y+GHEAD+28,(w-8)/2,24,"AUTO (OPT-IN)",()=>wxAuto())
+ const by = g.Y + GHEAD + 60, bh = 30
  aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0] * 0.12, GCYAN[1] * 0.06, GCYAN[2] * 0.06, 0.5); ctx.fill()
  aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0], GCYAN[1], GCYAN[2], 0.85); ctx.setLineWidth(0.9); ctx.stroke()
  const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "

@@ -205,11 +205,12 @@ const sameDay = (a: number, b = Date.now()) => {
 }
 
 const readCity = () => {
-    for (const p of [`${USER_DIR}/city.json`, `${CYBER_DIR}/config/city.json`]) {
+    for (const p of [`${USER_DIR}/city.json`]) {
         try {
             const [ok, data] = GLib.file_get_contents(p)
             if (ok) {
                 const o = JSON.parse(new TextDecoder().decode(data))
+                if(o.mode==="unset")return {name:"",full:""}
                 return {
                     name: String(o.name || "LOCAL").trim(),
                     full: String(o.full || o.name || "LOCAL").trim(),
@@ -217,7 +218,7 @@ const readCity = () => {
             }
         } catch { }
     }
-    return { name: "LOCAL", full: "LOCAL" }
+    return { name: "", full: "" }
 }
 
 const countryCode = (full: string) => {
@@ -463,7 +464,7 @@ const newsFeedsForPage = (city: any, page: number) => {
             return { feed: `GOOGLE ${page + 1}.${i + 1}`, url: buildGoogleNewsUrl(query, cc), region: "GLOBAL" }
         }),
         ...extra,
-        { feed: `LOCAL ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull },
+        ...(city.full||city.name ? [{ feed: `LOCAL ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull }] : []),
     ]
 }
 
