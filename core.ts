@@ -1,14 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
 // Dropped hybrars, too flaky to keep updating and targeting for build, besides alot of issue report
 
 import { App, Window, Box } from "./components/modules/widget.ts"
@@ -233,7 +223,8 @@ const scheduleMonitorSync = () => {
 const refreshWins = () => Promise.all([execAsync(["hyprctl", "clients", "-j"]), execAsync(["hyprctl", "monitors", "-j"])]).then(([co, mo]) => {
  try {
  const active = new Set<number>()
- for (const m of JSON.parse(mo)) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
+ const monitors = JSON.parse(mo)
+ for (const m of monitors) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
  const next = JSON.parse(co).filter((c: any) => {
  if (!c || !c.mapped || c.hidden || !c.size || !(c.size[0] > 0) || !c.at) return false
  return !!(c.workspace && active.has(c.workspace.id))
@@ -248,31 +239,46 @@ const pickRefresh = () => {
  if (holdOn) { GLib.source_remove(holdOn); holdOn = null }
  holdOn = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => { holdOn = null; refreshWins(); return false })
 }
+let socketRetry = null
+const retrySocket = () => {
+ if (socketRetry) return
+ socketRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+ socketRetry = null; wireSocket(); return GLib.SOURCE_REMOVE
+ })
+}
 const wireSocket = () => {
+ let conn = null, stream = null
+ const disconnect = () => {
+ try { stream?.close(null) } catch {}
+ try { conn?.close(null) } catch {}
+ retrySocket()
+ }
  try {
- const base = `${GLib.getenv("XDG_RUNTIME_DIR") || `/run/user/${GLib.get_user_name()}`}/hypr`
- const dir = GLib.Dir.open(base, 0); if (!dir) return
- let sock = null, nm
- while ((nm = dir.read_name())) { const p = `${base}/${nm}/.socket2.sock`; if (GLib.file_test(p, GLib.FileTest.EXISTS)) { sock = p; break } }
- if (!sock) { print("[cyberpunk] hypr socket2 not found"); return }
+ const signature = GLib.getenv("HYPRLAND_INSTANCE_SIGNATURE")
+ if (!signature) { retrySocket(); return }
+ const sock = `${GLib.get_user_runtime_dir()}/hypr/${signature}/.socket2.sock`
  const client = new Gio.SocketClient()
- const conn = client.connect(new Gio.UnixSocketAddress({ path: sock }), null)
- const stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
+ client.connect_async(new Gio.UnixSocketAddress({ path: sock }), null, (_client, result) => {
+ try {
+ conn = client.connect_finish(result)
+ stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
  const pump = () => stream.read_line_async(0, null, (_src, res) => {
   try {
   const [bytes] = stream.read_line_finish(res)
-  if (bytes) {
-  const line = bytes.toString(), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
+  if (!bytes) { disconnect(); return }
+  const line = new TextDecoder().decode(bytes), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
   if (ev === "workspace") setWorkspaceBadge(data.trim())
   else if (ev === "workspacev2") setWorkspaceBadge(data.split(",")[1]?.trim() || data.split(",")[0]?.trim())
   else if (ev === "focusedmon") setWorkspaceBadge(data.split(",")[1]?.trim())
+  if (ev.startsWith("monitoradded") || ev.startsWith("monitorremoved")) { scheduleMonitorSync(); pickRefresh() }
   if (EVENT_HITS.has(ev)) pickRefresh()
-  }
   pump()
-  } catch { try { pump() } catch {} }
+  } catch { disconnect() }
  })
- pump()
- } catch (e) { print("[cyberpunk] hypr socket:", e) }
+ refreshWins(); pump()
+ } catch { disconnect() }
+ })
+ } catch { disconnect() }
 }
 
 
@@ -296,13 +302,13 @@ const toggleHudTop = () => {
 App.start({
  instanceName: "cyberpunk",
  requestHandler(request, res) {
+ request = request.trim()
  const reply = (r) => { try { res(r) } catch {} }
  if (request === "launcher") {
  execAsync(["sh", "-c", "rofi -show drun || rofi -show run"]).catch(print)
  reply("ok")
  } else if (request === "apps-menu") {
- try { openAppsMenu() } catch (e) { print(e) }
- reply("ok")
+ try { openAppsMenu(); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request === "player") {
  try { togglePlayer() } catch (e) { print(e) }
  reply("ok")
@@ -329,8 +335,7 @@ App.start({
  try { triggerShutter(request.slice(7).trim()) } catch (e) { print(e) }
  reply("ok")
  } else if (request.startsWith("region-shot")) {
- try { triggerRegion(request.slice(11).trim()) } catch (e) { print(e) }
- reply("ok")
+ try { triggerRegion(request.slice(11).trim()); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request.startsWith("modal ")) {
  try { toggleModal(request.slice(6).trim()) } catch (e) { print(e) }
  reply("ok")

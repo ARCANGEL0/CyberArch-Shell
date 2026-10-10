@@ -4,6 +4,5 @@ LAUNCH="$(cd "$(dirname "$0")" && pwd)/launch-theme"
 [ -x "$LAUNCH" ] || LAUNCH="$HOME/.config/hypr/themes/cyberpunk/scripts/launch-theme"
 [ -x "$LAUNCH" ] || { echo "launch-theme not found next to $0" >&2; exit 1; }
 "$HOME/.local/bin/ags" quit -i cyberpunk 2>/dev/null
-pkill -9 -f '[c]ore.ts'
 sleep 1
 setsid "$LAUNCH" >/tmp/ags-cyberpunk.log 2>&1 </dev/null &

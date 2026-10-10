@@ -2,6 +2,8 @@ import { Window, DrawingArea, EventBox, activeMonitor, monitorAtPoint } from "./
 import { Anchor, Layer, Exclusivity, Keymode } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
+import Gio from "gi://Gio"
+import GLib from "gi://GLib"
 import { SCREEN_WIDTH , SCREEN_HEIGHT } from "../../env.ts"
 import { NEON, f, onColorChange, USER, tintSurface, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"
 import { MONO } from "./fonts.ts"
@@ -18,6 +20,7 @@ const easeOut = (t) => 1 - (1 - t) * (1 - t)
 const F25: [number, number, number] = NEON.f25
 let W = SCREEN_WIDTH, H = SCREEN_HEIGHT
 let monX = 0, monY = 0
+let recorder: any = null
 
 let recIconPix: any = null
 try { recIconPix = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/record.png`) } catch (e) { print("[region] record.png:", e) }
@@ -360,13 +363,31 @@ const finish = () => {
      const cue = sndOn("sndOverlay")
          ? `setsid -f sh -c 'play -q -v 1.5 "${ovl}" 2>/dev/null || mpv --no-video --really-quiet --volume=150 "${ovl}" 2>/dev/null' >/dev/null 2>&1`
          : "true"
+     const payload = `${monX} ${monY} ${W} ${H}`
      timeout(60, () => {
-         execAsync(["sh", "-c",
-             `D="$HOME/Videos/Recordings"; mkdir -p "$D"; F="$D/$(date +%Y-%m-%d_%H-%M-%S).mp4"; ` +
-             `setsid wf-recorder -g "${geom}" -f "$F" -p preset=ultrafast -p crf=28 >/dev/null 2>&1 & ` +
-             cue])
-         .catch(print)
-         try { setRecording(true, `${monX} ${monY} ${W} ${H}`, { x: rx, y: ry, w: rw, h: rh }) } catch (e) { print(e) }
+         if (recorder) return
+         try {
+             const dir = `${GLib.get_home_dir()}/Videos/Recordings`
+             if (GLib.mkdir_with_parents(dir, 0o755) !== 0) throw new Error("Cannot create recording directory")
+             const file = `${dir}/${GLib.DateTime.new_now_local().format("%Y-%m-%d_%H-%M-%S-%f")}.mp4`
+             const proc = Gio.Subprocess.new(["wf-recorder", "-g", geom, "-f", file, "-p", "preset=ultrafast", "-p", "crf=28"], Gio.SubprocessFlags.NONE)
+             recorder = proc
+             let shown = false
+             const started = timeout(300, () => {
+                 if (recorder !== proc) return
+                 shown = true
+                 setRecording(true, payload, { x: rx, y: ry, w: rw, h: rh })
+                 execAsync(["sh", "-c", cue]).catch(print)
+             })
+             proc.wait_async(null, (_proc, result) => {
+                 let failed = false
+                 try { proc.wait_finish(result); failed = !proc.get_successful() } catch (e) { failed = true; print(e) }
+                 if (recorder !== proc) return
+                 recorder = null; started.cancel()
+                 if (shown && isRecording()) setRecording(false)
+                 if (failed) timeout(250, () => showToast("RECORDING FAILED"))
+             })
+         } catch (e) { recorder = null; print(e); showToast("RECORDING FAILED") }
      })
      return
  }
@@ -392,6 +413,7 @@ const monitorPayload = (payload = "") => {
 }
 
 export const triggerRecordRegion = (payload = "") => {
+ if (recorder) { recorder.send_signal(2); return }
  if (isRecording()) {
  execAsync(["sh", "-c", "pkill -INT -x wf-recorder 2>/dev/null || pkill -INT -f '[w]f-recorder' 2>/dev/null"]).catch(() => {})
  try { setRecording(false) } catch (e) { print(e) }
