@@ -25,32 +25,68 @@ const MAXPIN = 5
 const BROWSE_CHUNK = 20
 const NEWS_CHUNK = 10
 const NEWS_BATCH_QUERIES = [
-    ["top stories when:1d", "breaking news when:1d", "world news when:1d"],
-    ["business markets economy when:1d", "technology cyber security when:1d", "science health when:1d"],
-    ["europe news when:1d", "americas news when:1d", "asia news when:1d"],
-    ["politics diplomacy conflict when:1d", "climate energy transport when:1d", "finance companies when:1d"],
-    ["security crime cities when:1d", "ai chips software when:1d", "crypto stocks markets when:1d"],
-    ["global headlines when:2d", "latest international news when:2d", "major world events when:2d"],
-    ["economic outlook when:2d", "technology regulation when:2d", "public safety when:2d"],
-    ["europe economy technology when:2d", "world business headlines when:2d", "science discoveries when:2d"],
+    [
+        { query: "world top stories", category: "WORLD" },
+        { query: "world breaking news", category: "WORLD" },
+        { query: "international headlines", category: "WORLD" },
+    ],
+    [
+        { query: "global business markets", category: "BUSINESS" },
+        { query: "world technology cyber security", category: "TECH" },
+        { query: "international science health", category: "SCIENCE" },
+    ],
+    [
+        { query: "global politics diplomacy", category: "WORLD" },
+        { query: "world climate energy", category: "WORLD" },
+        { query: "international security conflicts", category: "WORLD" },
+    ],
+    [
+        { query: "world economy news", category: "BUSINESS" },
+        { query: "global technology regulation", category: "TECH" },
+        { query: "international science discoveries", category: "SCIENCE" },
+    ],
+    [
+        { query: "world public safety", category: "WORLD" },
+        { query: "global AI chips software", category: "TECH" },
+        { query: "international finance companies", category: "BUSINESS" },
+    ],
+    [
+        { query: "global headlines", category: "WORLD" },
+        { query: "latest international news", category: "WORLD" },
+        { query: "major world events", category: "WORLD" },
+    ],
+    [
+        { query: "world economic outlook", category: "BUSINESS" },
+        { query: "global technology regulation", category: "TECH" },
+        { query: "international public safety", category: "WORLD" },
+    ],
+    [
+        { query: "global economy technology", category: "BUSINESS" },
+        { query: "world business headlines", category: "BUSINESS" },
+        { query: "international science discoveries", category: "SCIENCE" },
+    ],
 ]
+const NEWS_CATEGORIES = ["ALL", "WORLD", "BUSINESS", "TECH", "SCIENCE", "LOCAL"]
+const NEWS_DATE_FILTERS = ["ANY", "24H", "7D", "30D"]
 const EXTRA_NEWS_FEEDS = [
-    { feed: "BBC WORLD", url: "https://feeds.bbci.co.uk/news/world/rss.xml", region: "GLOBAL" },
-    { feed: "BBC BUSINESS", url: "https://feeds.bbci.co.uk/news/business/rss.xml", region: "GLOBAL" },
-    { feed: "BBC TECH", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", region: "GLOBAL" },
-    { feed: "BBC SCIENCE", url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml", region: "GLOBAL" },
-    { feed: "GUARDIAN WORLD", url: "https://www.theguardian.com/world/rss", region: "GLOBAL" },
-    { feed: "GUARDIAN BUSINESS", url: "https://www.theguardian.com/uk/business/rss", region: "GLOBAL" },
-    { feed: "GUARDIAN TECH", url: "https://www.theguardian.com/technology/rss", region: "GLOBAL" },
-    { feed: "GUARDIAN SCIENCE", url: "https://www.theguardian.com/science/rss", region: "GLOBAL" },
-    { feed: "AL JAZEERA", url: "https://www.aljazeera.com/xml/rss/all.xml", region: "GLOBAL" },
-    { feed: "NPR NEWS", url: "https://feeds.npr.org/1001/rss.xml", region: "GLOBAL" },
-    { feed: "SKY NEWS", url: "https://feeds.skynews.com/feeds/rss/world.xml", region: "GLOBAL" },
-    { feed: "DW NEWS", url: "https://rss.dw.com/rdf/rss-en-all", region: "GLOBAL" },
-    { feed: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", region: "GLOBAL" },
-    { feed: "NYT WORLD", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", region: "GLOBAL" },
-    { feed: "TECHCRUNCH", url: "https://techcrunch.com/feed/", region: "GLOBAL" },
-    { feed: "THE VERGE", url: "https://www.theverge.com/rss/index.xml", region: "GLOBAL" },
+    // updt: keep these extra feeds global; local news comes from the user's location.
+    { feed: "EURONEWS WORLD", url: "https://www.euronews.com/rss?format=mrss&level=theme&name=news", region: "GLOBAL", category: "WORLD" },
+    { feed: "BBC WORLD", url: "https://feeds.bbci.co.uk/news/world/rss.xml", region: "GLOBAL", category: "WORLD" },
+    { feed: "GUARDIAN WORLD", url: "https://www.theguardian.com/world/rss", region: "GLOBAL", category: "WORLD" },
+    { feed: "BBC BUSINESS", url: "https://feeds.bbci.co.uk/news/business/rss.xml", region: "GLOBAL", category: "BUSINESS" },
+    { feed: "BBC TECH", url: "https://feeds.bbci.co.uk/news/technology/rss.xml", region: "GLOBAL", category: "TECH" },
+    { feed: "BBC SCIENCE", url: "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml", region: "GLOBAL", category: "SCIENCE" },
+    { feed: "GUARDIAN BUSINESS", url: "https://www.theguardian.com/business/rss", region: "GLOBAL", category: "BUSINESS" },
+    { feed: "GUARDIAN TECH", url: "https://www.theguardian.com/technology/rss", region: "GLOBAL", category: "TECH" },
+    { feed: "GUARDIAN SCIENCE", url: "https://www.theguardian.com/science/rss", region: "GLOBAL", category: "SCIENCE" },
+    { feed: "AL JAZEERA", url: "https://www.aljazeera.com/xml/rss/all.xml", region: "GLOBAL", category: "WORLD" },
+    { feed: "LE MONDE INTERNATIONAL", url: "https://www.lemonde.fr/en/international/rss_full.xml", region: "GLOBAL", category: "WORLD" },
+    { feed: "SKY NEWS", url: "https://feeds.skynews.com/feeds/rss/world.xml", region: "GLOBAL", category: "WORLD" },
+    { feed: "DW NEWS", url: "https://rss.dw.com/rdf/rss-en-all", region: "GLOBAL", category: "WORLD" },
+    { feed: "CNBC", url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", region: "GLOBAL", category: "BUSINESS" },
+    { feed: "NYT WORLD", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml", region: "GLOBAL", category: "WORLD" },
+    { feed: "TECHCRUNCH", url: "https://techcrunch.com/feed/", region: "GLOBAL", category: "TECH" },
+    { feed: "THE VERGE", url: "https://www.theverge.com/rss/index.xml", region: "GLOBAL", category: "TECH" },
 ]
 const EXTRA_FEEDS_PER_PAGE = 4
 const MARKET_PLANE = makePlane({ w: 320, h: 196, yaw: 22, pitch: -8, roll: 4, focal: 4600, dist: 4200, pad: 18 })
@@ -103,7 +139,17 @@ let newsBusy = false
 let newsHint = "GLOBAL / LOCAL FEEDS"
 let newsCity = "LOCAL"
 let newsUpdated = 0
+let newsSearch = ""
+let newsCategoryFilter = "ALL"
+let newsDateFilter = "ANY"
+let newsSourceFilter = "ALL"
 const newsProviders=()=>Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(providerText).join(" | ")||"RSS: NOT REQUESTED"
+const newsFeedStatus=()=>{
+    if(newsBusy)return "FETCHING FEEDS"
+    const states=Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(key=>providerResults[key]?.state)
+    const available=states.filter(state=>state==="live"||state==="cached"||state==="stale").length
+    return states.length?`${available}/${states.length} SOURCES`:"FEEDS IDLE"
+}
 const pendingSeries = new Set<string>()
 const ICONS: any = {}
 const DEFAULT_MARKETS: Record<string, any[]> = {
@@ -179,7 +225,16 @@ const decodeHtml = (s: string) => String(s || "")
     .replace(/&#x([0-9a-f]+);/gi, (_m, h) => String.fromCharCode(parseInt(h, 16)))
     .replace(/&#([0-9]+);/g, (_m, d) => String.fromCharCode(parseInt(d, 10)))
 
-const clean = (s: string) => decodeHtml(String(s || "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()
+const clean = (s: string) => decodeHtml(String(s || "").replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim()
+const cleanSummary = (value: string, title: string) => {
+    let summary = clean(value)
+    const headline = clean(title)
+    if (headline && summary.slice(0, headline.length).toLowerCase() === headline.toLowerCase()) {
+        summary = summary.slice(headline.length).replace(/^[\s:|\-–—]+/, "").trim()
+        if (summary.length < 24) return ""
+    }
+    return summary.slice(0, 1600)
+}
 const trunc = (s: string, n: number) => {
     const t = clean(s)
     return t.length > n ? `${t.slice(0, Math.max(0, n - 1))}…` : t
@@ -408,21 +463,21 @@ const drawScrollbar = (ctx: any, x: number, y: number, h: number, total: number,
     ctx.fill()
 }
 
-const isAggregatorFeed = (feed: string) => /^google|^local/i.test(feed)
-
-const parseFeed = (xml: string, feed: string, region: string) => {
+const parseFeed = (xml: string, feed: string, region: string, category: string) => {
     const out: any[] = []
-    const aggregator = isAggregatorFeed(feed)
     const matches = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) || []
     matches.forEach((item, idx) => {
         const title = first(item, /<title[^>]*>([\s\S]*?)<\/title>/i)
         const link = first(item, /<link[^>]*href="([^"]+)"/i) || first(item, /<link[^>]*>([\s\S]*?)<\/link>/i) || first(item, /<guid[^>]*>([\s\S]*?)<\/guid>/i)
         if (!link || !title) return
-        const rawSummary = aggregator ? "" : (first(item, /<description[^>]*>([\s\S]*?)<\/description>/i)
-            || first(item, /<summary[^>]*>([\s\S]*?)<\/summary>/i)
-            || first(item, /<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i))
-        const titleNorm = clean(title).toLowerCase()
-        const summary = clean(rawSummary).toLowerCase().startsWith(titleNorm.slice(0, 24)) ? "" : rawSummary
+        // updt: keep the useful part when a feed repeats the headline first.
+        const summary = [
+            first(item, /<content:encoded[^>]*>([\s\S]*?)<\/content:encoded>/i),
+            first(item, /<media:description[^>]*>([\s\S]*?)<\/media:description>/i),
+            first(item, /<description[^>]*>([\s\S]*?)<\/description>/i),
+            first(item, /<summary[^>]*>([\s\S]*?)<\/summary>/i),
+            first(item, /<content[^>]*>([\s\S]*?)<\/content>/i),
+        ].map(value => cleanSummary(value, title)).sort((a, b) => b.length - a.length)[0] || ""
         const source = first(item, /<source[^>]*>([\s\S]*?)<\/source>/i) || feed
         const published = first(item, /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i)
             || first(item, /<updated[^>]*>([\s\S]*?)<\/updated>/i)
@@ -435,6 +490,7 @@ const parseFeed = (xml: string, feed: string, region: string) => {
             url: link,
             summary: clean(summary),
             region,
+            category,
             published: clean(published),
             ts: Number.isFinite(ts) ? ts : 0,
             feed,
@@ -443,13 +499,51 @@ const parseFeed = (xml: string, feed: string, region: string) => {
     return out
 }
 
-const fetchFeed = async (url: string, feed: string, region: string) => {
+const fetchFeed = async (url: string, feed: string, region: string, category: string) => {
     try {
       const result=await requestProvider(`RSS:${new URL(url).hostname}`,url,{maxAge:900,parse:(body:string)=>{
-        if(!/<(?:rss|feed)\b/i.test(body))throw Error("Invalid RSS response");return parseFeed(body,feed,region)},validate:Array.isArray})
-      return result.value||[]
+        if(!/<(?:rss|feed)\b/i.test(body))throw Error("Invalid RSS response");return parseFeed(body,feed,region,category)},validate:Array.isArray})
+      return (result.value||[]).map((row: any) => row.category ? row : { ...row, category })
     }
     catch (e) { print("[cyber] news feed:", feed, e); return [] }
+}
+
+const articleDescription = (html: string, title: string) => {
+    const tags = html.match(/<meta\b[^>]*>/gi) || []
+    const attr = (tag: string, name: string) => {
+        const match = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"))
+        return match ? (match[1] || match[2] || match[3] || "") : ""
+    }
+    for (const key of ["og:description", "twitter:description", "description"]) {
+        const tag = tags.find(value => [attr(value, "property"), attr(value, "name")].some(name => name.toLowerCase() === key))
+        if (!tag) continue
+        const summary = cleanSummary(attr(tag, "content"), title)
+        if (summary.length >= 40) return summary
+    }
+    return ""
+}
+
+const requestArticleDescription = (article: any) => {
+    if (!article || article.summary || article.summaryLoading || article.summaryAttempted) return
+    let url: URL
+    try {
+        url = new URL(article.url)
+        if (url.protocol !== "https:") { article.summaryAttempted = true; return }
+    } catch { article.summaryAttempted = true; return }
+    article.summaryLoading = true
+    // updt: grab the publisher's short description when the feed only gives a headline.
+    requestProvider(`ARTICLE:${url.hostname}`, article.url, {
+        group: `ARTICLE:${url.hostname}`,
+        maxAge: 86400,
+        parse: (html: string) => articleDescription(html, article.title),
+        validate: (summary: any) => typeof summary === "string" && summary.length >= 40,
+    }).then(result => {
+        if (result.value) article.summary = result.value
+    }).catch(() => {}).finally(() => {
+        article.summaryLoading = false
+        article.summaryAttempted = true
+        mkModal?.requestDraw()
+    })
 }
 
 const buildLocalNewsUrl = (name: string, full: string) => {
@@ -475,12 +569,12 @@ const newsFeedsForPage = (city: any, page: number) => {
     const cityFull = city.full || cityName
     const localQuery = page % 2 === 0 ? `${cityFull} news when:${Math.max(7, days)}d` : `${cityName} breaking local news when:${Math.max(7, days)}d`
     return [
-        ...queries.map((q, i) => {
-            const query = `${q.replace(/\s+when:\d+d/g, "")} when:${days}d`
-            return { feed: `GOOGLE ${page + 1}.${i + 1}`, url: buildGoogleNewsUrl(query, cc), region: "GLOBAL" }
+        ...queries.map((item, i) => {
+            const query = `${item.query} when:${days}d`
+            return { feed: `GOOGLE ${page + 1}.${i + 1}`, url: buildGoogleNewsUrl(query, cc), region: "GLOBAL", category: item.category }
         }),
         ...extra,
-        { feed: `LOCAL ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull },
+        { feed: `LOCAL ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull, category: "LOCAL" },
     ]
 }
 
@@ -695,7 +789,7 @@ const appendNewsBatch = async (city: any) => {
         tries += 1
         const feeds = newsFeedsForPage(city, newsPage)
         newsPage += 1
-        const chunks = await Promise.all(feeds.map((f) => fetchFeed(f.url, f.feed, f.region)))
+        const chunks = await Promise.all(feeds.map((f) => fetchFeed(f.url, f.feed, f.region, f.category)))
         const merged: any[] = []
         for (const chunk of chunks) for (const row of chunk) merged.push(row)
         const fresh = merged
@@ -727,9 +821,11 @@ const refreshNews = async () => {
         newsRows = []
         newsAllRows = []
         await appendNewsBatch(city)
-        newsSel = newsRows.some((r: any) => r.id === newsSel) ? newsSel : (newsRows[0]?.id || "")
+        if (!newsSourceOptions().includes(newsSourceFilter)) newsSourceFilter = "ALL"
+        const visibleRows = newsFilteredRows()
+        newsSel = visibleRows.some((r: any) => r.id === newsSel) ? newsSel : (visibleRows[0]?.id || "")
         newsUpdated = Date.now()
-        newsHint = newsRows.length ? `${newsRows.length} HEADLINES · LIVE/CACHED BY FEED` : "NO NEWS"
+        newsHint = newsRows.length ? `${newsRows.length} LOADED · ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "NO FEEDS RESPONDED"
     } catch (e) {
         newsHint = "NEWS FEEDS FAILED"
         print("[cyber] news:", e)
@@ -881,8 +977,42 @@ const marketDisplayRows = (kind: string) => {
 }
 
 const newsDisplayRows = () => {
-    if (!newsHasMore && !newsBusy) return newsRows
-    return newsRows.concat([{ id: "__news_load_more__", title: newsBusy ? "LOADING..." : "LOAD MORE", source: newsBusy ? "FETCHING" : `${newsRows.length} LOADED`, ts: Date.now(), loadMore: true }])
+    const rows = newsFilteredRows()
+    if (!newsHasMore && !newsBusy) return rows
+    return rows.concat([{ id: "__news_load_more__", title: newsBusy ? "LOADING..." : "LOAD MORE", source: newsBusy ? "FETCHING" : `${newsRows.length} LOADED`, ts: Date.now(), loadMore: true }])
+}
+
+const newsSourceOptions = () => ["ALL", ...Array.from(new Set(newsRows.map((row: any) => clean(row.source || row.feed)).filter(Boolean))).sort()]
+
+// updt: search the loaded headlines and narrow them by topic, age, or publisher.
+const newsFilteredRows = () => {
+    const query = newsSearch.trim().toLowerCase()
+    const ageMs = newsDateFilter === "24H" ? 86400000
+        : newsDateFilter === "7D" ? 7 * 86400000
+            : newsDateFilter === "30D" ? 30 * 86400000 : 0
+    return newsRows.filter((row: any) => {
+        const category = row.category || (row.region === "GLOBAL" ? "WORLD" : "LOCAL")
+        const source = clean(row.source || row.feed)
+        if (newsCategoryFilter !== "ALL" && category !== newsCategoryFilter) return false
+        if (newsSourceFilter !== "ALL" && source !== newsSourceFilter) return false
+        if (ageMs && (!row.ts || Date.now() - row.ts > ageMs)) return false
+        if (!query) return true
+        return [row.title, row.summary, source, row.feed, row.region].some(value => clean(value).toLowerCase().includes(query))
+    })
+}
+
+const updateNewsFilters = () => {
+    const rows = newsFilteredRows()
+    newsScroll = 0
+    newsSel = rows[0]?.id || ""
+    mkModal?.requestDraw()
+}
+
+const cycleNewsSource = () => {
+    const sources = newsSourceOptions()
+    const index = sources.indexOf(newsSourceFilter)
+    newsSourceFilter = sources[(index + 1) % sources.length] || "ALL"
+    updateNewsFilters()
 }
 
 const loadNextNews = async () => {
@@ -896,8 +1026,9 @@ const loadNextNews = async () => {
         const added = await appendNewsBatch(city)
         newsUpdated = Date.now()
         if (newsRows.length > before) newsScroll = Math.max(0, before - 1)
-        newsHint = added > 0 ? `UPDATED ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}  ${newsRows.length} LOADED` : "NO NEW NEWS"
-        if (!newsRows.some((r: any) => r.id === newsSel)) newsSel = newsRows[0]?.id || ""
+        newsHint = added > 0 ? `${newsRows.length} LOADED · ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "NO NEW NEWS"
+        const visibleRows = newsFilteredRows()
+        if (!visibleRows.some((r: any) => r.id === newsSel)) newsSel = visibleRows[0]?.id || ""
     } catch (e) {
         newsHint = "NEWS FEEDS FAILED"
         print("[cyber] news more:", e)
@@ -1005,6 +1136,10 @@ const cycleTab = () => {
 
 const openNewsArticle = (id: string) => {
     tab = "news"
+    newsSearch = ""
+    newsCategoryFilter = "ALL"
+    newsDateFilter = "ANY"
+    newsSourceFilter = "ALL"
     newsSel = id
     newsScroll = 0
     ensureModal()
@@ -1043,8 +1178,8 @@ export const MarketsPanel = (mon?: any) => {
             ? (newsMini.length >= 5 ? newsMini : newsRows).slice(0, 5)
             : (pins[viewTab] || [])
         tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.mktacc, 0.95, { bold: true, glow: 0.3 })
-        area.set_tooltip_text([providerText("CoinGecko prices"),providerText("CoinGecko history"),providerText("Yahoo prices"),providerText("Yahoo history")].join("\n"))
-        tiltText(ctx,MARKET_PLANE,RX0,190,(viewTab==="news"?newsProviders():providerText(viewTab==="crypto"?"CoinGecko prices":"Yahoo prices")).slice(0,54),MONO,6,NEON.dim,.8)
+        area.set_tooltip_text(viewTab==="news"?newsProviders():[providerText("CoinGecko prices"),providerText("CoinGecko history"),providerText("Yahoo prices"),providerText("Yahoo history")].join("\n"))
+        tiltText(ctx,MARKET_PLANE,RX0,190,viewTab==="news"?`NEWS ${newsFeedStatus()}`:providerText(viewTab==="crypto"?"CoinGecko prices":"Yahoo prices").slice(0,54),MONO,6,NEON.dim,.8)
         const tabs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
         let tx = RX1 - 162
         for (const [label, id] of tabs) {
@@ -1286,9 +1421,12 @@ const drawMarketModal = (ctx: any, g: any) => {
         gtxt(ctx, x + w - 244, navY + 55, "TAB", GMONO, 8, RACC, 0.45)
         gtxt(ctx, x + w - 202, navY + 55, `PINNED ${pins[tab].length}/${MAXPIN}`, GMONO, 8.5, RACC, 0.72)
     } else {
-        gtxt(ctx, x + w - 214, navY + 55, newsBusy ? "FETCHING" : "LIVE FEEDS", GMONO, 9, RACC, 0.68)
-        gtxt(ctx, x + w - 214, navY + 42, newsHint, GMONO, 8, RACC, 0.42)
-        gtxt(ctx,x,navY+54,newsProviders().slice(0,120),GMONO,7,RACC,.7)
+        // updt: keep the feed status in the gap before LOGOUT.
+        const statusRight = logoutX - 12
+        const statusX = (text: string, size: number) => statusRight - textWidth(ctx, text, GMONO, size)
+        gtxt(ctx, statusX(newsHint, 8), navY + 42, newsHint, GMONO, 8, RACC, 0.62)
+        const feedStatus = newsFeedStatus()
+        gtxt(ctx, statusX(feedStatus, 8), navY + 56, feedStatus, GMONO, 8, RACC, 0.72)
     }
 
     if (tab !== "news") {
@@ -1310,11 +1448,85 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.rectangle(x, railY, w, railH)
         ctx.setLineWidth(1)
         ctx.stroke()
-        gtxt(ctx, x + 14, railY + 19, `//LOCATION..${String(newsCity || "LOCAL").toUpperCase()}`, GTITLE, 12, ACC, 0.9, 1)
+        const cursor = newsSearch ? "▌" : ""
+        const searchLabel = newsSearch ? `//SEARCH.. ${newsSearch}${cursor}` : "//SEARCH.. TYPE TO SEARCH LOADED NEWS"
+        ctx.save()
+        ctx.rectangle(x + 10, railY + 1, w - 380, railH - 2)
+        ctx.clip()
+        gtxt(ctx, x + 14, railY + 19, searchLabel, GTITLE, 11, newsSearch ? ACC : RACC, newsSearch ? 0.95 : 0.56, 1)
+        ctx.restore()
+        const locationLabel = `LOCAL: ${trunc(String(newsCity || "LOCAL").toUpperCase(), 18)}`
+        gtxt(ctx, x + w - 258 - textWidth(ctx, locationLabel, GMONO, 8), railY + 19, locationLabel, GMONO, 8, RACC, 0.58)
         gtxt(ctx, x + w - 98, railY + 19, newsBusy ? "FEEDING" : "NEWS LIVE", GMONO, 9, RACC, 0.7)
     }
 
-    const bodyY = railY + 38
+    if (tab === "news") {
+        const filterY = railY + 34
+        const filterH = 27
+        ctx.setSourceRGBA(0.01, 0.06, 0.08, 0.68)
+        ctx.rectangle(x, filterY, w, filterH)
+        ctx.fill()
+        ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.24)
+        ctx.rectangle(x, filterY, w, filterH)
+        ctx.stroke()
+
+        const drawFilterChip = (label: string, bx: number, bw: number, key: string, active: boolean, on: () => void) => {
+            const by = filterY + 2
+            const bh = filterH - 4
+            const hovered = g.push.hoverKey === key
+            const col: any = active ? ACC : CYAN
+            ctx.setSourceRGBA(col[0], col[1], col[2], active ? 0.14 : hovered ? 0.09 : 0.025)
+            tabPath(ctx, bx, by, bw, bh)
+            ctx.fill()
+            ctx.setSourceRGBA(col[0], col[1], col[2], active ? 0.86 : hovered ? 0.66 : 0.32)
+            ctx.setLineWidth(1)
+            tabPath(ctx, bx, by, bw, bh)
+            ctx.stroke()
+            const tw = textWidth(ctx, label, GMONO, 8)
+            gtxt(ctx, bx + Math.max(5, (bw - tw) / 2), by + 15, label, GMONO, 8, col, active ? 0.96 : 0.7)
+            g.push({ kind: "news-filter", key, hoverable: true, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
+        }
+
+        let fx = x + 8
+        for (const category of NEWS_CATEGORIES) {
+            const label = category
+            const bw = Math.ceil(textWidth(ctx, label, GMONO, 8) + 18)
+            drawFilterChip(label, fx, bw, `news-category:${category}`, newsCategoryFilter === category, () => {
+                newsCategoryFilter = category
+                updateNewsFilters()
+            })
+            fx += bw + 4
+        }
+        fx += 5
+        const dateLabel = `AGE ${newsDateFilter}`
+        const dateW = Math.ceil(textWidth(ctx, dateLabel, GMONO, 8) + 18)
+        drawFilterChip(dateLabel, fx, dateW, "news-date-filter", newsDateFilter !== "ANY", () => {
+            const index = NEWS_DATE_FILTERS.indexOf(newsDateFilter)
+            newsDateFilter = NEWS_DATE_FILTERS[(index + 1) % NEWS_DATE_FILTERS.length]
+            updateNewsFilters()
+        })
+        fx += dateW + 4
+        const sourceLabel = `SRC ${trunc(newsSourceFilter, 18)}`
+        const sourceW = 150
+        drawFilterChip(sourceLabel, fx, sourceW, "news-source-filter", newsSourceFilter !== "ALL", cycleNewsSource)
+        const filteredCount = newsFilteredRows().length
+        const countLabel = `${filteredCount}/${newsRows.length}`
+        const countW = textWidth(ctx, countLabel, GMONO, 8)
+        const resetLabel = "RESET"
+        const clearW = Math.ceil(textWidth(ctx, resetLabel, GMONO, 8) + 18)
+        const clearX = x + w - countW - clearW - 34
+        const filtersOn = !!newsSearch || newsCategoryFilter !== "ALL" || newsDateFilter !== "ANY" || newsSourceFilter !== "ALL"
+        drawFilterChip(resetLabel, clearX, clearW, "news-filter-reset", filtersOn, () => {
+            newsSearch = ""
+            newsCategoryFilter = "ALL"
+            newsDateFilter = "ANY"
+            newsSourceFilter = "ALL"
+            updateNewsFilters()
+        })
+        gtxt(ctx, x + w - countW - 10, filterY + 17, countLabel, GMONO, 8, RACC, 0.68)
+    }
+
+    const bodyY = railY + (tab === "news" ? 68 : 38)
     const bodyH = y + h - bodyY - 8
     const listW = tab === "news" ? Math.round(w * 0.44) : Math.round(w * 0.41)
     const detailX = x + listW + 14
@@ -1322,6 +1534,7 @@ const drawMarketModal = (ctx: any, g: any) => {
 
     if (tab === "news") {
         const rows = newsDisplayRows()
+        const filteredRows = newsFilteredRows()
         const rowsH = 62
         const gap = 6
         const step = rowsH + gap
@@ -1329,7 +1542,7 @@ const drawMarketModal = (ctx: any, g: any) => {
         const maxS = Math.max(0, rows.length - vis)
         newsScroll = clamp(newsScroll, 0, maxS)
         const start = newsScroll
-        const selected = newsRows.find((r: any) => r.id === newsSel) || newsRows[0] || null
+        const selected = filteredRows.find((r: any) => r.id === newsSel) || filteredRows[0] || null
         if (selected && selected.id !== newsSel) newsSel = selected.id
 
         ctx.save()
@@ -1400,7 +1613,7 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.restore()
         drawScrollbar(ctx, x + listW - 7, bodyY, bodyH, rows.length, vis, newsScroll, CYAN)
 
-        const article = selected || newsRows[0]
+        const article = selected
         ctx.setSourceRGBA(0.01, 0.04, 0.06, 0.76)
         ctx.rectangle(detailX, bodyY, detailW, bodyH)
         ctx.fill()
@@ -1410,12 +1623,14 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.stroke()
 
         if (article) {
+            if (!article.summary) requestArticleDescription(article)
             const titleLines = wrapLines(ctx, article.title, detailW - 24, TITLE, 18, 3)
             let ty = bodyY + 30
             for (const ln of titleLines) { gtxt(ctx, detailX + 12, ty, ln, TITLE, 18, ACC, 0.98, 1, 0.2); ty += 22 }
             gtxt(ctx, detailX + 12, ty + 12, `${article.source}  •  ${article.region}  •  ${relTime(article.ts)}`, GMONO, 9, RACC, 0.72)
             gtxt(ctx, detailX + 12, ty + 29, article.published || "", GMONO, 8, RACC, 0.55)
-            const lines = wrapLines(ctx, article.summary || article.title, detailW - 24, GTITLE, 12, 10)
+            const description = article.summary || (article.summaryLoading ? "FETCHING SOURCE DESCRIPTION..." : "This feed did not include a description. Open the article for the full story.")
+            const lines = wrapLines(ctx, description, detailW - 24, GTITLE, 12, 10)
             let sy = ty + 54
             for (const ln of lines) { gtxt(ctx, detailX + 12, sy, ln, GTITLE, 12, ACC, 0.9, 0, 0.05); sy += 18 }
             const link = "OPEN ARTICLE"
@@ -1433,7 +1648,10 @@ const drawMarketModal = (ctx: any, g: any) => {
                 on: () => openUrl(article.url),
             })
         } else {
-            gtxt(ctx, detailX + 12, bodyY + 32, newsBusy ? "FETCHING NEWS" : "NO NEWS FOUND", TITLE, 16, ACC, 0.84, 1, 0.1)
+            const emptyTitle = newsBusy ? "FETCHING NEWS" : newsRows.length ? "NO HEADLINES MATCH" : "NO NEWS FOUND"
+            const emptyHint = newsRows.length ? "Change the filters or clear the search." : "Try loading the feeds again in a moment."
+            gtxt(ctx, detailX + 12, bodyY + 32, emptyTitle, TITLE, 16, ACC, 0.84, 1, 0.1)
+            gtxt(ctx, detailX + 12, bodyY + 54, emptyHint, GMONO, 9, RACC, 0.7)
         }
     } else {
         const listRows = marketDisplayRows(tab)
@@ -1672,10 +1890,18 @@ const ensureModal = () => {
                 if (k === Gdk.KEY_Up) { newsScroll = clamp(newsScroll - 1, 0, Math.max(0, newsDisplayRows().length - 1)); mkModal.requestDraw(); return }
                 if (k === Gdk.KEY_Down) { newsScroll = clamp(newsScroll + 1, 0, Math.max(0, newsDisplayRows().length - 1)); mkModal.requestDraw(); return }
                 if (k === Gdk.KEY_Return || k === Gdk.KEY_KP_Enter) {
-                    const cur = newsRows.find((r: any) => r.id === newsSel) || newsRows[0]
+                    const visibleRows = newsFilteredRows()
+                    const cur = visibleRows.find((r: any) => r.id === newsSel) || visibleRows[0]
                     if (cur) openUrl(cur.url)
                     return
                 }
+                if (k === Gdk.KEY_BackSpace) newsSearch = newsSearch.slice(0, -1)
+                else {
+                    const u = Gdk.keyval_to_unicode(k)
+                    if (u >= 32 && u < 0x10000) newsSearch += String.fromCharCode(u)
+                    else return
+                }
+                updateNewsFilters()
                 return
             }
             if (k === Gdk.KEY_BackSpace) mQuery = mQuery.slice(0, -1)

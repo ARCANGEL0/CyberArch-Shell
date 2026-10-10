@@ -12,22 +12,26 @@ export const createProviderClient=({fetch,store,now=()=>Date.now()})=>{
   const job=(async()=>{
    await previous;
    try{
-    const cached=await store.read(key),meta=await store.read(`${provider}:status`)||{};
+    const cached=await store.read(key),meta=await store.read(`${provider}:status`)||{},requestMeta=await store.read(`${key}:status`)||{};
     let good=false;try{good=cached&&Number.isFinite(cached.updatedAt)&&cached.updatedAt<=now()&&validate(cached.value)}catch{}
     const fallback=(error,retryAt=0)=>({provider,value:good?cached.value:null,updatedAt:good?cached.updatedAt:null,
      state:good?(now()-cached.updatedAt>maxAge*1000?'stale':'cached'):(retryAt>now()?'rate-limited':'error'),error:String(error||''),retryAt});
     if(meta.retryAt>now())return fallback(meta.error,meta.retryAt);
+    if(requestMeta.retryAt>now())return fallback(requestMeta.error,requestMeta.retryAt);
     if(good&&!meta.error&&now()-cached.updatedAt<maxAge*1000)return fallback('');
     let response;
     try{
      response=await fetch(url);
      if(response.status<200||response.status>=300)throw Error(`HTTP ${response.status}`);
      const value=parse(response.body);if(!validate(value))throw Error('Invalid provider payload');
-     const updatedAt=now();await store.write(key,{value,updatedAt});await store.write(`${provider}:status`,{failures:0,retryAt:0,error:''});
+     const updatedAt=now();await store.write(key,{value,updatedAt});await store.write(`${provider}:status`,{failures:0,retryAt:0,error:''});if(requestMeta.error||requestMeta.retryAt)await store.write(`${key}:status`,{failures:0,retryAt:0,error:''});
      return {provider,value,updatedAt,state:'live',error:'',retryAt:0};
     }catch(error){
-     const failures=Math.min(7,(meta.failures||0)+1),retryAt=now()+retryDelay(response?.headers?.['retry-after'],failures,now());
-     await store.write(`${provider}:status`,{failures,retryAt,error:String(error)});
+     const providerFailure=!response||response.status===429||response.status>=500;
+     const statusKey=providerFailure?`${provider}:status`:`${key}:status`;
+     const previous=providerFailure?meta:requestMeta;
+     const failures=Math.min(7,(previous.failures||0)+1),retryAt=now()+retryDelay(response?.headers?.['retry-after'],failures,now());
+     await store.write(statusKey,{failures,retryAt,error:String(error)});
      return fallback(error,retryAt);
     }
    }finally{release()}
