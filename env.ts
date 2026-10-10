@@ -25,20 +25,36 @@ export const SCREEN_HEIGHT = geo.height
 // Instead hardcoded min/max setups, now the HUD is scalable according to screen HxW, adjusting its own size to make sure it maintains the same layout desing nevertheless the screen used
 
 const scaleEnv = parseFloat(GLib.getenv("CYBER_SCALE") || "")
-const autoScale = (w: number, h: number) => Math.min(w / 1920, h / 1080)
+const autoScale = (w: number, h: number) => h > w
+    ? Math.min(w / 1080, h / 1920)
+    : Math.min(w / 1920, h / 1080)
 export const SCALE = scaleEnv > 0 ? scaleEnv : autoScale(SCREEN_WIDTH, SCREEN_HEIGHT)
+
+// updt: use the current monitor's size and scale instead of the primary monitor's.
+export const monitorSize = (mon: any) => {
+ try {
+  const g = mon?.get_geometry?.()
+  if (g && g.width > 0 && g.height > 0) return { width: g.width, height: g.height }
+ } catch {}
+ return { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }
+}
 
 export const scaleOf = (mon: any): number => {
  if (scaleEnv > 0) return scaleEnv
- try { const g = mon?.get_geometry?.(); if (g && g.width > 0 && g.height > 0) return autoScale(g.width, g.height) } catch {}
- return SCALE
+ const { width, height } = monitorSize(mon)
+ return autoScale(width, height)
 }
+export const monitorLayoutSize = (mon: any) => {
+ const { width, height } = monitorSize(mon)
+ const S = scaleOf(mon)
+ return { width: Math.round(width / S), height: Math.round(height / S) }
+}
+export const LAYOUT_WIDTH = Math.round(SCREEN_WIDTH / SCALE)
+export const LAYOUT_HEIGHT = Math.round(SCREEN_HEIGHT / SCALE)
 export const winScale = (w: any): number => { try { return scaleOf((w as any)?.gdkmonitor) } catch { return SCALE } }
 export const monW = (w: any): number => {
- try { const g = (w as any)?.gdkmonitor?.get_geometry?.(); if (g && g.width > 0) return g.width } catch {}
- return SCREEN_WIDTH
+ return monitorSize((w as any)?.gdkmonitor).width
 }
 export const monH = (w: any): number => {
- try { const g = (w as any)?.gdkmonitor?.get_geometry?.(); if (g && g.height > 0) return g.height } catch {}
- return SCREEN_HEIGHT
+ return monitorSize((w as any)?.gdkmonitor).height
 }

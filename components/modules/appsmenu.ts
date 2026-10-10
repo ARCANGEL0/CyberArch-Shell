@@ -300,7 +300,11 @@ export const openWheel = (cfg, entries) => {
   wheelCfg = cfg
   apps = entries; query = ""; filtered = apps.slice(); searchFlash = 0; scroll = 0; scrollTarget = 0
   active = true; intro = 1; introTarget = 1; lastFocusIdx = -1
-  try { menuWin.gdkmonitor = activeMonitor() } catch {}
+  try {
+      menuWin.gdkmonitor = activeMonitor()
+      const S = winScale(menuWin)
+      menuArea?.set_size_request(Math.round(monW(menuWin) / S), Math.round(monH(menuWin) / S))
+  } catch {}
   try { menuWin.keymode = cfg.keymode ?? Keymode.ON_DEMAND } catch {}
   menuWin.visible = true; try { menuWin.present?.() } catch {}
   menuArea?.queue_draw()
@@ -323,7 +327,18 @@ export const closeWheel = () => {
   const r = wheelCfg.onReset; if (r) r()
 }
 let cachedDisplay: string | undefined
+const sessionDisplay = (): string | null => {
+ try {
+     const [ok, out] = GLib.spawn_command_line_sync("systemctl --user show-environment")
+     if (!ok) return null
+     const line = new TextDecoder().decode(out).split("\n").find(line => line.startsWith("DISPLAY="))
+     const display = line?.slice(8)
+     return display && /^[^:]*:\d/.test(display) ? display : null
+ } catch { return null }
+}
 const resolveDisplay = (): string | null => {
+ const session = sessionDisplay()
+ if (session) { cachedDisplay = session; return session }
  if (cachedDisplay) return cachedDisplay
  const env = GLib.getenv("DISPLAY")
  if (env && /^[^:]*:\d/.test(env)) { cachedDisplay = env; return env }

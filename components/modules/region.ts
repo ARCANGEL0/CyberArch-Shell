@@ -435,7 +435,7 @@ export const triggerRegion = (payload = "", record = false) => {
  startT = Date.now()
  rWin.visible = true
  stopLoop(); ensureLoop()
- showToast(record ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", { x: -1, y: 34, w: 540, h: 56, col: F25, textCol: F25 })
+ showToast(record ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", { x: -1, y: 34, w: 540, h: 56, col: F25, textCol: F25, monitor: (rWin as any).gdkmonitor })
 }
 
 export const RegionWindow = () => {

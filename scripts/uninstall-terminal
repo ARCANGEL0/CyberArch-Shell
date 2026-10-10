@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+THEME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+UNINSTALL="$THEME/uninstall.sh"
+term=()
+
+if [ -n "${TERMINAL:-}" ]; then
+    read -r -a term <<< "$TERMINAL"
+    command -v "${term[0]:-}" >/dev/null 2>&1 || term=()
+fi
+
+if [ "${#term[@]}" -eq 0 ]; then
+    for candidate in kitty foot wezterm alacritty konsole gnome-terminal xterm; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            term=("$candidate")
+            break
+        fi
+    done
+fi
+
+if [ "${#term[@]}" -eq 0 ]; then
+    command -v notify-send >/dev/null 2>&1 && notify-send "CyberArch uninstall" "No terminal emulator was found."
+    exit 1
+fi
+
+case "$(basename "${term[0]}")" in
+    wezterm) setsid "${term[@]}" start -- bash "$UNINSTALL" --confirmed --terminal >/dev/null 2>&1 & ;;
+    gnome-terminal) setsid "${term[@]}" -- bash "$UNINSTALL" --confirmed --terminal >/dev/null 2>&1 & ;;
+    *) setsid "${term[@]}" -e bash "$UNINSTALL" --confirmed --terminal >/dev/null 2>&1 & ;;
+esac

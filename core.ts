@@ -27,7 +27,7 @@ import {
 import { RegionWindow, triggerRegion, triggerRecordRegion } from "./components/modules/region.ts"
 import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
-import { CModalWindows, toggleModal, ThemeSettingsWindow } from "./components/modules/cmodal.ts"
+import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
 import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
@@ -155,12 +155,75 @@ const deferShape = (win) => {
  return GLib.SOURCE_REMOVE
  })
 }
+const monitorWindows = new Map<any, { key: string; wins: any[] }>()
+const wiredHudWins = new WeakSet<any>()
+const watchedMonitors = new WeakSet<any>()
+const wireHudWindow = (win) => {
+ if (!win || wiredHudWins.has(win)) return
+ wiredHudWins.add(win)
+ try { win.connect("size-allocate", () => deferShape(win)) } catch {}
+ try { win.connect("map", () => deferShape(win)) } catch {}
+}
+const monitorKey = (mon) => {
+ try {
+ const g = mon.get_geometry()
+ return `${g.x}:${g.y}:${g.width}:${g.height}:${scaleOf(mon)}`
+ } catch { return "unknown" }
+}
+const makeMonitorWindows = (mon) => {
+ const wins: any[] = []
+ const S = scaleOf(mon)
+ wins.push(surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon)))
+ { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true; wins.push(sw) }
+ { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true; wins.push(mw) }
+ { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true; wins.push(hw) }
+ { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true; wins.push(tw) }
+ { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw); wins.push(lw) }
+ for (const win of wins) wireHudWindow(win)
+ return wins
+}
+const destroyMonitorWindows = (wins) => {
+ for (const win of wins) {
+ const i = hudWins.indexOf(win)
+ if (i >= 0) hudWins.splice(i, 1)
+ try { win.destroy?.() } catch {}
+ }
+}
+const syncMonitorWindows = () => {
+ const monitors = Array.from((App as any).get_monitors())
+ const current = new Set(monitors)
+ for (const [mon, entry] of monitorWindows) {
+ const key = current.has(mon) ? monitorKey(mon) : null
+ if (key === entry.key) continue
+ destroyMonitorWindows(entry.wins)
+ monitorWindows.delete(mon)
+ }
+ for (const mon of monitors) {
+ if (!monitorWindows.has(mon)) {
+ const key = monitorKey(mon)
+ monitorWindows.set(mon, { key, wins: makeMonitorWindows(mon) })
+ }
+ }
+ for (const mon of monitors) {
+ try {
+ if (!watchedMonitors.has(mon)) {
+ watchedMonitors.add(mon)
+ try { mon.connect("notify::geometry", scheduleMonitorSync) } catch {}
+ try { mon.connect("notify::scale-factor", scheduleMonitorSync) } catch {}
+ }
+ } catch {}
+ }
+ applyHudInputAll()
+}
+let monitorSyncTimer: any = null
+const scheduleMonitorSync = () => {
+ if (monitorSyncTimer) monitorSyncTimer.cancel()
+ monitorSyncTimer = timeout(150, () => { monitorSyncTimer = null; syncMonitorWindows() })
+}
 const refreshWins = () => Promise.all([execAsync(["hyprctl", "clients", "-j"]), execAsync(["hyprctl", "monitors", "-j"])]).then(([co, mo]) => {
  try {
  const active = new Set<number>()
  const monitors = JSON.parse(mo)
- const power = new Map<string, boolean>(monitors.map(m => [m.name, m.dpmsStatus !== false && !m.disabled]))
- if (JSON.stringify([...power]) !== JSON.stringify([...monitorPower])) { monitorPower = power; queueMonitorSync() }
  for (const m of monitors) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
  const next = JSON.parse(co).filter((c: any) => {
  if (!c || !c.mapped || c.hidden || !c.size || !(c.size[0] > 0) || !c.at) return false
@@ -207,7 +270,7 @@ const wireSocket = () => {
   if (ev === "workspace") setWorkspaceBadge(data.trim())
   else if (ev === "workspacev2") setWorkspaceBadge(data.split(",")[1]?.trim() || data.split(",")[0]?.trim())
   else if (ev === "focusedmon") setWorkspaceBadge(data.split(",")[1]?.trim())
-  if (ev.startsWith("monitoradded") || ev.startsWith("monitorremoved")) { queueMonitorSync(); pickRefresh() }
+  if (ev.startsWith("monitoradded") || ev.startsWith("monitorremoved")) { scheduleMonitorSync(); pickRefresh() }
   if (EVENT_HITS.has(ev)) pickRefresh()
   pump()
   } catch { disconnect() }
@@ -234,63 +297,6 @@ const toggleHudTop = () => {
 
 
 
-
-
-const monitorHuds = new Map<string, { mon: any, wins: any[], online: boolean, geometry: string }>()
-let monitorPower = new Map<string, boolean>()
-let monitorSync = null
-const queueMonitorSync = () => {
- if (monitorSync) monitorSync.cancel()
- monitorSync = timeout(200, () => { monitorSync = null; syncMonitorHud() })
-}
-const createMonitorHud = (mon) => {
- const first = hudWins.length
- const S = scaleOf(mon)
- surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
- { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
- { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
- { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
- { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
- for (const w of hudWins.slice(first)) {
- w.connect("size-allocate", () => deferShape(w))
- w.connect("map", () => deferShape(w))
- }
- return hudWins.slice(first)
-}
-
-const syncMonitorHud = () => {
- const present = new Set<string>()
- const mons = (App as any).get_monitors()
- for (let i = 0; i < mons.length; i++) {
- const mon = mons[i]
- const name = Gdk.Screen.get_default().get_monitor_plug_name(i) || `${mon.get_manufacturer()}:${mon.get_model()}:${i}`
- present.add(name)
- const geo = mon.get_geometry()
- const geometry = `${geo.x},${geo.y},${geo.width},${geo.height},${mon.get_scale_factor()}`
- let group = monitorHuds.get(name)
- if (!group) {
- group = { mon, wins: createMonitorHud(mon), online: false, geometry: "" }
- monitorHuds.set(name, group)
- }
- const online = monitorPower.get(name) !== false
- if (online !== group.online || mon !== group.mon || geometry !== group.geometry) {
- for (const w of group.wins) {
- w.visible = false
- w._monitorDetached = !online
- w.gdkmonitor = mon
- w.layer = hudOnTop ? Layer.TOP : Layer.BOTTOM
- if (online && !isRecording()) w.visible = true
- deferShape(w)
- }
- }
- group.mon = mon; group.online = online; group.geometry = geometry
- }
- for (const [name, group] of monitorHuds) if (!present.has(name)) {
- group.online = false
- for (const w of group.wins) { w._monitorDetached = true; w.visible = false }
- }
-}
 
 
 App.start({
@@ -392,11 +398,11 @@ App.start({
  applyWmRules()
  applyWmFromTheme()
 
- syncMonitorHud()
+ syncMonitorWindows()
+ // Refresh shell windows when the monitor setup changes.
  const display = Gdk.Display.get_default()
- display.connect("monitor-added", queueMonitorSync)
- display.connect("monitor-removed", queueMonitorSync)
- Gdk.Screen.get_default().connect("monitors-changed", queueMonitorSync)
+ try { display?.connect("monitor-added", scheduleMonitorSync) } catch {}
+ try { display?.connect("monitor-removed", scheduleMonitorSync) } catch {}
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  passthrough(AurBarWindow())
@@ -410,12 +416,11 @@ App.start({
  RegionWindow()
  ToastWindow()
  CModalWindows()
- ThemeSettingsWindow()
  AppsMenuWindow()
  PlayerWindow()
  registerHudWindows(hudWins)
  execAsync(["sh", "-c", `'${CYBER_DIR}/scripts/appvol-keeper'`]).catch(() => {})
-
+ for (const w of hudWins) wireHudWindow(w)
  timeout(400, applyHudInputAll); timeout(1200, applyHudInputAll)
  refreshWins(); wireSocket()
  execAsync(["hyprctl", "activeworkspace", "-j"]).then((s) => { try { setWorkspaceBadge(JSON.parse(s).name) } catch {} }).catch(() => {})

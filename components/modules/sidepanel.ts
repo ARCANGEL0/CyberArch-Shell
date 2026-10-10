@@ -12,6 +12,7 @@ import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
+import { jsonProvider, providerText } from "./providers.ts"
 
 const Cairo = (imports).cairo
 
@@ -181,7 +182,7 @@ const fetchMap = () => {
 const refreshWeather = async () => {
  try {
  const url = `https://api.open-meteo.com/v1/forecast?latitude=${wxLat}&longitude=${wxLon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto`
- const j = JSON.parse(await execAsync(["curl", "-sf", "--max-time", "9", url]))
+ const j = await jsonProvider("Open-Meteo",url,{maxAge:1800,validate:(value:any)=>Number.isFinite(value?.current?.temperature_2m)&&Array.isArray(value?.daily?.time)})
  const c = j.current
  if (c) { wxTemp = `${Math.round(c.temperature_2m)}°`; wxFeels = `${Math.round(c.apparent_temperature)}°`; wxDesc = WMO[c.weather_code] || "—"; wxHum = `${Math.round(c.relative_humidity_2m)}`; wxWind = `${Math.round(c.wind_speed_10m)}` }
  const dd = j.daily; forecast.length = 0
@@ -274,6 +275,7 @@ const drawOverlay = (ctx, now) => {
  const FORECOL = mapAccent.forecast || NETCOL
  tiltText(ctx, minimap, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, FORECOL, 0.95, { bold: true, glow: 0.3 })
  tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
+ tiltText(ctx,minimap,MX0+4,MY1+5,providerText("Open-Meteo").slice(0,70),MONO,6,FORECOL,.8)
  tiltText(ctx, minimap, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, MAPACC, 0.52, { bold: true })
  tiltText(ctx, minimap, MX1, MY1 + 16, fmtDate(now), MONO, 9.5, FORECOL, 0.9, { bold: true, align: "r", glow: 0.38 })
  const fy = MY1 + 36
@@ -516,6 +518,7 @@ const ensureForecastModal = () => {
  const x0 = g.X + 18, y0 = g.Y + GHEAD + 6, lw = 250
  gtxt(ctx, x0, y0 + 12, (geoCity || wxName || "NIGHT CITY").slice(0, 34).toUpperCase(), GTITLE, 11, YEL, 0.95, 1, 0.35)
  gtxt(ctx, x0, y0 + 27, geoCoords, GMONO, 8, ARA, 0.45)
+ gtxt(ctx,x0+lw+14,y0+27,providerText("Open-Meteo").slice(0,90),GMONO,7,ARA,.8)
  g.push({ kind: "city", bx0: x0 - 6, by0: y0 - 2, bx1: x0 + lw, by1: y0 + 32, on: () => {
  const t = Date.now()
  if (t - fcCityTap < 450) { fcCityTap = 0; fcModal.close(); openCityModal() } else fcCityTap = t

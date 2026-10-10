@@ -2,7 +2,7 @@ import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
-import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
+import { CYBER_DIR, winScale } from "../../env.ts"
 import { TITLE, MONO, NAVINE, NEUE, ORBITRON } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
@@ -301,7 +301,7 @@ const add = (n: any) => {
 }
 
 export const NotifPopupWindow = () => {
-    area = DrawingArea({}); area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * SCALE), Math.round((MARGIN_T + plane.height + 20) * SCALE))
+    area = DrawingArea({}); area.set_size_request(Math.round(MARGIN_L + plane.width + 20), Math.round(MARGIN_T + plane.height + 20))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     win = Window({

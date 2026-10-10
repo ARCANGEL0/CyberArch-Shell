@@ -1122,34 +1122,11 @@ fi
 
 hdr "HYPRLAND · Xwayland DISPLAY env"
 if [ -f "$HYLUA" ]; then
-  XDISP=""
-  if [ -n "${DISPLAY:-}" ]; then
-    XDISP="${DISPLAY##*:}"
-    XDISP=":${XDISP%%.*}"
-  else
-    for xsock in "${XDG_RUNTIME_DIR:-/nonexistent}"/X11-unix/X* /tmp/.X11-unix/X*; do
-      [ -S "$xsock" ] || continue
-      xn="${xsock##*/X}"
-      case "$xn" in ''|*[!0-9]*) continue;; esac
-      XDISP=":$xn"
-      break
-    done
-  fi
-  [ -n "$XDISP" ] || XDISP=":0"
-  case "$XDISP" in
-    ':'[0-9]*)
-      XTMP="$(mktemp)"
-      grep -v '^hl\.env("DISPLAY"' "$HYLUA" > "$XTMP" 2>/dev/null || true
-      { printf 'hl.env("DISPLAY", "%s")\n' "$XDISP"; cat "$XTMP"; } > "$HYLUA"
-      rm -f "$XTMP"
-      ok "pinned DISPLAY=$XDISP in $HYLUA |::| Xwayland apps (Steam, etc.) launched from the shell now reach X"
-      ;;
-    *)
-      warn "could not resolve an X display |::| skipped DISPLAY injection."
-      ;;
-  esac
+  # updt: remove the old install-time guess; Hyprland assigns DISPLAY when XWayland starts.
+  sed -i '/^hl\.env("DISPLAY", ":[0-9][0-9]*")$/d' "$HYLUA"
+  ok "removed the old install-time DISPLAY pin"
 else
-  warn "no $HYLUA to inject DISPLAY into |::| skipped (theme not loaded here)."
+  warn "no $HYLUA to clean up |::| skipped old DISPLAY pin removal."
 fi
 
 hdr "HYPRLAND · user.lua template"
@@ -1657,6 +1634,18 @@ step "installing/refreshing $MESA_PKGS before restart…"
 sudo pacman -S --needed $MESA_PKGS
 step "re-asserting qt6-multimedia (quickshell lock screen needs it)…"
 sudo pacman -S --needed qt6-multimedia
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cyberarch"
+STATE_FILE="$STATE_DIR/install-state"
+if [ ! -f "$STATE_FILE" ]; then
+  mkdir -p "$STATE_DIR"
+  # Keep the original greeter choice across reinstalls; the uninstaller won't guess.
+  DM_CHANGED=no
+  [ "$LOCK_STACK" = 1 ] && [ "$CUR_DM" != sddm ] && DM_CHANGED=yes
+  printf 'display_manager_changed=%s\ndisplay_manager_before=%s\n' "$DM_CHANGED" "${CUR_DM:-none}" > "$STATE_FILE.tmp"
+  chmod 600 "$STATE_FILE.tmp"
+  mv -f -- "$STATE_FILE.tmp" "$STATE_FILE"
+fi
 
 printf "${RED}${B}"
 cat <<'EOF'
