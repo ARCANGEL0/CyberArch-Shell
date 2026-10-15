@@ -34,6 +34,8 @@ import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
+import { hudLayout, onHudLayout, placeHudWindow } from './components/modules/hud-layout.ts'
+import { createSurfaces } from './components/modules/hud-layout-policy.js'
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = `${COMPONENTS_DIR}/style/cyber.css`
@@ -48,23 +50,9 @@ const compileCss = async () => {
 }
 
 const hudWins = []
-const WRAP_MARGINS: Record<string, [number, number, number, number]> = {
- monitors: [20, 0, 0, 20],
- sidepanel: [26, 28, 0, 0],
- toggles: [0, 0, 0, -5],
-}
 const surface = (mon, name, anchor, child, extra = {}) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, name)
  const wrap = Box({ className: `aug-wrap ${name}-wrap`, child })
- const m = WRAP_MARGINS[name]
- if (m) {
- try {
- wrap.set_margin_top(Math.round(m[0] * S))
- wrap.set_margin_right(Math.round(m[1] * S))
- wrap.set_margin_bottom(Math.round(m[2] * S))
- wrap.set_margin_left(Math.round(m[3] * S))
- } catch {}
- }
  const w = Window({
  name,
  className: `aug ${name}`,
@@ -75,6 +63,7 @@ const surface = (mon, name, anchor, child, extra = {}) => {
  child: wrap,
  ...extra,
  })
+ placeHudWindow(w, mon, name, S)
  hudWins.push(w)
  return w
 }
@@ -171,14 +160,13 @@ const monitorKey = (mon) => {
  } catch { return "unknown" }
 }
 const makeMonitorWindows = (mon) => {
- const wins: any[] = []
- const S = scaleOf(mon)
- wins.push(surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon)))
- { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true; wins.push(sw) }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true; wins.push(mw) }
- { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true; wins.push(hw) }
- { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true; wins.push(tw) }
- { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw); wins.push(lw) }
+ const factories = { monitors: Monitors, sidepanel: SidePanel, markets: MarketsPanel, hordock: HorizDock, toggles: Toggles }
+ const wins = createSurfaces(hudLayout(), name => {
+  const win = name === 'launcher' ? LauncherWindow(mon) : surface(mon, name, Anchor.TOP | Anchor.LEFT, factories[name](mon))
+  if (name === 'launcher') hudWins.push(win)
+  if (name !== 'monitors') win._rectHit = true
+  return win
+ })
  for (const win of wins) wireHudWindow(win)
  return wins
 }
@@ -189,6 +177,11 @@ const destroyMonitorWindows = (wins) => {
  try { win.destroy?.() } catch {}
  }
 }
+onHudLayout(() => {
+ for (const entry of monitorWindows.values()) destroyMonitorWindows(entry.wins)
+ monitorWindows.clear()
+ syncMonitorWindows()
+})
 const syncMonitorWindows = () => {
  const monitors = Array.from((App as any).get_monitors())
  const current = new Set(monitors)
