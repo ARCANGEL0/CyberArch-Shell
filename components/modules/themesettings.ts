@@ -21,7 +21,8 @@ import {
 } from "./userbinds.ts"
 import { isModKey, modsFrom, keyName, modNameOf, orderMods, canon } from "./cyberdeck.ts"
 import { stopModalStats } from "./sys.ts"
-import { openHudLayoutEditor } from './hud-layout-editor.ts'
+import { hudLayout, saveHudLayout } from './hud-layout.ts'
+import { layoutProfile, COMPONENTS, ANCHORS } from './hud-layout-policy.js'
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // hyprland has to be out of the way while the modal is listening for a combo,
@@ -2181,7 +2182,8 @@ export const drawConfig = (ctx, g, x, y, w) => {
     drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col, "", 13)
     drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col, "", 13)
 
-    drawBtn(ctx, gate, x, y + bh + 8, w, 32, 'HUD PROFILES / COMPONENT LAYOUT', openHudLayoutEditor, false, g.col, '', 13)
+    // dropped the external gtk window from pr #33, layout settings live in-menu now, theme styled
+    drawBtn(ctx, gate, x, y + bh + 8, w, 32, 'HUD LAYOUT', () => openHudLayout(), false, g.col, '', 13)
     const visTop = y + bh + 52, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; label: string; row?: CfgRow; keys?: string[] }[] = []
@@ -2245,6 +2247,147 @@ export const drawConfig = (ctx, g, x, y, w) => {
             drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, METRIC_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
+    }
+}
+
+let hudLayoutOpen = false
+let hudDraft: any = null
+let hudStatus = ""
+let hudStatusOk = true
+let hudProfileOpen = false
+let hudCornerOpen: string | null = null
+const HUD_PRESETS = ["Minimal", "Balanced", "Cinematic"]
+const HUD_LABELS: Record<string, string> = { hordock: "HORIZ DOCK", toggles: "VERT DOCK" }
+
+// hud layout as a sub-view in-menu now, wallpaper browser style. esc/back closes, draft gets
+// tossed unless u hit apply. the old editor window from pr #33 still exists for the tests,
+// the shell just dont open it anymore
+const openHudLayout = () => {
+    hudDraft = JSON.parse(JSON.stringify(hudLayout()))
+    hudStatus = ""
+    hudProfileOpen = false
+    hudCornerOpen = null
+    hudLayoutOpen = true
+    ctrl.requestDraw()
+}
+
+const closeHudLayout = () => {
+    hudLayoutOpen = false
+    hudDraft = null
+    hudStatus = ""
+    hudProfileOpen = false
+    hudCornerOpen = null
+    ctrl.requestDraw()
+}
+
+const hudMarkCustom = () => { hudDraft.profile = "Custom"; ctrl.requestDraw() }
+
+const drawHudLayout = (ctx, g, x, y, w) => {
+    const gate = (hudProfileOpen || hudCornerOpen) ? noPush : g.push
+    drawBtn(ctx, gate, x, y, 90, 26, "◂ BACK", closeHudLayout, false, g.col, "", 10)
+    txt(ctx, x + 104, y + 17, "// HUD LAYOUT", MONO, 10, g.accent, 0.9, 1)
+
+    if (hudStatus) {
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
+        txt(ctx, x + w - ctx.textExtents(hudStatus).width - 4, y + 17, hudStatus, MONO, 8.5,
+            hudStatusOk ? [0.42, 1, 0.6] : [1, 0.4, 0.44], 0.95, 1)
+    }
+
+    const py = y + 42
+    txt(ctx, x + 16, py + 19, "PROFILE", TITLE, 12, g.col, 0.9, 1)
+    drawBtn(ctx, gate, x + 112, py, 168, 26, `${hudDraft.profile}   ${hudProfileOpen ? "▴" : "▾"}`, () => {
+        hudProfileOpen = !hudProfileOpen
+        ctrl.requestDraw()
+    }, hudProfileOpen, g.col, "", 11.5)
+
+    txt(ctx, x + 320, py + 19, "GLOBAL SCALE", TITLE, 12, g.col, 0.9, 1)
+    drawSlider(ctx, gate, x + 486, py + 13, 190, (hudDraft.globalScale - 0.25) / 1.75, (nv) => {
+        hudDraft.globalScale = Math.round((0.25 + nv * 1.75) * 100) / 100
+        hudMarkCustom()
+    })
+    txt(ctx, x + 688, py + 19, hudDraft.globalScale.toFixed(2), MONO, 11, g.accent, 0.9)
+
+    const visTop = py + 46, visBottom = g.Y + g.h - 46
+    const cName = x + 16, cVis = x + Math.round(w * 0.17), cScl = x + Math.round(w * 0.25)
+    const cCor = x + Math.round(w * 0.46), cX = x + Math.round(w * 0.64), cY = x + Math.round(w * 0.82)
+    txt(ctx, cName, visTop + 14, "COMPONENT", MONO, 9, g.col, 0.5)
+    txt(ctx, cVis, visTop + 14, "VISIBLE", MONO, 9, g.col, 0.5)
+    txt(ctx, cScl, visTop + 14, "SCALE", MONO, 9, g.col, 0.5)
+    txt(ctx, cCor, visTop + 14, "CORNER", MONO, 9, g.col, 0.5)
+    txt(ctx, cX, visTop + 14, "X OFFSET", MONO, 9, g.col, 0.5)
+    txt(ctx, cY, visTop + 14, "Y OFFSET", MONO, 9, g.col, 0.5)
+
+    const rowH = 40
+    COMPONENTS.forEach((name, i) => {
+        const ry = visTop + 26 + i * rowH
+        if (ry + rowH > visBottom) return
+        const c = hudDraft.components[name]
+        txt(ctx, cName, ry + 22, (HUD_LABELS[name] ?? name).toUpperCase(), TITLE, 11.5, g.col, 0.88, 1)
+        drawToggle(ctx, gate, cVis, ry + 7, c.visible, () => { c.visible = !c.visible; hudMarkCustom() }, false, g.col, 1.35, USER.cyan as any)
+
+        txt(ctx, cScl, ry + 19, c.scale.toFixed(2), MONO, 10.5, g.accent, 0.9)
+        drawSlider(ctx, gate, cScl + 56, ry + 13, 110, (c.scale - 0.25) / 1.75, (nv) => { c.scale = Math.round((0.25 + nv * 1.75) * 100) / 100; hudMarkCustom() })
+
+        const cOpen = hudCornerOpen === name
+        drawBtn(ctx, gate, cCor, ry + 6, 132, 24, `${c.anchor}   ${cOpen ? "▴" : "▾"}`, () => {
+            hudCornerOpen = cOpen ? null : name
+            ctrl.requestDraw()
+        }, cOpen, g.col, "", 10.5)
+
+        txt(ctx, cX, ry + 19, `${Math.round(c.x)}`, MONO, 10.5, g.accent, 0.9)
+        drawSlider(ctx, gate, cX + 46, ry + 13, 110, Math.min(1, c.x / 2000), (nv) => { c.x = Math.round(nv * 2000); hudMarkCustom() })
+
+        txt(ctx, cY, ry + 19, `${Math.round(c.y)}`, MONO, 10.5, g.accent, 0.9)
+        drawSlider(ctx, gate, cY + 46, ry + 13, 110, Math.min(1, c.y / 2000), (nv) => { c.y = Math.round(nv * 2000); hudMarkCustom() })
+    })
+
+    const ay = Math.min(visBottom, visTop + 26 + COMPONENTS.length * rowH + 10)
+    drawBtn(ctx, gate, x, ay, 190, 30, "APPLY", () => {
+        try {
+            saveHudLayout(hudDraft)
+            hudDraft = JSON.parse(JSON.stringify(hudLayout()))
+            hudStatus = "SAVED — HUD REBUILT"
+            hudStatusOk = true
+        } catch (e) {
+            hudStatus = `NOT APPLIED: ${e}`
+            hudStatusOk = false
+        }
+        ctrl.requestDraw()
+    })
+    txt(ctx, x + 206, ay + 19, "// offsets are design units, clamped to monitor edges on apply · modals keep upstream scale", MONO, 8.5, g.col, 0.45)
+
+    if (hudProfileOpen) {
+        const ih = 27, listH = HUD_PRESETS.length * ih + 8
+        let ly = py + 30
+        if (ly + listH > g.Y + g.h - 16) ly = py - 6 - listH
+        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(x + 112, ly, 168, listH); ctx.fill()
+        HUD_PRESETS.forEach((p, i) => {
+            drawBtn(ctx, g.push, x + 115, ly + 3 + i * ih, 162, ih - 2, p, () => {
+                hudDraft = layoutProfile(p)
+                hudProfileOpen = false
+                hudStatus = ""
+                ctrl.requestDraw()
+            }, hudDraft.profile === p, hudDraft.profile === p ? (USER.cyan as any) : g.col, "", 12)
+        })
+        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { hudProfileOpen = false; ctrl.requestDraw() } })
+    }
+
+    if (hudCornerOpen) {
+        const ci = COMPONENTS.indexOf(hudCornerOpen)
+        const ry = visTop + 26 + ci * rowH
+        const ih = 27, listH = ANCHORS.length * ih + 8
+        let ly = ry + 30
+        if (ly + listH > g.Y + g.h - 16) ly = ry - 6 - listH
+        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(cCor, ly, 132, listH); ctx.fill()
+        const cc = hudDraft.components[hudCornerOpen]
+        ANCHORS.forEach((a, i) => {
+            drawBtn(ctx, g.push, cCor + 3, ly + 3 + i * ih, 126, ih - 2, a, () => {
+                cc.anchor = a
+                hudCornerOpen = null
+                hudMarkCustom()
+            }, cc.anchor === a, cc.anchor === a ? (USER.cyan as any) : g.col, "", 11)
+        })
+        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { hudCornerOpen = null; ctrl.requestDraw() } })
     }
 }
 
@@ -2350,6 +2493,10 @@ export const ThemeSettingsCtrl = () => {
                     modal.requestDraw()
                     return true
                 }
+                if (st.tab === "anim" && hudLayoutOpen) {
+                    closeHudLayout()
+                    return true
+                }
                 if (wmColorPick) {
                     closeWmPicker()
                     return true
@@ -2379,6 +2526,7 @@ export const ThemeSettingsCtrl = () => {
                     st.tab = TABS[next][1]
                     setKbScroll(0)
                     cfgOpen = null
+                    hudLayoutOpen = false
                     if (st.tab !== "wall") { wallOpen = null; wallScroll = 0 }
                     modal.requestDraw()
                 }
@@ -2435,6 +2583,7 @@ export const ThemeSettingsCtrl = () => {
                         st.tab = id
                         setKbScroll(0)
                         cfgOpen = null
+                        hudLayoutOpen = false
                         if (id !== "wall") { wallOpen = null; wallScroll = 0 }
                         uninstallConfirm = false
                         modal.requestDraw()
@@ -2448,7 +2597,10 @@ export const ThemeSettingsCtrl = () => {
             const cy = Y + 150
             if (st.tab === "colors") drawColors(ctx, g, mx, cy, mw)
             else if (st.tab === "keybinds") drawKeybinds(ctx, g, mx, cy, mw)
-            else if (st.tab === "anim") drawConfig(ctx, g, mx, cy, mw)
+            else if (st.tab === "anim") {
+                if (hudLayoutOpen) drawHudLayout(ctx, g, mx, cy, mw)
+                else drawConfig(ctx, g, mx, cy, mw)
+            }
             else if (st.tab === "wm") drawWm(ctx, g, mx, cy, mw)
             else if (st.tab === "wall") {
                 if (wallPickerOpen) drawWallPicker(ctx, g, mx, cy, mw)
