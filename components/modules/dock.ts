@@ -172,7 +172,7 @@ const makeHover = (layout: typeof VLAYOUT, hv: any, getHovered: () => string | n
 }
 
 const VertDock = (mon?: any) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, 'toggles', { width: vsp.width + 10, height: vsp.height + 20 })
  const on = {}, open = {}, hv = {}
   const area = DrawingArea({}); area.set_size_request(Math.round((vsp.width + 10) * S), Math.round((vsp.height + 20) * S)); _dockArea = area
  const recolorV = onColorChange(() => area.queue_draw())
@@ -248,7 +248,7 @@ const VertDock = (mon?: any) => {
 }
 
 const HorizDock = (mon?: any) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, 'hordock', hsp)
  const on = {}, open = {}, hv = {}
   const area = DrawingArea({}); area.set_size_request(Math.round(hsp.width * S), Math.round(hsp.height * S))
  const recolorH = onColorChange(() => area.queue_draw())

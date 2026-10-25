@@ -1148,16 +1148,20 @@ const openNewsArticle = (id: string) => {
 }
 
 export const MarketsPanel = (mon?: any) => {
-    const S = scaleOf(mon)
+    const S = scaleOf(mon, 'markets', MARKET_PLANE)
     loadPins()
     fetchBrowse("stocks").catch(() => { })
     fetchBrowse("crypto").catch(() => { })
     refreshAll()
-    interval(60000, refreshAll)
-    refreshHistory();interval(300000,refreshHistory)
-    interval(900000,()=>{if(tab==="news"&&mkModal?.isOpen())refreshNews().catch(()=>{})})
+    const priceTimer = interval(60000, refreshAll)
+    refreshHistory(); const historyTimer = interval(300000,refreshHistory)
+    const newsTimer = interval(900000,()=>{if(tab==="news"&&mkModal?.isOpen())refreshNews().catch(()=>{})})
     const area = DrawingArea({})
     areas.push(area)
+    area.connect('destroy', () => {
+        priceTimer.cancel(); historyTimer.cancel(); newsTimer.cancel()
+        const index = areas.indexOf(area); if (index >= 0) areas.splice(index, 1)
+    })
     const RX0 = 6, RX1 = 300
     const rowX1 = 268
     const priceX = 82

@@ -21,6 +21,7 @@ import {
 } from "./userbinds.ts"
 import { isModKey, modsFrom, keyName, modNameOf, orderMods, canon } from "./cyberdeck.ts"
 import { stopModalStats } from "./sys.ts"
+import { openHudLayoutEditor } from './hud-layout-editor.ts'
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // hyprland has to be out of the way while the modal is listening for a combo,
@@ -2180,7 +2181,8 @@ export const drawConfig = (ctx, g, x, y, w) => {
     drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col, "", 13)
     drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col, "", 13)
 
-    const visTop = y + bh + 20, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
+    drawBtn(ctx, gate, x, y + bh + 8, w, 32, 'HUD PROFILES / COMPONENT LAYOUT', openHudLayoutEditor, false, g.col, '', 13)
+    const visTop = y + bh + 52, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; label: string; row?: CfgRow; keys?: string[] }[] = []
     let yAcc = 0

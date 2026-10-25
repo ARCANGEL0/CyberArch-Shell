@@ -2,6 +2,8 @@ import GLib from "gi://GLib"
 import GdkPixbuf from "gi://GdkPixbuf"
 import Gtk from "gi://Gtk?version=3.0"
 import Gdk from "gi://Gdk?version=3.0"
+import { hudLayout } from './components/modules/hud-layout.ts'
+import { componentScale, fitScale } from './components/modules/hud-layout-policy.js'
 
 
 declare const SRC: string
@@ -39,10 +41,10 @@ export const monitorSize = (mon: any) => {
  return { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }
 }
 
-export const scaleOf = (mon: any): number => {
- if (scaleEnv > 0) return scaleEnv
+export const scaleOf = (mon: any, component?: string, footprint?: { width: number, height: number }): number => {
  const { width, height } = monitorSize(mon)
- return autoScale(width, height)
+ const requested = componentScale(scaleEnv > 0 ? scaleEnv : autoScale(width, height), hudLayout(), component)
+ return component && footprint ? fitScale(requested, { width, height }, footprint) : requested
 }
 export const monitorLayoutSize = (mon: any) => {
  const { width, height } = monitorSize(mon)

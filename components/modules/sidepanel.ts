@@ -312,13 +312,17 @@ const drawNetSpeed = (ctx) => {
 let cache = null, cacheKey = ""
 
 export const SidePanel = (mon?: any) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, 'sidepanel', plane)
  ensureWxModal()
  loadWxLocation(); refreshWeather()
- interval(1_800_000, refreshWeather)
- refreshNet(); interval(15_000, refreshNet)
- refreshNetSpeed(); interval(1000, refreshNetSpeed)
+ const weatherTimer = interval(1_800_000, refreshWeather)
+ refreshNet(); const networkTimer = interval(15_000, refreshNet)
+ refreshNetSpeed(); const trafficTimer = interval(1000, refreshNetSpeed)
  const area = DrawingArea({}); areas.push(area); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
+ area.connect('destroy', () => {
+  weatherTimer.cancel(); networkTimer.cancel(); trafficTimer.cancel()
+  const index = areas.indexOf(area); if (index >= 0) areas.splice(index, 1)
+ })
  if (!mapTile) try { mapTile = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/img/map-grid.png`); mapVer++ } catch {}
  area.connect("draw", (_w, ctx) => {
  ctx.scale(S, S)

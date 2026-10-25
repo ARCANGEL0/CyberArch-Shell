@@ -10,6 +10,7 @@ import { openAppsMenu } from "./appsmenu.ts"
 import { animOn } from "./config.ts"
 
 import { TITLE } from "./fonts.ts"
+import { placeHudWindow } from './hud-layout.ts'
 const W = 180, H = 180
 const plane = makePlane({ w: W, h: H, yaw: -16, pitch: 1, roll: 4, focal: 1180, dist: 1180, pad: 1 })
 const prompt = makePlane({ w: W, h: 14, yaw: -14, pitch: -1.5, roll: 2.5, focal: 1180, dist: 1180, pad: 5 })
@@ -18,9 +19,10 @@ let ICON: any = null
 try { ICON = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/launcher.png`) } catch (e) { print("[launcher] launcher.png:", e) }
 
 export const LauncherWindow = (mon?) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, 'launcher', plane)
  const area = DrawingArea({}); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
- onColorChange(() => area.queue_draw())
+ const recolor = onColorChange(() => area.queue_draw())
+ area.connect('destroy', () => { recolor(); if (flickT) flickT.cancel() })
  let hover = false
  let flick = 1
 
@@ -84,10 +86,11 @@ export const LauncherWindow = (mon?) => {
  evt.connect("leave-notify-event", () => { hover = false; area.queue_draw(); flip(); return false })
 
  const wrap = Box({ className: "launcher-wrap", child: evt })
- try { wrap.set_margin_right(Math.round(3 * S)) } catch {}
- return Window({
+ const win = Window({
      name: "launcher", className: "aug launcher", gdkmonitor: mon, anchor: Anchor.BOTTOM | Anchor.RIGHT,
      layer: Layer.BOTTOM, exclusivity: Exclusivity.IGNORE,
      child: wrap,
  })
+ placeHudWindow(win, mon, 'launcher', S)
+ return win
 }
