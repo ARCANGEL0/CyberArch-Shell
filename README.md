@@ -86,10 +86,12 @@ This is my attempt to recreate Cyberpunk 2077 UI entirely on **Hyprland**, using
 - **Screen Recording** -> Starts recording the active screen, and with the same HUD components from in-game when acessing cameras from quickhacks (Toggleable by SUPER+SHIFT+R)
 
 - **Music player** -> Opens/Closes the Media Player, designed pixel-perfect exact as the RADIOPORT in the game. (Toggleable by SUPER+SHIFT+O)
-  
+
+- **HUD Layout Editor** -> Reshape the persistent HUD from Theme Settings > Configuration: Minimal / Balanced / Cinematic or full Custom profiles, with per-component visibility, scale, corner anchor and X/Y offsets for monitors, sidepanel, markets, both docks and the launcher. Applies live, on every monitor.
+
 - **Quickshell lockscreen** -> ANimated loginscreen with qs.
  
-- **Terminal** -> Installs Cool-Retro-Term by Swordfish90 with a red 'Netrunner' profile, in same style of the terminal windows in-game, and the theme default terminal (Rio GPU Terminal) with _custom frames/colors/layouts_ for each theme applied on CyberArch, each theme loads a different .toml theme configuration. Along with an optional fish installation and 'SAMURAI' banner.
+- **Terminal** -> Installs Cool-Retro-Term by Swordfish90 with a red 'Netrunner' profile, in same style of the terminal windows in-game, and the theme default terminal (Rio GPU Terminal) with _custom frames/colors/layouts_ for each theme applied on CyberArch, each theme loads a different .toml theme configuration. Swap terminal themes anytime from inside the shell with **SUPER + SHIFT + TAB** (Terminal Theme Picker). Along with an optional fish installation and 'SAMURAI' banner.
 
 ---
 
@@ -209,6 +211,7 @@ Open the full cheat-sheet with all keybinds anytime with **`SUPER+SHIFT+H`**.
 | `SUPER + SHIFT + C` | CPU / RAM / system modal |
 | `SUPER + SHIFT + H` | Keybind help |
 | `SUPER + SHIFT + BACKSPACE` | Theme Settings |
+| `SUPER + SHIFT + TAB` | Terminal theme picker |
 
 ### System & capture
 
@@ -245,11 +248,13 @@ cyberpunk/
 ├─ env.ts              # Environment and runtime helpers
 ├─ theme.lua            # Hyprland full theme
 ├─ install.sh
+├─ uninstall.sh          # full clean removal of the shell
+├─ VERSION               # current release version (drives the updater)
 ├─ package.json
 ├─ tsconfig.json
 ├─ config/
 │  ├─ city.json                 #  Saved location (starts by default in London,UK)
-│  └─ keybinds.ts            # Keybinds for theme
+│  └─ keybinds.lua           # Keybinds for theme
 │
 ├─ components/
 │  ├─ modules/          # The widgets and main components of the theme HD
@@ -276,8 +281,8 @@ cyberpunk/
 - [x] Add custom wallpapers and new login
 - [x] Add the RipperDoc GUI or something similar
 - [x] Login screen; configure SDDM as single default lockscreen with netwatch theme + quickshell for session lock.
-- [ ] Wallpaper picker: Create a themed overlay to switch wallpapers easily using awww and quickshell.
-- [ ] Theme configuration: Create a new modal using $themeMod + ESC to open theme configuration such as add/edit keybinds, animations, and general settings.
+- [x] Wallpaper picker: Create a themed overlay to switch wallpapers easily using awww and quickshell.
+- [x] Theme configuration: Create a new modal using $themeMod + ESC to open theme configuration such as add/edit keybinds, animations, and general settings.
 <br>
 suggestions are welcome! :) 
 ---
