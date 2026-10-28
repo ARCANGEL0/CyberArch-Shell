@@ -328,14 +328,17 @@ export const SidePanel = (mon?: any) => {
  ctx.scale(S, S)
  const now = new Date()
 
- const key = `${paletteGen}|${mapVer}|${pad2(now.getHours())}${pad2(now.getMinutes())}|${wxName}|${wxTemp}|${wxDesc}|${wxFeels}|${geoCoords}|${geoCity}|${wxHum}|${wxWind}|${netName}|${forecast.map(f => f.hi + f.lo).join("")}`
+ // render the cache at the real pixel density so it isn't upscaled (blurry) on scaled monitors
+ const k = S * (area.get_scale_factor?.() || 1)
+ const key = `${k}|${paletteGen}|${mapVer}|${pad2(now.getHours())}${pad2(now.getMinutes())}|${wxName}|${wxTemp}|${wxDesc}|${wxFeels}|${geoCoords}|${geoCity}|${wxHum}|${wxWind}|${netName}|${forecast.map(f => f.hi + f.lo).join("")}`
  if (!cache || cacheKey !== key) {
  cacheKey = key
- cache = new Cairo.ImageSurface(Cairo.Format.ARGB32, plane.width, plane.height)
+ cache = new Cairo.ImageSurface(Cairo.Format.ARGB32, Math.ceil(plane.width * k), Math.ceil(plane.height * k))
  const cx = new Cairo.Context(cache)
+ cx.scale(k, k)
  drawMapStatic(cx); drawOverlay(cx, now)
  }
- ctx.setSourceSurface(cache, 0, 0); ctx.paint()
+ ctx.save(); ctx.scale(1 / k, 1 / k); ctx.setSourceSurface(cache, 0, 0); ctx.paint(); ctx.restore()
  drawCompassScan(ctx)
  drawNetSpeed(ctx)
  return false
