@@ -499,9 +499,15 @@ const parseFeed = (xml: string, feed: string, region: string, category: string) 
     return out
 }
 
+// GJS has no WHATWG URL global, so parse with GLib.Uri instead.
+const parseUri = (url: string) => {
+    const uri = GLib.Uri.parse(url, GLib.UriFlags.NONE)
+    return { protocol: `${(uri.get_scheme() || "").toLowerCase()}:`, hostname: uri.get_host() || "" }
+}
+
 const fetchFeed = async (url: string, feed: string, region: string, category: string) => {
     try {
-      const result=await requestProvider(`RSS:${new URL(url).hostname}`,url,{maxAge:900,parse:(body:string)=>{
+      const result=await requestProvider(`RSS:${parseUri(url).hostname}`,url,{maxAge:900,parse:(body:string)=>{
         if(!/<(?:rss|feed)\b/i.test(body))throw Error("Invalid RSS response");return parseFeed(body,feed,region,category)},validate:Array.isArray})
       return (result.value||[]).map((row: any) => row.category ? row : { ...row, category })
     }
@@ -525,9 +531,9 @@ const articleDescription = (html: string, title: string) => {
 
 const requestArticleDescription = (article: any) => {
     if (!article || article.summary || article.summaryLoading || article.summaryAttempted) return
-    let url: URL
+    let url: { protocol: string, hostname: string }
     try {
-        url = new URL(article.url)
+        url = parseUri(article.url)
         if (url.protocol !== "https:") { article.summaryAttempted = true; return }
     } catch { article.summaryAttempted = true; return }
     article.summaryLoading = true
