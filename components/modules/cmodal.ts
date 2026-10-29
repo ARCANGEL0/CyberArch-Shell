@@ -184,7 +184,7 @@ export const createModal = (spec) => {
         ? makePlane({ w, h, yaw, pitch, roll, focal: spec.focal ?? 1000, dist: spec.dist ?? 1000, pad: 30 })
         : makePlane({ w, h, yaw: 0, pitch: 0, roll: 0, focal: 1000, dist: 1000, pad: spec.pad ?? 30 })
     let plane = makeSizedPlane(W, H)
-    let surf: any = null, sctx: any = null, win: any = null, area: any = null
+    let surf: any = null, sctx: any = null, win: any = null, area: any = null, surfSS = 0
     let visible = false, intro = 0, introTarget = 0, seed = 0
     let animT: any = null, pollT: any = null, lastFrame = 0
     let hitRegions: any[] = [], drag: any = null, hoverKey: any = null, pressKey: any = null, dragKey: any = null, lastXY: any = null
@@ -214,8 +214,9 @@ export const createModal = (spec) => {
         screenCtx.scale(S, S)
         screenCtx.setOperator(0); screenCtx.paint(); screenCtx.setOperator(2)
         if (intro <= 0.002 && !visible) return
-        const ss = spec.ss ?? SS_DEFAULT
-        if (!surf) { surf = new Cairo.ImageSurface(Cairo.Format.ARGB32, W * ss, H * ss); sctx = new Cairo.Context(surf) }
+        // match the real pixel density so the modal isn't upscaled (blurry) on scaled monitors
+        const ss = spec.ss ?? Math.max(SS_DEFAULT, S * (area?.get_scale_factor?.() || 1))
+        if (!surf || surfSS !== ss) { surfSS = ss; surf = new Cairo.ImageSurface(Cairo.Format.ARGB32, Math.ceil(W * ss), Math.ceil(H * ss)); sctx = new Cairo.Context(surf) }
         sctx.save(); sctx.setOperator(0); sctx.paint(); sctx.setOperator(2); sctx.restore()
         sctx.save(); sctx.scale(ss, ss); renderFlat(sctx); sctx.restore(); surf.flush()
         warpReveal(screenCtx, surf, plane, W, H, intro, seed, ss)
