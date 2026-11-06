@@ -29,7 +29,8 @@ const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
 const ICON_3D = `${CYBER_DIR}/assets/icons/file.png`
 let phoneIcon: any = null
 
-const play = () => { if (!sndOn("sndNotif")) return; const p = sndFile("sndNotifFile", SND); execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${p}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${p}" 2>/dev/null || paplay "${p}" 2>/dev/null || play -q "${p}" 2>/dev/null`]).catch(() => {}) }
+// fix for notif trigger events, previous code would run a mpv instance for each fire, and if multiple notifications appeared this would lead huuge ram consumption. Now it correctly triggers one mpv instance and sigkills the previous one
+const play = () => { if (!sndOn("sndNotif")) return; const p = sndFile("sndNotifFile", SND); execAsync(["sh", "-c", `pkill -f "mpv.*notif\\.mp3" 2>/dev/null; mpv --no-terminal --really-quiet "${p}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${p}" 2>/dev/null || paplay "${p}" 2>/dev/null || play -q "${p}" 2>/dev/null`]).catch(() => {}) }
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 
 const ICONW = 64

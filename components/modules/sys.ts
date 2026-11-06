@@ -1,6 +1,7 @@
-import { Variable, interval, execAsync } from "astal"
+import { Variable, interval } from "astal"
 import GLib from "gi://GLib"
 import { NEON, RGB } from "./colors.ts"
+import { readNetworkSnapshot } from "./network.ts"
 
 
 
@@ -246,9 +247,7 @@ const fr = Math.min(1, total / CAP)
   s.frac.set(fr); s.percent.set(pct(fr))
   s.substat.set(`\u2193 ${fmt(dr)} \u2191 ${fmt(dtx)}`)
   }))
-  const refreshName = () => execAsync(["sh", "-c",
-  `iwgetid -r 2>/dev/null || echo ${iface}`])
-  .then(v => s.sublabel.set((v.trim() || iface).toUpperCase())).catch(() => {})
+  const refreshName = async () => { try { const n = await readNetworkSnapshot(); s.sublabel.set((n.ssid || n.interface || iface).toUpperCase()) } catch {} }
   refreshName(); live.push(interval(15000, refreshName))
   return s
 }

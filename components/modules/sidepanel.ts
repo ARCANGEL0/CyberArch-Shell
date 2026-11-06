@@ -73,13 +73,11 @@ let wxLat = 40.7128, wxLon = -74.006, wxName = "NEW YORK", wxFull = "NEW YORK"
 let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "--"
 let netName = "OFFLINE"
 let network=networkState(),netBusy=false
-export const networkSnapshot=()=>({...network})
 const refreshNet = async () => {if(netBusy)return;netBusy=true;try{network=await readNetworkSnapshot();netName=network.label;areas.forEach(a=>a?.queue_draw())}finally{netBusy=false}}
 let netUp = "0.0", netDown = "0.0"
 let _prx = -1, _ptx = 0, _pnt = 0
 let previousTraffic:any=null
 const readProc = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d) : "" } catch { return "" } }
-const netIface = () => { for (const l of readProc("/proc/net/route").split("\n").slice(1)) { const p = l.split(/\s+/); if (p[1] === "00000000" && p[0]) return p[0] } return "" }
 const netCounters = (iface) => { const l = readProc("/proc/net/dev").split("\n").find(x => x.trim().startsWith(iface + ":")); if (!l) return [0, 0]; const p = l.split(":")[1].trim().split(/\s+/).map(Number); return [p[0], p[8]] }
 const mbpsFmt = (bps) => { const m = bps * 8 / 1e6; return m >= 100 ? m.toFixed(0) : m.toFixed(1) }
 const refreshNetSpeed = () => {

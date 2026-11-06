@@ -24,6 +24,9 @@ CD.sock = sock
 CD.app  = app
 
 local function rawbind(combo, run, opts)
+    if type(combo) == "string" and combo:find("SUPER", 1, true) == 1 and not combo:find("Super_L", 1, true) and _G.__superAloneFired ~= nil then
+        if opts then hl.bind(combo, function() _G.__superAloneFired = true end, opts) else hl.bind(combo, function() _G.__superAloneFired = true end) end
+    end
     if opts then hl.bind(combo, run, opts) else hl.bind(combo, run) end
 end
 
@@ -203,7 +206,6 @@ local function applyDefaults(mod)
     end
 end
 
-CD.bind("SUPER + TAB", app("scripts/launcher"), "LAUNCHER")
 CD.bind("SUPER + T", hl.dsp.exec_cmd("rio"), "RIO TERMINAL")
 CD.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("cool-retro-term"), "RETRO TERMINAL")
 CD.bind("SUPER + ALT + D", hl.dsp.exec_cmd("discord"), "DISCORD")
