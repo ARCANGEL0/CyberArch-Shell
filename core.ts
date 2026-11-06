@@ -1,14 +1,4 @@
 
-
-
-
-
-
-
-
-
-
-
 // Dropped hybrars, too flaky to keep updating and targeting for build, besides alot of issue report
 
 import { App, Window, Box } from "./components/modules/widget.ts"
@@ -37,13 +27,15 @@ import {
 import { RegionWindow, triggerRegion, triggerRecordRegion } from "./components/modules/region.ts"
 import { ToastWindow, showToast } from "./components/modules/toast.ts"
 import { setTextHalo } from "./components/modules/proj.ts"
-import { CModalWindows, toggleModal, ThemeSettingsWindow } from "./components/modules/cmodal.ts"
+import { CModalWindows, toggleModal } from "./components/modules/cmodal.ts"
 import { openKbConflictsModal } from "./components/modules/kbconflicts.ts"
 import { AurBarWindow, dismissAurBar, dismissThemeBar, showInstalled } from "./components/modules/aurbar.ts"
 import { LauncherWindow } from "./components/modules/launcher.ts"
 import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
+import { hudLayout, onHudLayout, placeHudWindow } from './components/modules/hud-layout.ts'
+import { createSurfaces } from './components/modules/hud-layout-policy.js'
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = `${COMPONENTS_DIR}/style/cyber.css`
@@ -58,23 +50,9 @@ const compileCss = async () => {
 }
 
 const hudWins = []
-const WRAP_MARGINS: Record<string, [number, number, number, number]> = {
- monitors: [20, 0, 0, 20],
- sidepanel: [26, 28, 0, 0],
- toggles: [0, 0, 0, -5],
-}
 const surface = (mon, name, anchor, child, extra = {}) => {
- const S = scaleOf(mon)
+ const S = scaleOf(mon, name)
  const wrap = Box({ className: `aug-wrap ${name}-wrap`, child })
- const m = WRAP_MARGINS[name]
- if (m) {
- try {
- wrap.set_margin_top(Math.round(m[0] * S))
- wrap.set_margin_right(Math.round(m[1] * S))
- wrap.set_margin_bottom(Math.round(m[2] * S))
- wrap.set_margin_left(Math.round(m[3] * S))
- } catch {}
- }
  const w = Window({
  name,
  className: `aug ${name}`,
@@ -85,6 +63,7 @@ const surface = (mon, name, anchor, child, extra = {}) => {
  child: wrap,
  ...extra,
  })
+ placeHudWindow(w, mon, name, S)
  hudWins.push(w)
  return w
 }
@@ -165,10 +144,80 @@ const deferShape = (win) => {
  return GLib.SOURCE_REMOVE
  })
 }
+const monitorWindows = new Map<any, { key: string; wins: any[] }>()
+const wiredHudWins = new WeakSet<any>()
+const watchedMonitors = new WeakSet<any>()
+const wireHudWindow = (win) => {
+ if (!win || wiredHudWins.has(win)) return
+ wiredHudWins.add(win)
+ try { win.connect("size-allocate", () => deferShape(win)) } catch {}
+ try { win.connect("map", () => deferShape(win)) } catch {}
+}
+const monitorKey = (mon) => {
+ try {
+ const g = mon.get_geometry()
+ return `${g.x}:${g.y}:${g.width}:${g.height}:${scaleOf(mon)}`
+ } catch { return "unknown" }
+}
+const makeMonitorWindows = (mon) => {
+ const factories = { monitors: Monitors, sidepanel: SidePanel, markets: MarketsPanel, hordock: HorizDock, toggles: Toggles }
+ const wins = createSurfaces(hudLayout(), name => {
+  const win = name === 'launcher' ? LauncherWindow(mon) : surface(mon, name, Anchor.TOP | Anchor.LEFT, factories[name](mon))
+  if (name === 'launcher') hudWins.push(win)
+  if (name !== 'monitors') win._rectHit = true
+  return win
+ })
+ for (const win of wins) wireHudWindow(win)
+ return wins
+}
+const destroyMonitorWindows = (wins) => {
+ for (const win of wins) {
+ const i = hudWins.indexOf(win)
+ if (i >= 0) hudWins.splice(i, 1)
+ try { win.destroy?.() } catch {}
+ }
+}
+onHudLayout(() => {
+ for (const entry of monitorWindows.values()) destroyMonitorWindows(entry.wins)
+ monitorWindows.clear()
+ syncMonitorWindows()
+})
+const syncMonitorWindows = () => {
+ const monitors = Array.from((App as any).get_monitors())
+ const current = new Set(monitors)
+ for (const [mon, entry] of monitorWindows) {
+ const key = current.has(mon) ? monitorKey(mon) : null
+ if (key === entry.key) continue
+ destroyMonitorWindows(entry.wins)
+ monitorWindows.delete(mon)
+ }
+ for (const mon of monitors) {
+ if (!monitorWindows.has(mon)) {
+ const key = monitorKey(mon)
+ monitorWindows.set(mon, { key, wins: makeMonitorWindows(mon) })
+ }
+ }
+ for (const mon of monitors) {
+ try {
+ if (!watchedMonitors.has(mon)) {
+ watchedMonitors.add(mon)
+ try { mon.connect("notify::geometry", scheduleMonitorSync) } catch {}
+ try { mon.connect("notify::scale-factor", scheduleMonitorSync) } catch {}
+ }
+ } catch {}
+ }
+ applyHudInputAll()
+}
+let monitorSyncTimer: any = null
+const scheduleMonitorSync = () => {
+ if (monitorSyncTimer) monitorSyncTimer.cancel()
+ monitorSyncTimer = timeout(150, () => { monitorSyncTimer = null; syncMonitorWindows() })
+}
 const refreshWins = () => Promise.all([execAsync(["hyprctl", "clients", "-j"]), execAsync(["hyprctl", "monitors", "-j"])]).then(([co, mo]) => {
  try {
  const active = new Set<number>()
- for (const m of JSON.parse(mo)) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
+ const monitors = JSON.parse(mo)
+ for (const m of monitors) { if (m && m.activeWorkspace && typeof m.activeWorkspace.id === "number") active.add(m.activeWorkspace.id) }
  const next = JSON.parse(co).filter((c: any) => {
  if (!c || !c.mapped || c.hidden || !c.size || !(c.size[0] > 0) || !c.at) return false
  return !!(c.workspace && active.has(c.workspace.id))
@@ -183,31 +232,46 @@ const pickRefresh = () => {
  if (holdOn) { GLib.source_remove(holdOn); holdOn = null }
  holdOn = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => { holdOn = null; refreshWins(); return false })
 }
+let socketRetry = null
+const retrySocket = () => {
+ if (socketRetry) return
+ socketRetry = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+ socketRetry = null; wireSocket(); return GLib.SOURCE_REMOVE
+ })
+}
 const wireSocket = () => {
+ let conn = null, stream = null
+ const disconnect = () => {
+ try { stream?.close(null) } catch {}
+ try { conn?.close(null) } catch {}
+ retrySocket()
+ }
  try {
- const base = `${GLib.getenv("XDG_RUNTIME_DIR") || `/run/user/${GLib.get_user_name()}`}/hypr`
- const dir = GLib.Dir.open(base, 0); if (!dir) return
- let sock = null, nm
- while ((nm = dir.read_name())) { const p = `${base}/${nm}/.socket2.sock`; if (GLib.file_test(p, GLib.FileTest.EXISTS)) { sock = p; break } }
- if (!sock) { print("[cyberpunk] hypr socket2 not found"); return }
+ const signature = GLib.getenv("HYPRLAND_INSTANCE_SIGNATURE")
+ if (!signature) { retrySocket(); return }
+ const sock = `${GLib.get_user_runtime_dir()}/hypr/${signature}/.socket2.sock`
  const client = new Gio.SocketClient()
- const conn = client.connect(new Gio.UnixSocketAddress({ path: sock }), null)
- const stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
+ client.connect_async(new Gio.UnixSocketAddress({ path: sock }), null, (_client, result) => {
+ try {
+ conn = client.connect_finish(result)
+ stream = new Gio.DataInputStream({ base_stream: conn.input_stream })
  const pump = () => stream.read_line_async(0, null, (_src, res) => {
   try {
   const [bytes] = stream.read_line_finish(res)
-  if (bytes) {
-  const line = bytes.toString(), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
+  if (!bytes) { disconnect(); return }
+  const line = new TextDecoder().decode(bytes), ev = line.split(">>")[0], data = line.slice(ev.length + 2)
   if (ev === "workspace") setWorkspaceBadge(data.trim())
   else if (ev === "workspacev2") setWorkspaceBadge(data.split(",")[1]?.trim() || data.split(",")[0]?.trim())
   else if (ev === "focusedmon") setWorkspaceBadge(data.split(",")[1]?.trim())
+  if (ev.startsWith("monitoradded") || ev.startsWith("monitorremoved")) { scheduleMonitorSync(); pickRefresh() }
   if (EVENT_HITS.has(ev)) pickRefresh()
-  }
   pump()
-  } catch { try { pump() } catch {} }
+  } catch { disconnect() }
  })
- pump()
- } catch (e) { print("[cyberpunk] hypr socket:", e) }
+ refreshWins(); pump()
+ } catch { disconnect() }
+ })
+ } catch { disconnect() }
 }
 
 
@@ -231,13 +295,13 @@ const toggleHudTop = () => {
 App.start({
  instanceName: "cyberpunk",
  requestHandler(request, res) {
+ request = request.trim()
  const reply = (r) => { try { res(r) } catch {} }
  if (request === "launcher") {
  execAsync(["sh", "-c", "rofi -show drun || rofi -show run"]).catch(print)
  reply("ok")
  } else if (request === "apps-menu") {
- try { openAppsMenu() } catch (e) { print(e) }
- reply("ok")
+ try { openAppsMenu(); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request === "player") {
  try { togglePlayer() } catch (e) { print(e) }
  reply("ok")
@@ -264,8 +328,7 @@ App.start({
  try { triggerShutter(request.slice(7).trim()) } catch (e) { print(e) }
  reply("ok")
  } else if (request.startsWith("region-shot")) {
- try { triggerRegion(request.slice(11).trim()) } catch (e) { print(e) }
- reply("ok")
+ try { triggerRegion(request.slice(11).trim()); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request.startsWith("modal ")) {
  try { toggleModal(request.slice(6).trim()) } catch (e) { print(e) }
  reply("ok")
@@ -328,15 +391,11 @@ App.start({
  applyWmRules()
  applyWmFromTheme()
 
- for (const mon of (App as any).get_monitors()) {
- const S = scaleOf(mon)
- surface(mon, "monitors", Anchor.TOP | Anchor.LEFT, Monitors(mon))
- { const sw = surface(mon, "sidepanel", Anchor.TOP | Anchor.RIGHT, SidePanel(mon)); (sw as any)._rectHit = true }
- { const mw = surface(mon, "markets", Anchor.TOP | Anchor.RIGHT, MarketsPanel(mon), { margin_top: Math.round(560 * S) }); (mw as any)._rectHit = true }
- { const hw = surface(mon, "hordock", Anchor.BOTTOM | Anchor.LEFT, HorizDock(mon)); (hw as any)._rectHit = true }
- { const tw = surface(mon, "toggles", Anchor.BOTTOM | Anchor.LEFT, Toggles(mon)); (tw as any)._rectHit = true }
- { const lw = LauncherWindow(mon); (lw as any)._rectHit = true; hudWins.push(lw) }
- }
+ syncMonitorWindows()
+ // Refresh shell windows when the monitor setup changes.
+ const display = Gdk.Display.get_default()
+ try { display?.connect("monitor-added", scheduleMonitorSync) } catch {}
+ try { display?.connect("monitor-removed", scheduleMonitorSync) } catch {}
  passthrough(OsdWindow())
  passthrough(NotifPopupWindow())
  passthrough(AurBarWindow())
@@ -350,17 +409,11 @@ App.start({
  RegionWindow()
  ToastWindow()
  CModalWindows()
- ThemeSettingsWindow()
  AppsMenuWindow()
  PlayerWindow()
  registerHudWindows(hudWins)
  execAsync(["sh", "-c", `'${CYBER_DIR}/scripts/appvol-keeper'`]).catch(() => {})
- for (const w of hudWins) {
- try {
- w.connect("size-allocate", () => deferShape(w))
- w.connect("map", () => deferShape(w))
- } catch {}
- }
+ for (const w of hudWins) wireHudWindow(w)
  timeout(400, applyHudInputAll); timeout(1200, applyHudInputAll)
  refreshWins(); wireSocket()
  execAsync(["hyprctl", "activeworkspace", "-j"]).then((s) => { try { setWorkspaceBadge(JSON.parse(s).name) } catch {} }).catch(() => {})

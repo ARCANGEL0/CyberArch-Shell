@@ -26,7 +26,7 @@ normalize_windows() {
     while IFS=$'\t' read -r addr mon ws; do
         [ -n "$addr" ] || continue
         [ "$ws" -gt 0 ] 2>/dev/null || continue
-        idx="$(printf '%s\n' "$mons" | jq -r --arg m "$mon" 'sort_by(.id) | to_entries[] | select(.value.name==$m) | .key' | head -1)"
+        idx="$(printf '%s\n' "$mons" | jq -r --argjson m "$mon" 'sort_by(.id) | to_entries[] | select(.value.id==$m) | .key' | head -1)"
         [ -n "$idx" ] || idx=0
         logical=$(( ((ws - 1) % 10) + 1 ))
         target=$(( logical + idx * 10 ))

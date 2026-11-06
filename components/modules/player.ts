@@ -25,7 +25,7 @@ let hitRegions: any[] = []
 let intro = 0, introTarget = 0
 let hoverIdx = -1, hoverA = 0
 let playStart = 0, wasPlaying = false, iconPos: any = null
-let panelSurf: any = null, panelDirty = true
+let panelSurf: any = null, panelDirty = true, panelK = 1
 let pollT: any = null, animT: any = null
 let plBars = [0.4, 0.7, 0.5], plT = 0, tick = 0
 
@@ -282,10 +282,12 @@ const drawActiveIcon = (ctx, x, y, al) => {
  else eqIcon(ctx, x, y, aTF, 0.95 * al)
 }
 
-const renderToCache = () => {
- if (!panelSurf) panelSurf = new Cairo.ImageSurface(Cairo.Format.ARGB32, PW, PH)
+// k matches the real pixel density so the cached panel isn't upscaled (blurry) on scaled monitors
+const renderToCache = (k = 1) => {
+ if (!panelSurf || panelK !== k) { panelK = k; panelSurf = new Cairo.ImageSurface(Cairo.Format.ARGB32, Math.ceil(PW * k), Math.ceil(PH * k)) }
  const c = new Cairo.Context(panelSurf)
  c.setOperator(0); c.paint(); c.setOperator(2)
+ c.scale(k, k)
  renderPanel(c)
  panelSurf.flush()
  panelDirty = false
@@ -301,10 +303,11 @@ const draw = (ctx, aw, ah) => {
  ctx.setSourceRGBA(0, 0, 0, 0.6 * ease); ctx.rectangle(0, 0, sw, sh); ctx.fill()
  const X0 = Math.round((sw - PW) / 2), Y0 = Math.round((sh - PH) / 2)
  const sc = 0.96 + 0.04 * ease
- if (!panelSurf || (panelDirty && intro === introTarget)) renderToCache()
+ const k = S * (pArea?.get_scale_factor?.() || 1)
+ if (!panelSurf || panelK !== k || (panelDirty && intro === introTarget)) renderToCache(k)
  ctx.save()
  ctx.translate(X0 + PW / 2, Y0 + PH / 2 + (1 - ease) * 20); ctx.scale(sc, sc); ctx.translate(-PW / 2, -PH / 2)
- ctx.setSourceSurface(panelSurf, 0, 0); ctx.paintWithAlpha(ease)
+ ctx.save(); ctx.scale(1 / k, 1 / k); ctx.setSourceSurface(panelSurf, 0, 0); ctx.paintWithAlpha(ease); ctx.restore()
  if (iconPos) drawActiveIcon(ctx, iconPos.x, iconPos.y, ease)
  ctx.restore()
  if (e < 0.999) {

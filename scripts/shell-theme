@@ -7,6 +7,7 @@ GTK="$AUG/assets/gtk"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 USR="$CFG/cyberarch"
 KVDIR="$CFG/Kvantum/Daemon"
+source "$AUG/scripts/theme-state"
 
 case "$NAME" in
     BLADE)     ACC="183 81 7";    SEC="195 120 18"; TXT="224 214 200"; DIM="127 123 157"; BAS="4 3 2";   WRN="202 83 170" ;;
@@ -95,9 +96,16 @@ if [ -f "$GTK/gtk.css" ]; then
     for v in 3.0 4.0; do
         d="$CFG/gtk-$v"
         mkdir -p "$d"
+        cyber_record_original "gtk-$v-css" "$d/gtk.css"
         rm -f "$d/gtk.css"
         cp -f "$USR/gtk.css" "$d/gtk.css"
+        cyber_record_installed "gtk-$v-css" "$d/gtk.css"
     done
+fi
+
+if [ -f "$GTK/DaemonKvantum/Daemon.kvconfig" ] || [ -f "$GTK/DaemonKvantum/Daemon.svg" ]; then
+    cyber_record_original kvantum-daemon "$KVDIR"
+    cyber_record_original kvantum-config "$CFG/Kvantum/kvantum.kvconfig"
 fi
 
 if [ -f "$GTK/DaemonKvantum/Daemon.kvconfig" ]; then
@@ -143,6 +151,11 @@ if [ -f "$GTK/DaemonKvantum/Daemon.svg" ]; then
         "$GTK/DaemonKvantum/Daemon.svg" > "$KVDIR/Daemon.svg"
 fi
 
+if [ -f "$GTK/DaemonKvantum/Daemon.kvconfig" ] || [ -f "$GTK/DaemonKvantum/Daemon.svg" ]; then
+    cyber_record_installed kvantum-daemon "$KVDIR"
+    cyber_record_installed kvantum-config "$CFG/Kvantum/kvantum.kvconfig"
+fi
+
 cat > "$USR/shell_colors.lua" <<EOF
 return {
     palette  = "$NAME",
@@ -164,7 +177,9 @@ if command -v hyprctl >/dev/null 2>&1; then
 fi
 
 if command -v gsettings >/dev/null 2>&1; then
+    cyber_record_setting gsettings-scheme org.gnome.desktop.interface color-scheme
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null
+    cyber_mark_setting gsettings-scheme org.gnome.desktop.interface color-scheme
 fi
 
 exit 0

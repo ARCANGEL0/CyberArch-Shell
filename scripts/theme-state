@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+CYBER_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/cyberarch/uninstall-backups"
+
+# Save the first copy, then restore it only while the installed copy is unchanged.
+cyber_record_original() {
+    local key="$1" path="$2"
+    mkdir -p "$CYBER_STATE_DIR"
+    chmod 700 "$CYBER_STATE_DIR"
+    [ -e "$CYBER_STATE_DIR/$key.recorded" ] && return 0
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        cp -a -- "$path" "$CYBER_STATE_DIR/$key.original" || return 1
+    else
+        : > "$CYBER_STATE_DIR/$key.absent"
+    fi
+    : > "$CYBER_STATE_DIR/$key.recorded"
+}
+
+cyber_record_installed() {
+    local key="$1" path="$2" snapshot="$CYBER_STATE_DIR/$1.installed"
+    mkdir -p "$CYBER_STATE_DIR"
+    chmod 700 "$CYBER_STATE_DIR"
+    rm -rf -- "$snapshot" "$CYBER_STATE_DIR/$key.installed-absent"
+    if [ -e "$path" ] || [ -L "$path" ]; then
+        cp -a -- "$path" "$snapshot"
+    else
+        : > "$CYBER_STATE_DIR/$key.installed-absent"
+    fi
+}
+
+cyber_record_setting() {
+    local key="$1" schema="$2" setting="$3" value
+    mkdir -p "$CYBER_STATE_DIR"
+    chmod 700 "$CYBER_STATE_DIR"
+    [ -e "$CYBER_STATE_DIR/$key.recorded" ] && return 0
+    command -v gsettings >/dev/null 2>&1 || return 0
+    value="$(gsettings get "$schema" "$setting" 2>/dev/null)" || return 0
+    printf '%s\n' "$value" > "$CYBER_STATE_DIR/$key.original"
+    : > "$CYBER_STATE_DIR/$key.recorded"
+}
+
+cyber_mark_setting() {
+    local key="$1" schema="$2" setting="$3" value
+    command -v gsettings >/dev/null 2>&1 || return 0
+    value="$(gsettings get "$schema" "$setting" 2>/dev/null)" || return 0
+    printf '%s\n' "$value" > "$CYBER_STATE_DIR/$key.installed"
+}
+
+cyber_restore_path() {
+    local key="$1" path="$2" original="$CYBER_STATE_DIR/$1.original" installed="$CYBER_STATE_DIR/$1.installed"
+    local absent="$CYBER_STATE_DIR/$1.installed-absent" same=0
+    [ -e "$CYBER_STATE_DIR/$key.recorded" ] || return 0
+    if [ -e "$absent" ]; then
+        if [ ! -e "$path" ] && [ ! -L "$path" ]; then same=1; fi
+    elif { [ -e "$installed" ] || [ -L "$installed" ]; } && { [ -e "$path" ] || [ -L "$path" ]; }; then
+        if [ -L "$installed" ] || [ -L "$path" ]; then
+            [ -L "$installed" ] && [ -L "$path" ] && [ "$(readlink "$installed")" = "$(readlink "$path")" ] && same=1
+        elif [ -d "$installed" ] || [ -d "$path" ]; then
+            [ -d "$installed" ] && [ -d "$path" ] && diff -qr "$installed" "$path" >/dev/null 2>&1 && same=1
+        else
+            cmp -s -- "$installed" "$path" && same=1
+        fi
+    fi
+    if [ "$same" != 1 ]; then
+        printf 'Kept %s because it changed after installation.\n' "$path"
+        return 0
+    fi
+    rm -rf -- "$path"
+    if [ -e "$original" ] || [ -L "$original" ]; then
+        mkdir -p "$(dirname "$path")"
+        cp -a -- "$original" "$path" && printf 'Restored %s\n' "$path"
+    else
+        printf 'Removed %s\n' "$path"
+    fi
+}
+
+cyber_restore_setting() {
+    local key="$1" schema="$2" setting="$3" original="$CYBER_STATE_DIR/$1.original" installed="$CYBER_STATE_DIR/$1.installed" current
+    [ -f "$original" ] && [ -f "$installed" ] || return 0
+    command -v gsettings >/dev/null 2>&1 || return 0
+    current="$(gsettings get "$schema" "$setting" 2>/dev/null)" || return 0
+    if [ "$current" = "$(cat "$installed")" ]; then
+        gsettings set "$schema" "$setting" "$(cat "$original")" 2>/dev/null && printf 'Restored desktop setting %s\n' "$setting"
+    else
+        printf 'Kept desktop setting %s because it changed after installation.\n' "$setting"
+    fi
+}

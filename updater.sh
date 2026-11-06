@@ -2,11 +2,14 @@
 #### Check for updates from remote repo and installs
 set -uo pipefail
 THEME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="ARCANGEL0/CyberArch-Shell"
+ORIGIN="$(git -C "$THEME" remote get-url origin 2>/dev/null || true)"
+REPO="$(printf '%s' "$ORIGIN" | sed -nE 's#^(https://github.com/|git@github.com:|ssh://git@github.com/)([^/]+/[^/]+)$#\2#p')"
+REPO="${REPO%.git}"
 API="https://api.github.com/repos/$REPO/releases/latest"
 USER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch"
 CACHE="$USER_DIR/update.json"
 APPLIED="$USER_DIR/applied-version"
+APPLIED_COMMIT="$USER_DIR/applied-commit"
 STAMP="$USER_DIR/update-done"
 
 R=$'\033[0m'; B=$'\033[1m'; DIM=$'\033[2m'
@@ -53,7 +56,7 @@ local_ver() {
     [ -r "$THEME/VERSION" ] && read -r v < "$THEME/VERSION"
     v="$(norm "${v:-0.0.0}")"
     [ -n "$v" ] || v="0.0.0"
-    if [ -r "$APPLIED" ]; then
+    if [ -r "$APPLIED" ] && [ -r "$APPLIED_COMMIT" ] && [ "$(cat "$APPLIED_COMMIT")" = "$(git -C "$THEME" rev-parse HEAD 2>/dev/null)" ]; then
         a=""
         read -r a < "$APPLIED"
         a="$(norm "${a:-}")"
@@ -61,15 +64,16 @@ local_ver() {
     fi
     printf '%s\n' "$v"
 }
-remote_tag() { jq -r '.tag_name // empty' "$CACHE" 2>/dev/null; }
+remote_tag() { jq -r --arg repo "$REPO" 'select(._cyberarch_repo == $repo) | .tag_name // empty' "$CACHE" 2>/dev/null; }
   fetch_release() {
+     [ -n "$REPO" ] || return 1
      command -v curl >/dev/null 2>&1 || return 1
   command -v jq   >/dev/null 2>&1 || return 1
   j="$(curl -fsSL --max-time 8 -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || return 1
    [ -n "$j" ] || return 1
   printf '%s' "$j" | jq -e '.tag_name' >/dev/null 2>&1 || return 1
      mkdir -p "$USER_DIR"
-                printf '%s' "$j" > "$CACHE"
+                printf '%s' "$j" | jq --arg repo "$REPO" '. + {_cyberarch_repo: $repo}' > "$CACHE"
 }
 
 cmd_check() {    lv="$(local_ver)"
@@ -164,8 +168,12 @@ cmd_apply() {
         exit 1
     fi
     target=""
-    if [ -n "$tag" ] && git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
-        target="refs/tags/$tag"
+    if [ -n "$tag" ]; then
+        if ! git fetch origin "refs/tags/$tag"; then
+            err "Release tag $tag is unavailable from origin"
+            exit 1
+        fi
+        target="$(git rev-parse FETCH_HEAD)"
         ok "target $tag"
     else
         br="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)"
@@ -190,6 +198,7 @@ cmd_apply() {
     [ -n "$nv" ] || { nv=""; read -r nv < "$THEME/VERSION" 2>/dev/null; nv="$(norm "${nv:-$lv}")"; }
     mkdir -p "$USER_DIR"
     printf '%s\n' "$nv" > "$APPLIED"
+    printf '%s\n' "$NEW" > "$APPLIED_COMMIT"
 
     hdr "POST-UPDATE"
     if [ "$OLD" = "$NEW" ]; then

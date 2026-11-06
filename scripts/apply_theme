@@ -4,17 +4,21 @@
 set -u
 AUG="$HOME/.config/hypr/themes/cyberpunk"
 GTK="$AUG/assets/gtk"
+source "$AUG/scripts/theme-state"
 
 # ── icon theme: symlink it into the icon search path under our own name ──
 ICON_NAME="iconpack"
 mkdir -p "$HOME/.local/share/icons"
+cyber_record_original iconpack "$HOME/.local/share/icons/$ICON_NAME"
 ln -sfn "$GTK/iconpack" "$HOME/.local/share/icons/$ICON_NAME"
+cyber_record_installed iconpack "$HOME/.local/share/icons/$ICON_NAME"
 
 # ── GTK 3 and 4: dark base theme + icons, and the per-theme gtk.css from shell-theme
 PALETTE=$(sed -n 's/^local palette = "\([A-Z]*\)".*/\1/p' \
     "${XDG_CONFIG_HOME:-$HOME/.config}/cyberarch/user_colors.lua" 2>/dev/null | tail -n 1)
 for v in 3.0 4.0; do
     d="$HOME/.config/gtk-$v"; mkdir -p "$d"
+    cyber_record_original "gtk-$v-settings" "$d/settings.ini"
     cat > "$d/settings.ini" <<EOF
 [Settings]
 gtk-theme-name=Adwaita-dark
@@ -22,19 +26,32 @@ gtk-icon-theme-name=$ICON_NAME
 gtk-application-prefer-dark-theme=1
 gtk-cursor-theme-name=neurodance
 EOF
+    cyber_record_installed "gtk-$v-settings" "$d/settings.ini"
 done
 
 if command -v gsettings >/dev/null 2>&1; then
+    cyber_record_setting gsettings-icon org.gnome.desktop.interface icon-theme
+    cyber_record_setting gsettings-gtk org.gnome.desktop.interface gtk-theme
+    cyber_record_setting gsettings-scheme org.gnome.desktop.interface color-scheme
+    cyber_record_setting gsettings-cursor org.gnome.desktop.interface cursor-theme
     gsettings set org.gnome.desktop.interface icon-theme "$ICON_NAME" 2>/dev/null
     gsettings set org.gnome.desktop.interface gtk-theme    "Adwaita-dark" 2>/dev/null
     gsettings set org.gnome.desktop.interface color-scheme "prefer-dark" 2>/dev/null
     gsettings set org.gnome.desktop.interface cursor-theme "neurodance" 2>/dev/null
+    cyber_mark_setting gsettings-icon org.gnome.desktop.interface icon-theme
+    cyber_mark_setting gsettings-gtk org.gnome.desktop.interface gtk-theme
+    cyber_mark_setting gsettings-scheme org.gnome.desktop.interface color-scheme
+    cyber_mark_setting gsettings-cursor org.gnome.desktop.interface cursor-theme
 fi
 
+cyber_record_original kvantum-old-daemon "$HOME/.config/Kvantum/daemon-2.0"
 rm -rf "$HOME/.config/Kvantum/daemon-2.0"
+cyber_record_installed kvantum-old-daemon "$HOME/.config/Kvantum/daemon-2.0"
 CYBER_DIR="$AUG" "$AUG/scripts/shell-theme" "${PALETTE:-NETWATCH}"
 
 mkdir -p "$HOME/.config/kitty"
+cyber_record_original kitty "$HOME/.config/kitty/kitty.conf"
 ln -sfn "$AUG/assets/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"
+cyber_record_installed kitty "$HOME/.config/kitty/kitty.conf"
 
 exit 0

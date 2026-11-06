@@ -237,9 +237,10 @@ const scanlines = (ctx: any, x0: number, x1: number, y: number, h: number, gap: 
 }
 
 export const Monitors = (mon?: any) => {
-    const S = scaleOf(mon)
+    const S = scaleOf(mon, 'monitors', plane)
     const area = DrawingArea({}); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
-    onColorChange(() => area.queue_draw())
+    const recolor = onColorChange(() => area.queue_draw())
+    area.connect('destroy', () => recolor())
     const d = { sto: 0, cpu: 0, ram: 0, bat: 0 }
     const bar = (k: "sto" | "cpu" | "ram" | "bat") => animOn("animGauge") ? clamp(d[k]) : 1
 

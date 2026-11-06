@@ -28,5 +28,28 @@ fi
 
 [ -n "$display" ] || exit 1
 
-exec env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$display" GDK_BACKEND=wayland \
+# updt: wait for the display Hyprland assigned before starting the app wheel.
+x11_display=""
+for _ in {1..50}; do
+    x11_display="$(systemctl --user show-environment 2>/dev/null | sed -n 's/^DISPLAY=//p' | tail -n 1 || true)"
+    if [[ "$x11_display" =~ ^:([0-9]+)(\.[0-9]+)?$ ]]; then
+        x_number="${BASH_REMATCH[1]}"
+        if [ -S "$runtime_dir/X11-unix/X$x_number" ] || [ -S "/tmp/.X11-unix/X$x_number" ]; then
+            break
+        fi
+    fi
+    x11_display=""
+    sleep 0.1
+done
+
+x11_env=()
+if [ -n "$x11_display" ]; then
+    export DISPLAY="$x11_display"
+    dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY >/dev/null 2>&1 || true
+    x11_env=("DISPLAY=$x11_display")
+else
+    echo "[theme] XWayland DISPLAY was not ready; the app wheel will retry when an app is launched" >> /tmp/cyberhypr-x11.log
+fi
+
+exec env XDG_RUNTIME_DIR="$runtime_dir" WAYLAND_DISPLAY="$display" "${x11_env[@]}" GDK_BACKEND=wayland \
     "$AGS_BIN" run --gtk 3 "$CORE_TS" >/tmp/cyberhypr-debug.log 2>&1

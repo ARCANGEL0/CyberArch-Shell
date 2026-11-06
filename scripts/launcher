@@ -1,3 +1,8 @@
 #!/usr/bin/env bash
 # toggle the CP2077-style "APPS" wheel launcher inspired in the kiroshi scanner, plus the original sound effects from the game taken from the official files.
-echo "apps-menu" | socat - UNIX-CONNECT:"$XDG_RUNTIME_DIR/astal/cyberpunk.sock" 2>/dev/null
+reply=$(timeout --kill-after=1s 3s astal -i cyberpunk apps-menu)
+if [ "$?" -ne 0 ] || [ "$reply" != "ok" ]; then
+    printf '%s\n' 'The shell did not open the apps menu' >&2
+    notify-send "Apps menu unavailable" "The shell did not respond successfully; it may need restarting" 2>/dev/null || true
+    exit 1
+fi

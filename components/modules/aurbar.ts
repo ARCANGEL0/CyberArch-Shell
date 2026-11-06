@@ -6,7 +6,7 @@ import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import GLib from "gi://GLib"
 import Gio from "gi://Gio"
-import { CYBER_DIR, USER_DIR, SCALE, winScale } from "../../env.ts"
+import { CYBER_DIR, USER_DIR, winScale } from "../../env.ts"
 import { TITLE, RAJDHANI, RAJDHANI_MED } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
@@ -338,13 +338,13 @@ const bootCheck = () => {
 }
 
 export const AurBarWindow = () => {
-    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
+    area = DrawingArea({}); area.set_size_request(Math.round(plane.width), Math.round(plane.height))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })
     win = Window({
         name: "aurbar", className: "aug aurbar",
         anchor: Anchor.LEFT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
-        margin_left: Math.round(14 * SCALE), visible: false, child: area,
+        margin_left: 14, visible: false, child: area,
     })
     passthrough(win)
     timeout(3500, bootCheck)

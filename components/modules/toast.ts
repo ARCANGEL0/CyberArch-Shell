@@ -1,9 +1,9 @@
-import { Window, DrawingArea } from "./widget.ts"
+import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval } from "astal"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
-import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW } from "../../env.ts"
+import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW, monH } from "../../env.ts"
 import { makePlane, strokePath, tiltText } from "./proj.ts"
 import { NEON, f, onColorChange, tintPixbuf, imgTint, notifIconTint } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
@@ -14,8 +14,8 @@ const cR = NEON.overlay, cC = NEON.dock
 let ALERT: any = null
 try { ALERT = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/alert.png`) } catch (e) { print("[toast] alert.png:", e) }
 
-type Cfg = { x: number; y: number; w: number; h: number; yaw: number; pitch: number; roll: number; focal: number; dist: number; text: string; col: [number, number, number]; textCol: [number, number, number] }
-const DEF: Cfg = { x: -1, y: 70, w: 360, h: 40, yaw: 0, pitch: 0, roll: 0, focal: 2000, dist: 2000, text: "NOTIFICATION TESTING", col: cR, textCol: cC }
+type Cfg = { x: number; y: number; w: number; h: number; yaw: number; pitch: number; roll: number; focal: number; dist: number; text: string; col: [number, number, number]; textCol: [number, number, number]; monitor?: any }
+const DEF: Cfg = { x: -1, y: 70, w: 360, h: 40, yaw: 0, pitch: 0, roll: 0, focal: 2000, dist: 2000, text: "NOTIFICATION TESTING", col: cR, textCol: cC, monitor: null }
 
 let ICON = 30
 const GAP = 8, ACW = 9
@@ -129,6 +129,7 @@ export const showToast = (text?: string, opts?: Partial<Cfg>) => {
  cfg = { ...DEF, ...(opts || {}) }
  if (text) cfg.text = text
  buildPlane()
+ try { win.gdkmonitor = cfg.monitor ?? activeMonitor(); const S = winScale(win); area.set_size_request(Math.round(monW(win) / S), Math.round(monH(win) / S)) } catch {}
  t0 = Date.now(); running = true; win.visible = true
  if (anim) anim.cancel()
  anim = interval(16, () => area.queue_draw())
