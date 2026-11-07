@@ -26,6 +26,10 @@ if cfgf then
 end
 local anim_master = ucfg["anim"] ~= false
 local anim_workspace = anim_master and ucfg["animWorkspace"] == true
+-- dont stomp their hyprland input stuff, only set if user picked one
+if type(ucfg["kbLayout"]) == "string" and ucfg["kbLayout"] ~= "" then
+    hl.config({ input = { kb_layout = ucfg["kbLayout"] } })
+end
 local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
 local set_wallpaper = wallpapers_path .. "/netwatch/main.mp4"
 local wf = loadfile(user_dir .. "/wallpaper.lua")

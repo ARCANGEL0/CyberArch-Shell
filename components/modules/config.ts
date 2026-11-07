@@ -15,6 +15,9 @@ const DEF: Record<string, CfgVal> = {
  sndOverlay: true, sndOverlayFile: "", sndKillFile: "",
 
  gaugeBadge: "workspace", gaugeXp: "disk", gaugeHealth: "cpu", gaugeRam: "ram", gaugeStamina: "battery",
+
+ // kb layout for binds
+ kbLayout: "",
 }
 const CFG: Record<string, CfgVal> = { ...DEF }
 
@@ -33,9 +36,14 @@ export const METRIC_LABEL: Record<string, string> = {
 }
 
 const BAR_METRICS = ["cpu", "cputemp", "ram", "ramfree", "swap", "disk", "battery", "gpu", "vram", "load", "net"]
+export const LAYOUT_OPTS: string[] = ["us", "gb", "de", "fr", "es", "it", "pt-br", "ru", "ua", "gr", "tr", "pl", "cz", "jp", "kr", "cn"]
+export const LAYOUT_LABEL: Record<string, string> = { "": "AUTO (DETECTED)" }
+LAYOUT_OPTS.forEach(l => { LAYOUT_LABEL[l] = l.toUpperCase() })
+
 export const GAUGE_OPTS: Record<string, string[]> = {
  gaugeBadge: ["workspace", "cputemp", "cpu", "ram", "ramfree", "swap", "disk", "battery", "gpu", "load"],
  gaugeXp: BAR_METRICS, gaugeHealth: BAR_METRICS, gaugeRam: BAR_METRICS, gaugeStamina: BAR_METRICS,
+ kbLayout: ["", ...LAYOUT_OPTS],
 }
 
 
@@ -94,21 +102,33 @@ const applyHyprAnim = (): void => {
  execAsync(["hyprctl", "eval", `hl.config({ animations = { enabled = ${master} } }); ` + WS_ANIM.replace("%s", String(ws))]).catch(() => {})
 }
 
+// apply kb layout live no reload
+const applyHyprKbLayout = (v: string): void => {
+ if (v) execAsync(["hyprctl", "keyword", "input:kb_layout", v]).catch(() => {})
+ else execAsync(["hyprctl", "reload"]).catch(() => {})
+}
+export const readHyprKbLayout = (): Promise<string> =>
+ execAsync(["hyprctl", "getoption", "input:kb_layout", "-j"])
+     .then(o => { try { return String(JSON.parse(o)?.str ?? "") } catch { return "" } })
+     .catch(() => "")
+
 export const setCfg = (k: string, v: CfgVal): void => {
  if (!(k in DEF) || CFG[k] === v) return
  CFG[k] = v
  saveUserConfig()
  if (HYPR_KEYS.includes(k)) applyHyprAnim()
+ else if (k === "kbLayout") applyHyprKbLayout(String(v))
  notifyConfigChange()
 }
 export const toggleCfg = (k: string): void => { setCfg(k, CFG[k] !== true) }
 
 export const resetCfg = (keys: string[]): void => {
- let hit = false, hypr = false
- for (const k of keys) if (k in DEF && CFG[k] !== DEF[k]) { CFG[k] = DEF[k]; hit = true; if (HYPR_KEYS.includes(k)) hypr = true }
+ let hit = false, hypr = false, kb = false
+ for (const k of keys) if (k in DEF && CFG[k] !== DEF[k]) { CFG[k] = DEF[k]; hit = true; if (HYPR_KEYS.includes(k)) hypr = true; if (k === "kbLayout") kb = true }
  if (!hit) return
  saveUserConfig()
  if (hypr) applyHyprAnim()
+ if (kb) applyHyprKbLayout("")
  notifyConfigChange()
 }
 

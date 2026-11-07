@@ -8,7 +8,7 @@ import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, g
 import { closeAllModals, createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
-import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL } from "./config.ts"
+import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL, LAYOUT_LABEL, readHyprKbLayout } from "./config.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
@@ -2083,6 +2083,10 @@ const CFG_SECTIONS: [string, CfgRow[]][] = [
         { t: "sel", k: "gaugeHealth", label: "HEALTH BAR" }, { t: "sel", k: "gaugeRam", label: "RAM BAR" },
         { t: "sel", k: "gaugeStamina", label: "STAMINA BAR" },
     ]],
+
+    ["// ::keyboard", [
+        { t: "sel", k: "kbLayout", label: "KEYBOARD LAYOUT" },
+    ]],
 ]
 
 const CFG_DEP: Record<string, string> = {
@@ -2096,8 +2100,11 @@ const CFG_FALLBACK: Record<string, string> = {
     sndWheelStart: "kiroshi_on.ogg", sndWheelActive: "kiroshi_menu.ogg", sndWheelEnd: "kiroshi_off.ogg",
     sndOverlayFile: "active.ogg", sndKillFile: "kill.ogg",
 }
+const OPT_LABEL: Record<string, string> = { ...METRIC_LABEL, ...LAYOUT_LABEL }
 
 let cfgOpen: string | null = null
+let kbLayoutLive = ""
+const refreshKbLive = () => { readHyprKbLayout().then(v => { if (v && v !== kbLayoutLive) { kbLayoutLive = v; ctrl?.requestDraw() } }).catch(() => {}) }
 let cfgExpand: Record<string, boolean> = {}
 let extPicker = ""
 sh("for c in zenity kdialog yad; do command -v $c >/dev/null 2>&1 && { echo $c; break; }; done").then((o) => { extPicker = String(o || "").trim() })
@@ -2173,7 +2180,8 @@ const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
     }
 
     const cur = cfgStr(r.k), open = cfgOpen === r.k
-    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${METRIC_LABEL[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
+    const shown = r.k === "kbLayout" && cur === "" ? (kbLayoutLive || "AUTO") : cur
+    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${OPT_LABEL[shown] ?? shown}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
 }
 
 export const drawConfig = (ctx, g, x, y, w) => {
@@ -2235,7 +2243,8 @@ export const drawConfig = (ctx, g, x, y, w) => {
     }
 
     if (pop) {
-        const opts = GAUGE_OPTS[pop.key] ?? []
+        let opts = GAUGE_OPTS[pop.key] ?? []
+        if (pop.key === "kbLayout" && kbLayoutLive && !opts.includes(kbLayoutLive)) opts = [kbLayoutLive, ...opts]
         const ih = 27, listH = opts.length * ih + 8
         let ly = pop.by + 2
         if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
@@ -2244,7 +2253,7 @@ export const drawConfig = (ctx, g, x, y, w) => {
         ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
         const cur = cfgStr(pop.key)
         opts.forEach((o, i) => {
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, METRIC_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, OPT_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
     }
@@ -2454,6 +2463,7 @@ export const ThemeSettingsCtrl = () => {
             uninstallStatus = ""
             releaseKeys()
             readTune()
+            refreshKbLive()
         },
         onClose: () => {
             if (kbCaptureKind || kbListening) cancelCapture()
@@ -2527,6 +2537,7 @@ export const ThemeSettingsCtrl = () => {
                     setKbScroll(0)
                     cfgOpen = null
                     hudLayoutOpen = false
+                    if (st.tab === "anim") refreshKbLive()
                     if (st.tab !== "wall") { wallOpen = null; wallScroll = 0 }
                     modal.requestDraw()
                 }
@@ -2584,6 +2595,7 @@ export const ThemeSettingsCtrl = () => {
                         setKbScroll(0)
                         cfgOpen = null
                         hudLayoutOpen = false
+                        if (id === "anim") refreshKbLive()
                         if (id !== "wall") { wallOpen = null; wallScroll = 0 }
                         uninstallConfirm = false
                         modal.requestDraw()

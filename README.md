@@ -188,6 +188,8 @@ before re-running it, then restarts the HUD.
 The theme modifier is **`$themeMod = SUPER + SHIFT`**. You can change it on Theme Settings > Keybinds (or change it at the top of `config/keybinds.lua`). 
 Open the full cheat-sheet with all keybinds anytime with **`SUPER+SHIFT+H`**.
 
+Keybinds are bound by key name, so they only fire under the right keyboard layout — set it on **Theme Settings > Configuration > KEYBOARD LAYOUT** (it writes Hyprland `input.kb_layout` live). Leave it on **AUTO** to keep Hyprland's own detected layout.
+
 ### HUD & widgets
 
 | Keybind | Action |
