@@ -18,6 +18,7 @@ const DEF: Record<string, CfgVal> = {
 
  // kb layout for binds
  kbLayout: "",
+ lang: "en",
 }
 const CFG: Record<string, CfgVal> = { ...DEF }
 
@@ -39,6 +40,10 @@ const BAR_METRICS = ["cpu", "cputemp", "ram", "ramfree", "swap", "disk", "batter
 export const LAYOUT_OPTS: string[] = ["us", "gb", "de", "fr", "es", "it", "pt-br", "ru", "ua", "gr", "tr", "pl", "cz", "jp", "kr", "cn"]
 export const LAYOUT_LABEL: Record<string, string> = { "": "AUTO (DETECTED)" }
 LAYOUT_OPTS.forEach(l => { LAYOUT_LABEL[l] = l.toUpperCase() })
+
+export const LANG_OPTS: string[] = ["en", "ru", "fr", "es", "pt", "de", "sv", "nl", "no", "da", "fi", "hu", "ro", "bg", "el", "uk", "be", "sk", "sl", "hr", "sr", "lt", "lv", "et", "ja", "zh", "ko", "th", "vi", "id", "ms", "ar", "he", "fa", "ur", "it", "tr", "pl", "cz"]
+export const LANG_LABEL: Record<string, string> = { en: "ENGLISH", ru: "RUSSIAN", fr: "FRENCH", es: "SPANISH", pt: "PORTUGUESE", de: "GERMAN", sv: "SWEDISH", nl: "DUTCH", no: "NORWEGIAN", da: "DANISH", fi: "FINNISH", hu: "HUNGARIAN", ro: "ROMANIAN", bg: "BULGARIAN", el: "GREEK", uk: "UKRAINIAN", be: "BELARUSIAN", sk: "SLOVAK", sl: "SLOVENIAN", hr: "CROATIAN", sr: "SERBIAN", lt: "LITHUANIAN", lv: "LATVIAN", et: "ESTONIAN", ja: "JAPANESE", zh: "CHINESE", ko: "KOREAN", th: "THAI", vi: "VIETNAMESE", id: "INDONESIAN", ms: "MALAY", ar: "ARABIC", he: "HEBREW", fa: "PERSIAN", ur: "URDU", it: "ITALIAN", tr: "TURKISH", pl: "POLISH", cz: "CZECH" }
+LANG_OPTS.forEach(l => { if (!LANG_LABEL[l]) LANG_LABEL[l] = l.toUpperCase() })
 
 export const GAUGE_OPTS: Record<string, string[]> = {
  gaugeBadge: ["workspace", "cputemp", "cpu", "ram", "ramfree", "swap", "disk", "battery", "gpu", "load"],
@@ -118,17 +123,19 @@ export const setCfg = (k: string, v: CfgVal): void => {
  saveUserConfig()
  if (HYPR_KEYS.includes(k)) applyHyprAnim()
  else if (k === "kbLayout") applyHyprKbLayout(String(v))
- notifyConfigChange()
+ else if (k === "lang") notifyConfigChange()
+ else notifyConfigChange()
 }
 export const toggleCfg = (k: string): void => { setCfg(k, CFG[k] !== true) }
 
 export const resetCfg = (keys: string[]): void => {
- let hit = false, hypr = false, kb = false
- for (const k of keys) if (k in DEF && CFG[k] !== DEF[k]) { CFG[k] = DEF[k]; hit = true; if (HYPR_KEYS.includes(k)) hypr = true; if (k === "kbLayout") kb = true }
+ let hit = false, hypr = false, kb = false, lang = false
+ for (const k of keys) if (k in DEF && CFG[k] !== DEF[k]) { CFG[k] = DEF[k]; hit = true; if (HYPR_KEYS.includes(k)) hypr = true; if (k === "kbLayout") kb = true; if (k === "lang") lang = true }
  if (!hit) return
  saveUserConfig()
  if (hypr) applyHyprAnim()
  if (kb) applyHyprKbLayout("")
+ if (lang) notifyConfigChange()
  notifyConfigChange()
 }
 

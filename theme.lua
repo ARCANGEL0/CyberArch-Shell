@@ -30,6 +30,9 @@ local anim_workspace = anim_master and ucfg["animWorkspace"] == true
 if type(ucfg["kbLayout"]) == "string" and ucfg["kbLayout"] ~= "" then
     hl.config({ input = { kb_layout = ucfg["kbLayout"] } })
 end
+if type(ucfg["lang"]) == "string" and ucfg["lang"] ~= "" and ucfg["lang"] ~= "en" then
+    hl.config({ locale = ucfg["lang"] })
+end
 local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
 local set_wallpaper = wallpapers_path .. "/netwatch/main.mp4"
 local wf = loadfile(user_dir .. "/wallpaper.lua")
