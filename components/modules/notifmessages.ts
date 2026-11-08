@@ -8,6 +8,7 @@ import { CYBER_DIR, winScale } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
 import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { t } from "./i18n.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -432,7 +433,7 @@ const draw = (ctx: any) => {
         const mC = tcol(msgActive, msgHov), aC = tcol(appsActive, appsHov)
 
 
-        tiltText(ctx, plane, ICONW + 22, 16, ENVELOPE, ICONF, 13, mC, labelA * 0.9, { bold: true, glow: 0.6 })
+        tiltText(ctx, plane, ICONW + 22, 16, t("cfg.notif.network"), ICONF, 13, mC, labelA * 0.9, { bold: true, glow: 0.6 })
         tiltText(ctx, plane, ICONW + 42, 16, "MESSAGES", RAJDHANI, 18, mC, labelA, { bold: true, glow: 0.6 })
         if (view === "detail" && selectedApp) {
             tiltText(ctx, plane, ICONW + 110, 16, ">", ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
@@ -577,7 +578,7 @@ const draw = (ctx: any) => {
         }
 
         if (shown.length === 0) {
-            tiltText(ctx, plane, ICONW + 22, HEADER + 26, "NO MESSAGES", MONO, 11, GREY, 0.5 * pa)
+            tiltText(ctx, plane, ICONW + 22, HEADER + 26, t("cfg.notif.no_messages"), MONO, 11, GREY, 0.5 * pa)
         }
     } else {
         const gs = shown as { app: string; last: any; count: number }[]
@@ -623,7 +624,7 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
         }
 
         if (gs.length === 0) {
-            tiltText(ctx, plane, ICONW + 22, HEADER + 26, "NO RECENT ALERTS", MONO, 11, GREY, 0.5 * pa)
+            tiltText(ctx, plane, ICONW + 22, HEADER + 26, t("cfg.notif.no_recent_alerts"), MONO, 11, GREY, 0.5 * pa)
         }
     }
     ctx.restore()
@@ -637,7 +638,7 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
             const dc: [number, number, number] = blDismissHover ? NEON.notiflbl : NEON.overlay
             const dg = blDismissHover ? 0.9 : 0.5
             tiltText(ctx, plane, ICONW + 14, FOOTER_Y + 22, XICON, ICONF, 12, dc, fA * 0.9, { bold: true, glow: dg })
-            tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, view === "detail" ? "DISMISS ALL" : "DISMISS", ROBOTO_BOLD, 10, dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })
+            tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, view === "detail" ? t("cfg.notif.dismiss_all") : t("cfg.notif.dismiss"), ROBOTO_BOLD, 10, dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })
         }
         keycap(ctx, ICONW + 326, FOOTER_Y + 7, "M", fA)
         tiltText(ctx, plane, ICONW + 358, FOOTER_Y + 22, "CLOSE", ROBOTO_BOLD, 10, RED, fA, { bold: true, glow: 0.7, bloom: 0.3 })
