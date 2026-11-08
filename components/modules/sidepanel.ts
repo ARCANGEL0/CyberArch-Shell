@@ -9,6 +9,7 @@ import { interval, execAsync } from "astal"
 import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
+import { t } from "./i18n.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
@@ -266,8 +267,8 @@ const ordDay = (d) => { const j = d % 10, k = d % 100; return d + (j === 1 && k 
 const fmtDate = (now) => `${ordDay(now.getDate())} ${MON3[now.getMonth()]}, ${now.getFullYear()}`
 
 const drawOverlay = (ctx, now) => {
- tiltText(ctx, minimap, MX0 + 8, MY0 + 10, "55S.441.20", MONO, 7, MAPACC, 0.34)
- tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || "NIGHT CITY").slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
+ tiltText(ctx, minimap, MX0 + 8, MY0 + 10, t("cfg.sidepanel.coord"), MONO, 7, MAPACC, 0.34)
+ tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || t("cfg.sidepanel.night_city")).slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
   const tstr = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
  const tcx = MX0 + 4, tcy = MY0 - 7
  tiltText(ctx, minimap, tcx, tcy, tstr, TITLE, 18.1, mapAccent.clock, 0.92, { bold: true, glow: 0.82,extraRotate: 0.01  })
@@ -281,7 +282,7 @@ const drawOverlay = (ctx, now) => {
  fillQuad(ctx, minimap, MX0 - 2, fy - 8, MX1 + 2, fy + 70, [0, 0, 0], 0.012)
  strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.16, 5)
  strokePath(ctx, minimap, [[MX0 + 2, fy + 5], [MX1 - 2, fy + 5]], FORECOL, 0.62, 1)
- tiltText(ctx, minimap, MX0, fy, "7-DAY FORECAST", TITLE, 9, FORECOL, 0.85, { bold: true, glow: 0.32 })
+ tiltText(ctx, minimap, MX0, fy, t("cfg.sidepanel.forecast"), TITLE, 9, FORECOL, 0.85, { bold: true, glow: 0.32 })
  tiltText(ctx, minimap, MX1, fy, "L-CLICK \u25B8 DETAILS \u00B7 R \u25B8 CITY", MONO, 7, MAPACC, 0.38, { align: "r" })
  const span = (MX1 - MX0) / 7
  for (let i = 0; i < 7; i++) {
@@ -297,7 +298,7 @@ const drawOverlay = (ctx, now) => {
  const ny = fy + 121, dx = 72
  const off = !network.link
  const stxt = off ? "OFFLINE!" : netName
- tiltText(ctx, connPlane, MX0 - 16 + dx, ny, "NETWORK STATUS", TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
+ tiltText(ctx, connPlane, MX0 - 16 + dx, ny, t("cfg.sidepanel.network_status"), TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
  alertChip(ctx, iconPlane, MX0 + 6 + dx, ny + 11, NETCHIP, 0.8)
  tiltText(ctx, connPlane, MX0 + 26 + dx, ny + 22, stxt, TITLE, 14, NETCOL, 0.95, { bold: true, glow: off ? 0.22 : 0.1, bloom: 0.45, shadow: 1 })
 }
