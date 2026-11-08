@@ -1564,16 +1564,16 @@ fi`).then(() => timeout(200, fetchInitApps))
             } else if (st.tab === "system") {
             groupLabel(ctx, mx, cy3, "// SYS_INFO")
                   const sw4 = (mw - 28) / 3, gpuOk = st.sysInfo.gpuLoad >= 0
-              slotSq(ctx, mx, cy3 + 14, sw4, 62, "GPU LOAD", gpuOk ? `${st.sysInfo.gpuLoad}%` : "N/A", gpuOk ? st.sysInfo.gpuLoad / 100 : -1, SYSY, gpuOk && st.sysInfo.gpuLoad > 85)
-                slotSq(ctx, mx + sw4 + 14, cy3 + 14, sw4, 62, "CORES", `${NCORES}`, -1, SYSC, false)
-              slotSq(ctx, mx + (sw4 + 14) * 2, cy3 + 14, sw4, 62, "UPTIME", st.uptime, -1, SYSC, false)
+              slotSq(ctx, mx, cy3 + 14, sw4, 62, t("cfg.sys.gpu_load"), gpuOk ? `${st.sysInfo.gpuLoad}%` : "N/A", gpuOk ? st.sysInfo.gpuLoad / 100 : -1, SYSY, gpuOk && st.sysInfo.gpuLoad > 85)
+                slotSq(ctx, mx + sw4 + 14, cy3 + 14, sw4, 62, t("cfg.sys.cores"), `${NCORES}`, -1, SYSC, false)
+              slotSq(ctx, mx + (sw4 + 14) * 2, cy3 + 14, sw4, 62, t("cfg.sys.uptime"), st.uptime, -1, SYSC, false)
 
                   let gy = cy3 + 94
-              groupLabel(ctx, mx, gy, "// CPU")
+              groupLabel(ctx, mx, gy, t("cfg.sys.cpu"))
                 drawGraph(ctx, mx, gy + 10, mw, 38, st.cpuHist, 100, SYSY)
               gy += 62
                   if (gpuOk) {
-                groupLabel(ctx, mx, gy, "// GPU")
+                groupLabel(ctx, mx, gy, t("cfg.sys.gpu"))
                     drawGraph(ctx, mx, gy + 10, mw, 38, st.sysInfo.gpuHist, 100, SYSC)
                   gy += 62
                   }
