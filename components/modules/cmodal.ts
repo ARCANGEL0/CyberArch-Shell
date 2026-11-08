@@ -21,6 +21,7 @@ import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { t } from "./i18n.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -122,7 +123,7 @@ export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = C
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5*sc, kw, bh - 5*sc); ctx.fill()
     ctx.selectFontFace(TITLE, 0, 1)
     ctx.setFontSize(Math.round(8*sc))
-    const lbl = val ? "ON" : "OFF"
+    const lbl = val ? t("on") : t("off")
     const tw = ctx.textExtents(lbl).width
     const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
@@ -166,11 +167,12 @@ const drawHudFrame = (ctx, x, y, w, h, title) => {
 
     const fy = y + h - ft
     ctx.setSourceRGBA(hr, hg, hb, 0.5); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(px + 10, fy); ctx.lineTo(px + pw - 10, fy); ctx.stroke()
-    txt(ctx, px + 12, fy + 11, "ELISA TEST — DECLARATION", MONO, 6.5, HUDRED, 0.72)
-    txt(ctx, px + 12, fy + 19, "MEDICAL EXAMINATION REPORT", MONO, 6.5, HUDRED, 0.72)
+    txt(ctx, px + 12, fy + 11, t("cfg.hudframe.elisa"), MONO, 6.5, HUDRED, 0.72)
+    txt(ctx, px + 12, fy + 19, t("cfg.hudframe.medical"), MONO, 6.5, HUDRED, 0.72)
+    txt(ctx, px + 12, fy + 27, t("cfg.hudframe.sector"), MONO, 6.5, HUDRED, 0.5)
     txt(ctx, px + 12, fy + 27, "4455.444.492513", MONO, 6.5, HUDRED, 0.5)
     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(26); ctx.setSourceRGBA(hr, hg, hb, 0.96)
-    const lg = "cc+", lw2 = ctx.textExtents(lg).width
+    const lg = t("cfg.hudframe.cc"), lw2 = ctx.textExtents(lg).width
     ctx.moveTo(px + pw - lw2 - 12, fy + 27); ctx.showText(lg)
 }
 
@@ -532,7 +534,7 @@ const VolCtrl = () => {
             const want: any = {}
             String(s).trim().split("\n").filter(Boolean).forEach((l) => { const i = l.indexOf("="); if (i > 0) want[l.slice(0, i)] = parseInt(l.slice(i + 1)) })
             st.apps = o.trim().split("\n").filter(Boolean).map((l) => {
-                const a = l.split("|"), name = (a[1] || "App"), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
+                const a = l.split("|"), name = (a[1] || t("cfg.audio.app")), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
                 return { id: a[0], name, vol: (w != null && !isNaN(w)) ? Math.min(1, w / 100) : live, muted: a[3] === "yes" }
             })
             ctrl.requestDraw()
@@ -541,7 +543,7 @@ const VolCtrl = () => {
             const want: any = {}
             String(s).trim().split("\n").filter(Boolean).forEach((l) => { const i = l.indexOf("="); if (i > 0) want[l.slice(0, i)] = parseInt(l.slice(i + 1)) })
             st.recApps = o.trim().split("\n").filter(Boolean).map((l) => {
-                const a = l.split("|"), name = (a[1] || "App"), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
+                const a = l.split("|"), name = (a[1] || t("cfg.audio.app")), live = Math.min(1, (parseInt(a[2]) || 0) / 100), w = want[name]
                 return { id: a[0], name, vol: (w != null && !isNaN(w)) ? Math.min(1, w / 100) : live, muted: a[3] === "yes" }
             })
             ctrl.requestDraw()
@@ -582,7 +584,7 @@ const VolCtrl = () => {
         drawSlider(ctx, g.push, x, yO, trackW, st.master, (t) => { st.master = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${t.toFixed(2)}`); g.refresh() })
         const r0 = g.push[g.push.length - 1]
         armScroll(g, r0, () => st.master, (v) => { st.master = v; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${v.toFixed(2)}`) })
-        txt(ctx, x + trackW + 12, yO + 5, st.muted ? "MUTE" : `${Math.round(st.master * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
+        txt(ctx, x + trackW + 12, yO + 5, st.muted ? t("cfg.audio.mute") : `${Math.round(st.master * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
 
         const yIS = yO + 38
         sectionHeader(ctx, g, x, yIS, "// MASTER INPUT", w)
@@ -590,16 +592,16 @@ const VolCtrl = () => {
         drawSlider(ctx, g.push, x, yI, trackW, st.mic, (t) => { st.mic = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${t.toFixed(2)}`); g.refresh() })
         const rI = g.push[g.push.length - 1]
         armScroll(g, rI, () => st.mic, (v) => { st.mic = v; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${v.toFixed(2)}`) })
-        txt(ctx, x + trackW + 12, yI + 5, st.micMuted ? "MUTE" : `${Math.round(st.mic * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
+        txt(ctx, x + trackW + 12, yI + 5, st.micMuted ? t("cfg.audio.mute") : `${Math.round(st.mic * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
 
         const muteY = yI + 38
         const halfW = (w - 6) / 2
-        drawBtn(ctx, g.push, x, muteY, halfW, 24, st.micMuted ? "UNMUTE INPUT" : "MUTE INPUT", () => {
+        drawBtn(ctx, g.push, x, muteY, halfW, 24, st.micMuted ? t("cfg.audio.unmute_input") : t("cfg.audio.mute_input"), () => {
             st.micMuted = !st.micMuted
             g.refresh()
             sh("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle").then(() => timeout(120, refresh))
         }, st.micMuted, g.col, ch(st.micMuted ? 0xf131 : 0xf130), 10)
-        drawBtn(ctx, g.push, x + halfW + 6, muteY, halfW, 24, st.muted ? "UNMUTE OUTPUT" : "MUTE OUTPUT", () => {
+        drawBtn(ctx, g.push, x + halfW + 6, muteY, halfW, 24, st.muted ? t("cfg.audio.unmute_output") : t("cfg.audio.mute_output"), () => {
             st.muted = !st.muted
             g.refresh()
             sh("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle").then(() => timeout(120, refresh))
@@ -646,7 +648,7 @@ const VolCtrl = () => {
         const muteBtnW = 52
         const pctW = 32
         const trackW = w - muteBtnW - pctW - 14
-        const nm = (a.name || "App").slice(0, 24)
+        const nm = (a.name || t("cfg.audio.app")).slice(0, 24)
         txt(ctx, x, y, nm.toUpperCase(), MONO, 9, g.col, a.muted ? 0.4 : 0.95)
         const muteBx = x + w - muteBtnW
         const pctBx = muteBx - pctW - 6
@@ -654,7 +656,7 @@ const VolCtrl = () => {
         drawSlider(ctx, g.push, x, y + 12, trackW, a.vol, (t) => { a.vol = t; setter(a.name, a.id, t); g.refresh() })
         const rr = g.push[g.push.length - 1]
         armApp(g, rr, () => a.vol, (v) => { a.vol = v; setter(a.name, a.id, v) })
-        drawBtn(ctx, g.push, muteBx, y + 4, muteBtnW, 18, "MUTE", () => {
+        drawBtn(ctx, g.push, muteBx, y + 4, muteBtnW, 18, t("cfg.audio.mute"), () => {
             a.muted = !a.muted
             g.refresh()
             sh(`pactl ${setter === setAppVol ? "set-sink-input-mute" : "set-source-output-mute"} ${a.id} toggle`).then(() => timeout(120, refresh))
@@ -713,7 +715,7 @@ const BrtCtrl = () => {
         draw: (ctx, g) => {
             const x = g.X + 18, trackW = g.w - 36 - 52, secW = g.w - 36
             const ty = g.Y + HEADER + 48
-            sectionHeader(ctx, g, x, ty - 18, "BRIGHTNESS", secW)
+            sectionHeader(ctx, g, x, ty - 18, t("cfg.audio.brightness"), secW)
             drawSlider(ctx, g.push, x, ty, trackW, st.val, (t) => { st.val = Math.max(0.02, t); sh(`brightnessctl set ${Math.round(st.val * 100)}%`); g.refresh() })
             txt(ctx, x + trackW + 12, ty + 5, `${Math.round(st.val * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
         },
@@ -828,11 +830,11 @@ const WifiCtrl = () => {
         draw: (ctx, g) => {
             const panelW = 280, panelX = g.X + g.w - panelW - 6, panelH = g.h
             drawGlass(ctx, panelX, g.Y, panelW, panelH, g.col)
-            txt(ctx, panelX + 16, g.Y + 27, "NETWORK", TITLE, 14, g.accent, 0.98, 1, 0.45)
+            txt(ctx, panelX + 16, g.Y + 27, t("cfg.wifi.title"), TITLE, 14, g.accent, 0.98, 1, 0.45)
             ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.32); ctx.setLineWidth(1)
             ctx.newPath(); ctx.moveTo(panelX + 8, g.Y + HEADER); ctx.lineTo(panelX + panelW - 8, g.Y + HEADER); ctx.stroke()
             const px = panelX + 14, py = g.Y + HEADER + 10
-            drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "WIFI: ON" : "WIFI: OFF", toggle, st.on)
+            drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? t("cfg.wifi.on") : t("cfg.wifi.off"), toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", refresh, false, g.col)
             let ty = py + (st.on ? 88 : 50)
             txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? ACC : g.col, 0.85)
@@ -864,10 +866,10 @@ const WifiCtrl = () => {
                 }
                 ty += btnH + 10
             } else if (st.on) {
-                txt(ctx, px, ty, "~ SELECT A NETWORK ~", MONO, 9, g.col, 0.5)
+                txt(ctx, px, ty, t("cfg.wifi.select_network"), MONO, 9, g.col, 0.5)
                 ty += 18
             } else {
-                txt(ctx, px, ty, "~ OFFLINE ~", MONO, 9, g.col, 0.5)
+                txt(ctx, px, ty, t("cfg.wifi.offline"), MONO, 9, g.col, 0.5)
                 ty += 18
             }
             const sepY = ty
@@ -903,18 +905,18 @@ const BtCtrl = () => {
     const toggle = () => { if (st.on) { sh("bluetoothctl power off").then(() => timeout(700, refresh)) } else { sh("rfkill unblock bluetooth; sleep 0.3; bluetoothctl power on").then(() => timeout(1500, scanBT)) } }
     const wheelList = () => st.devs.map((d) => ({ label: d.name, badge: d.connected ? "CONNECTED" : d.paired ? "PAIRED" : d.mac.slice(0, 8), glyph: null, data: d }))
     ctrl = createModal({
-        name: "bt", tabTitle: "BLUETOOTH", W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
+        name: "bt", tabTitle: t("cfg.bluetooth.title"), W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
         onOpen: () => { st.selected = null; st.scroll = 0; refresh(); if (st.on) timeout(800, scanBT); openWheel({ title: "BLUETOOTH", subtitle: "// KIROSHI :: TRACING DEVICES", footer: "[ SCROLL / ARROWS ] NAVIGATE   [ ENTER / CLICK ] CONNECT   [ ESC ] CLOSE", searchable: true, reserveX: 600, onActivate: (d) => sh(`bluetoothctl ${d.connected ? "disconnect" : "connect"} ${d.mac}`).then(() => timeout(1800, refresh)), onFocus: (d) => { st.selected = d; ctrl.requestDraw() }, onReset: () => ctrl.close(), emptyText: "// NO DEVICES" }, wheelList()) },
         onClose: () => { closeWheel(); st.selected = null },
         poll: () => refresh(), pollMs: 5000,
         draw: (ctx, g) => {
             const panelW = 280, panelX = g.X + g.w - panelW - 6
             drawGlass(ctx, panelX, g.Y, panelW, g.h, g.col)
-            txt(ctx, panelX + 16, g.Y + 27, "BLUETOOTH", TITLE, 14, g.accent, 0.98, 1, 0.45)
+            txt(ctx, panelX + 16, g.Y + 27, t("cfg.bluetooth.title"), TITLE, 14, g.accent, 0.98, 1, 0.45)
             ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.32); ctx.setLineWidth(1)
             ctx.newPath(); ctx.moveTo(panelX + 8, g.Y + HEADER); ctx.lineTo(panelX + panelW - 8, g.Y + HEADER); ctx.stroke()
             const px = panelX + 14, py = g.Y + HEADER + 10
-            drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? "BT: ON" : "BT: OFF", toggle, st.on)
+            drawBtn(ctx, g.push, px, py, panelW - 28, 26, st.on ? t("cfg.bluetooth.on") : t("cfg.bluetooth.off"), toggle, st.on)
             if (st.on) drawBtn(ctx, g.push, px, py + 46, panelW - 28, 22, "SCAN", scanBT, false, g.col)
             let ty = py + (st.on ? 88 : 50)
             txt(ctx, px, ty, `STATUS: ${st.on ? "ACTIVE" : "INACTIVE"}`, MONO, 10, st.on ? ACC : g.col, 0.85)
@@ -943,7 +945,7 @@ const BtCtrl = () => {
                 txt(ctx, px, ty, "~ SELECT A DEVICE ~", MONO, 9, g.col, 0.5)
                 ty += 18
             } else {
-                txt(ctx, px, ty, "~ OFFLINE ~", MONO, 9, g.col, 0.5)
+                txt(ctx, px, ty, t("cfg.wifi.offline"), MONO, 9, g.col, 0.5)
                 ty += 18
             }
             const sepY = ty
@@ -1029,7 +1031,7 @@ const drawProcList = (ctx, push, x, y, w, h, items, scroll, sel, pinned, onClick
     if (items.length > vis) { const bh = lh * vis / items.length, by = listTop + (lh - bh) * (scroll / maxS || 0); ctx.setSourceRGBA(BR, BG, BB, 0.5); ctx.rectangle(x + w + 4, by, 3, bh); ctx.fill() }
 }
 
-const PROFILES = [["PERFORMANCE", "performance"], ["NEUTRAL", "balanced"], ["ECONOMIC", "power-saver"]]
+const PROFILES = [[t("cfg.sys.performance"), "performance"], [t("cfg.sys.neutral"), "balanced"], [t("cfg.sys.economic"), "power-saver"]]
 const BatCtrl = () => {
     const st: any = { present: true, status: "", pct: 0, rate: 0, mins: 0, perMin: 0, profile: "balanced", apps: [], hist: [] }
     let ctrl
@@ -1057,25 +1059,25 @@ const BatCtrl = () => {
     }
     const setProfile = (p) => { sh(`powerprofilesctl set ${p}`).then(() => timeout(300, refresh)) }
     ctrl = createModal({
-        name: "bat", tabTitle: "POWER CELL", W: 352, H: 470, hud: true,
+        name: "bat", tabTitle: t("cfg.sys.tab_pwr"), W: 352, H: 470, hud: true,
         onOpen: () => { st.hist = []; refresh() }, poll: refresh, pollMs: 4000,
         draw: (ctx, g) => {
             const x = g.X + 20, w = g.w - 40, RED = g.col, BR = rcAcc()
             let cy = g.Y + HEADER + 16
             if (!st.present) {
                 ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(28); const aw = ctx.textExtents("AC POWERED").width
-                ctx.setSourceRGBA(BR[0], BR[1], BR[2], 0.98); ctx.moveTo(g.X + g.w / 2 - aw / 2, cy + 30); ctx.showText("AC POWERED")
-                txt(ctx, g.X + g.w / 2 - aw / 2, cy + 50, "// DIRECT SUPPLY", MONO, 9, g.col, 0.82); cy += 74
+                ctx.setSourceRGBA(BR[0], BR[1], BR[2], 0.98); ctx.moveTo(g.X + g.w / 2 - aw / 2, cy + 30); ctx.showText(t("cfg.sys.ac_powered"))
+                txt(ctx, g.X + g.w / 2 - aw / 2, cy + 50, t("cfg.sys.direct_supply"), MONO, 9, g.col, 0.82); cy += 74
             } else {
                 const charging = st.status === "Charging", full = st.status === "Full" || st.status === "Not charging"
                 const col = st.pct <= 15 ? [1, 0.4, 0.44] : BR
                 ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(46); const big = `${st.pct}%`; const bw = ctx.textExtents(big).width
                 ctx.setSourceRGBA(col[0], col[1], col[2], 0.98); ctx.moveTo(x, cy + 36); ctx.showText(big)
-                txt(ctx, x + bw + 16, cy + 18, full ? "✓ FULLY CHARGED" : charging ? "⚡ CHARGING" : "ON BATTERY", MONO, 11, RED, 0.92)
-                txt(ctx, x + bw + 16, cy + 37, full ? "AC CONNECTED" : `${st.rate.toFixed(1)} W · ${st.perMin.toFixed(1)} %/min${st.mins > 0 ? " · " + fmtTime(st.mins) + (charging ? " to full" : " left") : ""}`, MONO, 8.5, col, 0.72)
+                txt(ctx, x + bw + 16, cy + 18, full ? t("cfg.sys.fully_charged") : charging ? t("cfg.sys.charging") : t("cfg.sys.on_battery"), MONO, 11, RED, 0.92)
+                txt(ctx, x + bw + 16, cy + 37, full ? t("cfg.sys.ac_connected") : `${st.rate.toFixed(1)} W · ${st.perMin.toFixed(1)} %/min${st.mins > 0 ? " · " + fmtTime(st.mins) + (charging ? " to full" : " left") : ""}`, MONO, 8.5, col, 0.72)
                 ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.18); ctx.rectangle(x, cy + 48, w, 5); ctx.fill()
                 ctx.setSourceRGBA(col[0], col[1], col[2], 0.9); ctx.rectangle(x, cy + 48, w * st.pct / 100, 5); ctx.fill()
-                txt(ctx, x, cy + 68, "// DRAW HISTORY · W", MONO, 8, RED, 0.45)
+                txt(ctx, x, cy + 68, t("cfg.sys.draw_history"), MONO, 8, RED, 0.45)
                 drawGraph(ctx, x, cy + 72, w, 42, st.hist, Math.max(5, ...(st.hist.length ? st.hist : [5])), col); cy += 128
             }
             const gap = 10, bw2 = (w - 2 * gap) / 3
@@ -1434,7 +1436,7 @@ fi`).then(() => timeout(200, fetchInitApps))
     const killSel = () => { if (st.sel) sh(`kill -9 ${st.sel} 2>/dev/null`).then(() => { st.sel = ""; st.selProc = null; timeout(400, refresh) }) }
     const layout = monitorLayoutSize(activeMonitor())
     ctrl = createModal({
-        name: "sys", tabTitle: "SYSTEM MONITOR", W: layout.width, H: layout.height, sizeForMonitor: monitorLayoutSize, noGlass: true, pad: 0,
+        name: "sys", tabTitle: t("cfg.sys.tab_sys"), W: layout.width, H: layout.height, sizeForMonitor: monitorLayoutSize, noGlass: true, pad: 0,
         idleFrameMs: 70,
         onFrame: () => {
             const tc = st.cpu / 100, tm = st.memU / st.memT
@@ -1486,7 +1488,7 @@ fi`).then(() => timeout(200, fetchInitApps))
             let hx = X + 46
             hx = pair(hx, `${st.cpu}`, "CPU", SYSY) + 34
             hx = pair(hx, `${Math.round(memF * 100)}`, "MEM", SYSC) + 34
-            const tabs = [["PROC_LIST", "task"], ["SYS_INFO", "system"], ["INIT_DAEMON", "init"], ["INFO_LOGS", "logs"]]
+            const tabs = [[t("cfg.sys.tab.proc"), "task"], [t("cfg.sys.tab.sys"), "system"], [t("cfg.sys.tab.init"), "init"], [t("cfg.sys.tab.logs"), "logs"]]
             ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
             const tabGap = narrow ? 16 : 30
             const tabY = hy + (narrow ? 44 : 0)
@@ -1553,12 +1555,12 @@ fi`).then(() => timeout(200, fetchInitApps))
 
                 const py = cy3 + (narrow ? 300 : 172)
                 groupLabel(ctx, mx, py, "// PROCESSES")
-                drawBtn(ctx, g.push, mx + mw - 150, py - 16, 150, 26, st.sel ? "FORCE KILL" : "SELECT A PROC", killSel, !!st.sel, SYSR, st.sel ? ch(0xf011) : "")
+                drawBtn(ctx, g.push, mx + mw - 150, py - 16, 150, 26, st.sel ? t("cfg.sys.force_kill") : t("cfg.sys.select_proc"), killSel, !!st.sel, SYSR, st.sel ? ch(0xf011) : "")
                 const ly = py + 14, lh = (Y + H) - ly - 46
                 const pinned = st.sel ? (st.selProc || st.procs.find((p) => p.pid === st.sel)) : null
                 const rest = pinned ? st.procs.filter((p) => p.pid !== st.sel) : st.procs
                 drawProcList(ctx, g.push, mx, ly, mw, lh, rest, st.scroll, st.sel, pinned, select, (p) => { select(p); killSel() })
-                txt(ctx, X + 46, Y + H - 22, "SCROLL processes · CLICK to select · RIGHT-CLICK kills · ESC closes", MONO, 9, SYSDIM, 0.5)
+                txt(ctx, X + 46, Y + H - 22, t("cfg.sys.scroll_procs"), MONO, 9, SYSDIM, 0.5)
             } else if (st.tab === "system") {
             groupLabel(ctx, mx, cy3, "// SYS_INFO")
                   const sw4 = (mw - 28) / 3, gpuOk = st.sysInfo.gpuLoad >= 0
