@@ -7,6 +7,7 @@ import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
 import { USER, USER_A, isOvr, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
 import { animOn } from "./config.ts"
+import { t } from "./i18n.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, winScale, monW, monH } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
@@ -170,7 +171,7 @@ const keyChip = (ctx, x, yc, key, label, boxCol, labelCol, a) => {
 const renderPanel = (ctx) => {
  const X = 0, Y = 0
 
- txt(ctx, X + 14, Y + 14, "TRN_TCLAS_B00095", MONO, 9, aCC, 0.55, 1)
+ txt(ctx, X + 14, Y + 14, t("cfg.player.radioport"), MONO, 9, aCC, 0.55, 1)
 
  const tby = Y + 22, tbh = 50, tx0 = X + 14
  accentBar(ctx, X + 5, tby + 1, 9, tbh - 2, 1)
@@ -182,7 +183,7 @@ const renderPanel = (ctx) => {
  ctx.fill()
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setOperator(12); ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.12); ctx.setLineWidth(4); ctx.stroke(); ctx.setOperator(2)
  bevelPath(ctx, tx0, tby, PW - tx0, tbh, 13); ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.82); ctx.setLineWidth(1.3); ctx.stroke()
- ptext(ctx, X + 28, tby + 34, "RADIOPORT", TITLE, true, 26, aTI, 0.98, 0.5)
+ ptext(ctx, X + 28, tby + 34, t("cfg.player.radioport"), TITLE, true, 26, aTI, 0.98, 0.5)
 
  const csz = CSZ, cx = X + 16, cy = Y + 102, bev = 14
  accentBar(ctx, X + 7, cy + 1, 9, csz - 2, 0.62)
@@ -195,20 +196,20 @@ const renderPanel = (ctx) => {
  const gn = 5, gsz = 5, gm = 20, gstep = (csz - gm * 2) / (gn - 1)
  for (let r = 0; r < gn; r++) for (let c = 0; c < gn; c++) ctx.rectangle(cx + gm + c * gstep - gsz / 2, cy + gm + r * gstep - gsz / 2, gsz, gsz)
  ctx.stroke()
- const tl = [`IMAGE NAME:  ${trunc((title || "SIGNAL").toUpperCase(), 16)}`, "IMAGE TYPE:  NETRUNNER AUDIO STREAM", "[STREAM CACHED]", "SECTOR ADDR:  00000000"]
+ const tl = [`IMAGE NAME:  ${trunc((title || t("cfg.sidepanel.night_city")).toUpperCase(), 16)}`, t("cfg.player.image_type"), "[STREAM CACHED]", "SECTOR ADDR:  00000000"]
  tl.forEach((s, i) => txt(ctx, cx + 8, cy + csz - 42 + i * 11, s, MONO, 7.5, aCC, 0.82, 1))
 
  const rx = X + 222
- txt(ctx, rx, cy - 6, status === "Paused" ? "PAUSED" : "NOW PLAYING", MONO, 9, aCC, 0.72, 1)
+ txt(ctx, rx, cy - 6, status === "Paused" ? t("cfg.player.paused") : t("cfg.player.now_playing"), MONO, 9, aCC, 0.72, 1)
  ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.8); ctx.setLineWidth(1.4); ctx.newPath(); ctx.moveTo(rx, cy + 1); ctx.lineTo(X + PW, cy + 1); ctx.stroke()
  if (title) {
      ptext(ctx, rx, cy + 40, trunc((artist || source || "—").toUpperCase(), 30), TITLE, true, 21, aCC, 0.97, 0.3)
      ptext(ctx, rx, cy + 62, trunc(title, 38), TITLE, true, 15, aCC, 0.9)
  } else {
-     ptext(ctx, rx, cy + 46, "NOT PLAYING ANY AUDIO", TITLE, true, 17, aCC, 0.85, 0.2)
+     ptext(ctx, rx, cy + 46, t("cfg.player.not_playing"), TITLE, true, 17, aCC, 0.85, 0.2)
  }
 
- txt(ctx, rx, cy + 120, "VOLUME", TITLE, 15, aVO, 0.95, 1)
+ txt(ctx, rx, cy + 120, t("cfg.player.volume"), TITLE, 15, aVO, 0.95, 1)
  txt(ctx, rx + 110, cy + 120, muted ? "MUTE" : `${vol}%`, TITLE, 17, aVO, 0.97, 1)
 
  const pbx = rx, pbw = X + PW - rx, pby = cy + 150, fr = length > 0 ? Math.min(1, position / length) : 0
