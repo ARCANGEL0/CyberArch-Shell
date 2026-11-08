@@ -17,6 +17,10 @@ export const FONT_BY_LANG: Record<Lang, string> = {
   en: "", ru: "Noto Sans", fr: "", es: "", pt: "", de: "", sv: "", nl: "", no: "", da: "", fi: "", hu: "", ro: "", bg: "", el: "", uk: "Noto Sans", be: "Noto Sans", sk: "", sl: "", hr: "", sr: "", lt: "", lv: "", et: "", ja: "Noto Sans CJK JP", zh: "Noto Sans CJK SC", ko: "Noto Sans CJK KR", th: "Noto Sans Thai", vi: "", id: "", ms: "", ar: "Noto Sans Arabic", he: "Noto Sans Hebrew", fa: "Noto Sans Arabic", ur: "Noto Sans Arabic", it: "", tr: "", pl: "", cz: ""
 }
 
+export const RTL_LANGS: Lang[] = ["ar", "he", "fa", "ur"]
+
+export const fontForLang = (lang: Lang): string => FONT_BY_LANG[lang] ?? ""
+
 export const isRtl = (lang: Lang): boolean => ["ar", "he", "fa", "ur"].includes(lang)
 
 const EN: Record<string, string> = {

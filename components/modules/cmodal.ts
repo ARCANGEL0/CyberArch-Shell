@@ -21,7 +21,7 @@ import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
-import { t } from "./i18n.ts"
+import { t, isRtl, fontForLang } from "./i18n.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -87,16 +87,27 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     }
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
     ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 1 : 0.95)
+    const fnt = fontForLang(getLang()) || TITLE
     let fs = fsMax
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs)
+    ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs)
     const maxW = bw - 10
     let tw = ctx.textExtents(label).width
     while (tw > maxW && fs > 7) { fs -= 0.5; ctx.setFontSize(fs); tw = ctx.textExtents(label).width }
     let iw = 0
     if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); iw = ctx.textExtents(icon).width + 6 }
     const sx = bx + bw / 2 - (tw + iw) / 2
-    if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, by + bh / 2 + 4); ctx.showText(icon) }
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(fs); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
+    if (isRtl(getLang())) {
+        const tw2 = ctx.textExtents(label).width
+        ctx.save()
+        ctx.translate(sx + tw2 + iw, by + bh / 2 + 4)
+        ctx.scale(-1, 1)
+        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(iw, 0); ctx.showText(icon) }
+        ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs); ctx.moveTo(0, 0); ctx.showText(label)
+        ctx.restore()
+    } else {
+        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, by + bh / 2 + 4); ctx.showText(icon) }
+        ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
+    }
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
@@ -121,11 +132,23 @@ export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = C
     const kw = Math.round(17*sc)   // knob
       const kx = val ? bx + bw - kw - 2 : bx + 2
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5*sc, kw, bh - 5*sc); ctx.fill()
-    ctx.selectFontFace(TITLE, 0, 1)
+    const fnt = fontForLang(getLang()) || TITLE
+    ctx.selectFontFace(fnt, 0, 1)
     ctx.setFontSize(Math.round(8*sc))
     const lbl = val ? t("on") : t("off")
     const tw = ctx.textExtents(lbl).width
     const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
+    if (isRtl(getLang())) {
+        ctx.save()
+        ctx.translate(cx + tw, by + bh / 2 + 3*sc)
+        ctx.scale(-1, 1)
+        ctx.moveTo(0, 0)
+        ctx.showText(lbl)
+        ctx.restore()
+    } else {
+        ctx.moveTo(cx - tw / 2, by + bh / 2 + 3*sc)
+        ctx.showText(lbl)
+    }
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
     ctx.moveTo(cx - tw / 2, by + bh/2 + 3*sc); ctx.showText(lbl)
     if (!dis) push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
@@ -356,11 +379,12 @@ export const createModal = (spec) => {
 
 
 export const sectionHeader = (ctx, g, x, y, label, w, fs=9) => {
-    txt(ctx, x, y, label, MONO, fs, g.col, 0.85)
-      ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(fs)
-    const lw = ctx.textExtents(label).width
-    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(x + lw + 10, y - 3, (x + w) - (x + lw + 10), 1.2); ctx.fill()
-}
+    const fnt = fontForLang(getLang()) || MONO
+    ctx.selectFontFace(fnt, 0, 0); ctx.setFontSize(fs)
+    const tw = ctx.textExtents(label).width
+    const lx = isRtl(getLang()) ? x + w - lw - 10 : x
+    txt(ctx, lx, y, label, fnt, fs, g.col, 0.85)
+    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(lx + tw + 10, y - 3, (x + w) - (lx + tw + 10), 1.2); ctx.fill()
 
 const APPS_CMD = `pactl list sink-inputs 2>/dev/null | awk '/^Sink Input #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
 const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Output #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`

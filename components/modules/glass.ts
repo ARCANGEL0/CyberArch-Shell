@@ -81,16 +81,35 @@ export const drawGlass = (ctx, x, y, w, h, col: [number, number, number] = CYAN,
 let _txtfx = false
 export const setTxtFX = (v) => { _txtfx = v }
 export const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => {
-    ctx.selectFontFace(font, 0, bold); ctx.setFontSize(size)
-    if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, y); ctx.showText(s); ctx.setOperator(2) }
-    if (_txtfx) {
-        ctx.setOperator(12)
-        ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); ctx.moveTo(x + 0.8, y + 0.6); ctx.showText(s)
-        ctx.setSourceRGBA(1, 0.12, 0.16, 0.45 * a); ctx.moveTo(x - 1.5, y); ctx.showText(s)
-        ctx.setSourceRGBA(1, 0.55, 0.3, 0.3 * a); ctx.moveTo(x + 1.5, y); ctx.showText(s)
-        ctx.setOperator(2)
+    const fnt = fontForLang(getLang()) || font
+    if (isRtl(getLang())) {
+        const tw = ctx.textExtents(s).width
+        ctx.save()
+        ctx.translate(x + tw, y)
+        ctx.scale(-1, 1)
+        ctx.selectFontFace(fnt, 0, bold); ctx.setFontSize(size)
+        if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(0, 0); ctx.showText(s); ctx.setOperator(2) }
+        if (_txtfx) {
+            ctx.setOperator(12)
+            ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); ctx.moveTo(0.8, 0.6); ctx.showText(s)
+            ctx.setSourceRGBA(1, 0.12, 0.16, 0.45 * a); ctx.moveTo(-1.5, 0); ctx.showText(s)
+            ctx.setSourceRGBA(1, 0.55, 0.3, 0.3 * a); ctx.moveTo(1.5, 0); ctx.showText(s)
+            ctx.setOperator(2)
+        }
+        ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(0, 0); ctx.showText(s)
+        ctx.restore()
+    } else {
+        ctx.selectFontFace(fnt, 0, bold); ctx.setFontSize(size)
+        if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, y); ctx.showText(s); ctx.setOperator(2) }
+        if (_txtfx) {
+            ctx.setOperator(12)
+            ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); ctx.moveTo(x + 0.8, y + 0.6); ctx.showText(s)
+            ctx.setSourceRGBA(1, 0.12, 0.16, 0.45 * a); ctx.moveTo(x - 1.5, y); ctx.showText(s)
+            ctx.setSourceRGBA(1, 0.55, 0.3, 0.3 * a); ctx.moveTo(x + 1.5, y); ctx.showText(s)
+            ctx.setOperator(2)
+        }
+        ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, y); ctx.showText(s)
     }
-    ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, y); ctx.showText(s)
 }
 export const pango = (ctx, x, yBase, s, family, bold, px, col, a) => {
     try {

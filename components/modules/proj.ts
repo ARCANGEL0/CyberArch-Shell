@@ -172,13 +172,21 @@ export const tiltText = (
     const s = pl.scaleAt(u, v)
     const ang = pl.angleAt(u, v)
     const [r, g, b] = f(color)
+    const fnt = fontForLang(getLang()) || font
     ctx.save()
     ctx.translate(sx, sy)
     ctx.rotate(ang + (opts.extraRotate || 0))
     ctx.scale(s, s)
-    ctx.selectFontFace(font, 0, opts.bold ? 1 : 0)
-    ctx.setFontSize(size)
-    let ox = 0, oy = 0
+    if (isRtl(getLang())) {
+        const tw = ctx.textExtents(text).width
+        ctx.translate(tw, 0)
+        ctx.scale(-1, 1)
+        ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
+        ctx.setFontSize(size)
+    } else {
+        ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
+        ctx.setFontSize(size)
+    }
     if (opts.align === "r") { const te = ctx.textExtents(text); ox = -te.width }
     else if (opts.align === "c") { const te = ctx.textExtents(text); ox = -te.width / 2 }
     if (opts.vcenter) { const te = ctx.textExtents(text); oy = -te.height / 2 - te.y }
