@@ -5,6 +5,7 @@ import { execAsync } from "astal"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, Cairo, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
 import { USER } from "./colors.ts"
+import { t } from "./i18n.ts"
 
 const YEL: [number, number, number] = USER.cyan
 const ARA: [number, number, number] = GACC
@@ -292,7 +293,7 @@ const ensure = () => {
             }
             ctx.restore()
             const live = status && Date.now() < statusUntil
-            gtxt(ctx, x, g.Y + g.h - 10, live ? status : "TAB switches field · type · click a zone · ESC closes", GMONO, 8.5, live ? YEL : ARA, live ? 0.9 : 0.5)
+            gtxt(ctx, x, g.Y + g.h - 10, live ? status : t("cfg.time.tab_hint"), GMONO, 8.5, live ? YEL : ARA, live ? 0.9 : 0.5)
 
             if (authOpen) {
                 ctx.setSourceRGBA(0, 0, 0, 0.72); ctx.rectangle(g.X, g.Y, g.w, g.h); ctx.fill()
@@ -304,7 +305,7 @@ const ensure = () => {
                 ctx.setSourceRGBA(HOT[0], HOT[1], HOT[2], 0.95); ctx.setLineWidth(1.6); ctx.stroke()
                 bracket(ctx, ax + 6, ay + 6, aw - 12, ah - 12, YEL, 0.7, 12)
                 ctx.setSourceRGBA(HOT[0], HOT[1], HOT[2], 0.9); ctx.rectangle(ax, ay, aw, 3); ctx.fill()
-                gtxt(ctx, ax + 18, ay + 30, "// BREACH PROTOCOL — ROOT ACCESS", GMONO, 9, YEL, 0.85)
+                gtxt(ctx, ax + 18, ay + 30, t("cfg.time.root_auth"), GMONO, 9, YEL, 0.85)
                 gtxt(ctx, ax + 18, ay + 52, authMsg, GTITLE, 13, authMsg.indexOf("DENIED") >= 0 ? HOT : AC2, 0.98, 1, 0.3)
                 const px = ax + 18, py = ay + 66, pw = aw - 36, ph = 34
                 chamfer(ctx, px, py, pw, ph, 8)

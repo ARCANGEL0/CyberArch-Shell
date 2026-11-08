@@ -6,6 +6,7 @@ import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"
 import { showToast } from "./toast.ts"
 import { animOn, animMaster } from "./config.ts"
+import { t } from "./i18n.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
@@ -453,17 +454,17 @@ const drawRecLeft = (ctx, tick) => {
  tiltText(ctx, leftPlane, 12, 28, "TIME", TITLE, 11, NEON.overlay, 0.85 * a, { bold: true, glow: 0.6 })
  fillQuad(ctx, leftPlane, 48, 16, 126, 35, [255, 36, 44], a)
  tiltText(ctx, leftPlane, 56, 30, timeStr, MONO, 12, [10, 0, 2], 1.0 * a, { bold: true })
- tiltText(ctx, leftPlane, 124, 45, "SCANNER", MONO, 6, NEON.overlay, 0.6 * a, { align: "r", bold: true })
+ tiltText(ctx, leftPlane, 124, 45, t("cfg.anim.scanner"), MONO, 6, NEON.overlay, 0.6 * a, { align: "r", bold: true })
 
  const dotA = (0.62 + 0.38 * Math.abs(Math.sin(recBlink))) * a
  const dc = leftPlane.project(18, 52.5), dr = 5 * leftPlane.scaleAt(18, 52.5)
  ctx.setOperator(12); ctx.setSourceRGBA(rr, rg, rb, 0.15 * dotA); ctx.newPath(); ctx.arc(dc[0], dc[1], dr * 1.5, 0, Math.PI * 2); ctx.fill(); ctx.setOperator(2)
  ctx.setSourceRGBA(rr, rg, rb, dotA); ctx.newPath(); ctx.arc(dc[0], dc[1], dr, 0, Math.PI * 2); ctx.fill()
- tiltText(ctx, leftPlane, 30, 57, "REC", TITLE, 12, NEON.overlay, 0.95 * a, { bold: true, glow: 0.6 })
+ tiltText(ctx, leftPlane, 30, 57, t("cfg.anim.rec"), TITLE, 12, NEON.overlay, 0.95 * a, { bold: true, glow: 0.6 })
 
- tiltText(ctx, leftPlane, 12, 88, "HD", TITLE, 12, NEON.overlay, 0.85 * a, { bold: true, glow: 0.55 })
- tiltText(ctx, leftPlane, 12, 108, "F 5.6", MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
- tiltText(ctx, leftPlane, 12, 128, "ISO 100", MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
+ tiltText(ctx, leftPlane, 12, 88, t("cfg.anim.hd"), TITLE, 12, NEON.overlay, 0.85 * a, { bold: true, glow: 0.55 })
+ tiltText(ctx, leftPlane, 12, 108, t("cfg.anim.f_5_6"), MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
+ tiltText(ctx, leftPlane, 12, 128, t("cfg.anim.iso_100"), MONO, 11, NEON.overlay, 0.8 * a, { bold: true, glow: 0.5 })
 }
 
 const drawRecRight = (ctx) => {
@@ -479,7 +480,7 @@ const drawRecRight = (ctx) => {
  boltPath(); ctx.setSourceRGBA(rr, rg, rb, 0.97 * a); ctx.fill()
  const camName = getUsername()
  tiltText(ctx, rightPlane, 33, 30, `CAMERA 01: ${camName}`, TITLE, 14, NEON.overlay, 0.95 * a, { bold: true, glow: 0.7 })
- const pwr = "POWER CONNECTED"
+ const pwr = t("cfg.anim.power_connected")
  fillQuad(ctx, rightPlane, RIGHT_W - 124, 16, RIGHT_W - 6, 33, [255, 36, 44], a)
  tiltText(ctx, rightPlane, RIGHT_W - 13, 29, pwr, MONO, 8, [10, 0, 2], 1.0 * a, { align: "r" })
 }

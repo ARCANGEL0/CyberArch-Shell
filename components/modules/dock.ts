@@ -8,6 +8,7 @@ import { togglePlayer, isPlayerOpen, onPlayerChange, playPauseActive } from "./p
 import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
 import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./colors.ts"
 import { animOn } from "./config.ts"
+import { t } from "./i18n.ts"
 const NOTIF_RED: RGB = NEON.notifbadge
 import { CYBER_DIR, scaleOf } from "../../env.ts"
 

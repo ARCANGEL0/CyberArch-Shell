@@ -1,6 +1,7 @@
 import { Variable, interval } from "astal"
 import GLib from "gi://GLib"
 import { NEON, RGB } from "./colors.ts"
+import { t } from "./i18n.ts"
 import { readNetworkSnapshot } from "./network.ts"
 
 
