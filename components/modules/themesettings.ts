@@ -9,6 +9,7 @@ import { closeAllModals, createModal, drawBtn, drawToggle, drawSlider, sectionHe
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL, LAYOUT_LABEL, readHyprKbLayout } from "./config.ts"
+import { t, getLang, setLang, isRtl, langFont, LANG_OPTS, LANG_LABEL } from "./i18n.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
@@ -2086,6 +2087,7 @@ const CFG_SECTIONS: [string, CfgRow[]][] = [
 
     ["// ::keyboard", [
         { t: "sel", k: "kbLayout", label: "KEYBOARD LAYOUT" },
+        { t: "sel", k: "lang", label: t("cfg.lang.label") },
     ]],
 ]
 
@@ -2104,6 +2106,7 @@ const OPT_LABEL: Record<string, string> = { ...METRIC_LABEL, ...LAYOUT_LABEL }
 
 let cfgOpen: string | null = null
 let kbLayoutLive = ""
+let langDirty = false
 const refreshKbLive = () => { readHyprKbLayout().then(v => { if (v && v !== kbLayoutLive) { kbLayoutLive = v; ctrl?.requestDraw() } }).catch(() => {}) }
 let cfgExpand: Record<string, boolean> = {}
 let extPicker = ""
@@ -2180,7 +2183,7 @@ const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
     }
 
     const cur = cfgStr(r.k), open = cfgOpen === r.k
-    const shown = r.k === "kbLayout" && cur === "" ? (kbLayoutLive || "AUTO") : cur
+    const shown = r.k === "kbLayout" && cur === "" ? (kbLayoutLive || "AUTO") : (r.k === "lang" ? (cur === "en" ? LANG_LABEL["en"] || "AUTO" : cur) : cur)
     drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${OPT_LABEL[shown] ?? shown}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
 }
 
@@ -2245,6 +2248,7 @@ export const drawConfig = (ctx, g, x, y, w) => {
     if (pop) {
         let opts = GAUGE_OPTS[pop.key] ?? []
         if (pop.key === "kbLayout" && kbLayoutLive && !opts.includes(kbLayoutLive)) opts = [kbLayoutLive, ...opts]
+        if (pop.key === "lang") opts = LANG_OPTS
         const ih = 27, listH = opts.length * ih + 8
         let ly = pop.by + 2
         if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
@@ -2253,7 +2257,9 @@ export const drawConfig = (ctx, g, x, y, w) => {
         ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
         const cur = cfgStr(pop.key)
         opts.forEach((o, i) => {
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, OPT_LABEL[o] ?? o, () => { setCfg(pop!.key, o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
+            const isLang = pop.key === "lang"
+            const label = isLang ? (o === "en" ? LANG_LABEL["en"] || "AUTO" : LANG_LABEL[o] ?? o) : (OPT_LABEL[o] ?? o)
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, label, () => { setCfg(pop!.key, o); if (pop.key === "lang") setLang(o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
     }
