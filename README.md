@@ -190,6 +190,8 @@ Open the full cheat-sheet with all keybinds anytime with **`SUPER+SHIFT+H`**.
 
 Keybinds are bound by key name, so they only fire under the right keyboard layout — set it on **Theme Settings > Configuration > KEYBOARD LAYOUT** (it writes Hyprland `input.kb_layout` live). Leave it on **AUTO** to keep Hyprland's own detected layout.
 
+**Multi lingual support**: Switchable on Theme Settings > Configuration > **LANGUAGE**. Supported: english, russian, french, spanish, portuguese, german, swedish, japanese, chinese, korean, arabic, italian, turkish, polish, czech, plus dutch, norwegian, danish, finnish, hungarian, romanian, bulgarian, greek, ukrainian, belarusian, slovak, slovenian, croatian, serbian, lithuanian, latvian, estonian, thai, vietnamese, indonesian, malay, hebrew, persian, urdu. Pick one, hit **RELOAD CYBERARCH**, and the theme UI switches language. **arabic** is right-to-left and renders RTL. If you don't pick one, the theme never touches your hyprland input settings — leave it on AUTO.
+
 ### HUD & widgets
 
 | Keybind | Action |
