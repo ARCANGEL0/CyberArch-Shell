@@ -21,7 +21,7 @@ import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
-import { t, isRtl, fontForLang } from "./i18n.ts"
+import { t, isRtl, fontForLang, getLang } from "./i18n.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -382,9 +382,10 @@ export const sectionHeader = (ctx, g, x, y, label, w, fs=9) => {
     const fnt = fontForLang(getLang()) || MONO
     ctx.selectFontFace(fnt, 0, 0); ctx.setFontSize(fs)
     const tw = ctx.textExtents(label).width
-    const lx = isRtl(getLang()) ? x + w - lw - 10 : x
+    const lx = isRtl(getLang()) ? x + w - tw - 10 : x
     txt(ctx, lx, y, label, fnt, fs, g.col, 0.85)
     ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(lx + tw + 10, y - 3, (x + w) - (lx + tw + 10), 1.2); ctx.fill()
+}
 
 const APPS_CMD = `pactl list sink-inputs 2>/dev/null | awk '/^Sink Input #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
 const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Output #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`

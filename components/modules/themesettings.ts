@@ -9,7 +9,8 @@ import { closeAllModals, createModal, drawBtn, drawToggle, drawSlider, sectionHe
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
 import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL, LAYOUT_LABEL, readHyprKbLayout } from "./config.ts"
-import { t, getLang, setLang, isRtl, langFont, LANG_OPTS, LANG_LABEL } from "./i18n.ts"
+import { t, getLang, setLang, isRtl, langFont } from "./i18n.ts"
+import { LANG_OPTS, LANG_LABEL } from "./config.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
     CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,

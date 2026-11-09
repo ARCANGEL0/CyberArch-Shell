@@ -20,6 +20,7 @@
 
 import { RGB, f } from "./colors.ts"
 import { TITLE } from "./fonts.ts"
+import { isRtl, fontForLang, getLang } from "./i18n.ts"
 type Ctx = any
 const Cairo: any = (imports as any).cairo
 const D2R = Math.PI / 180
@@ -187,6 +188,7 @@ export const tiltText = (
         ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
         ctx.setFontSize(size)
     }
+    let ox = 0, oy = 0
     if (opts.align === "r") { const te = ctx.textExtents(text); ox = -te.width }
     else if (opts.align === "c") { const te = ctx.textExtents(text); ox = -te.width / 2 }
     if (opts.vcenter) { const te = ctx.textExtents(text); oy = -te.height / 2 - te.y }

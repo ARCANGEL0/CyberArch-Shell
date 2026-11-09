@@ -9,6 +9,7 @@ import { makePlane, Plane } from "./proj.ts"
 
 export const Cairo: any = (imports as any).cairo
 import { TITLE, MONO, ICONF } from "./fonts.ts"
+import { isRtl, fontForLang, getLang } from "./i18n.ts"
 export { TITLE, MONO, ICONF }
 export const CYAN: [number, number, number] = [...USER.dock] as [number, number, number]
 const syncCyan = () => {

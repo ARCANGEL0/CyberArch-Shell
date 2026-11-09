@@ -652,6 +652,8 @@ const EN: Record<string, string> = {
   "cfg.keybinds.dispatcher.workspace": "WORKSPACE",
 }
 
+const langs: Record<Lang, Record<string, string>> = {}
+
 // fill gaps: any Lang missing a key falls back to EN via t()
 for (const l of LANG_ORDER) {
   if (!langs[l]) langs[l] = {}
