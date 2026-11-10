@@ -1,7 +1,8 @@
 
 // Dropped hybrars, too flaky to keep updating and targeting for build, besides alot of issue report
 
-import { App, Window, Box } from "./components/modules/widget.ts"
+import { App, Window, Box, redrawWindows } from "./components/modules/widget.ts"
+import { onLangChange, t } from "./components/modules/i18n.ts"
 import { Anchor, Layer, Exclusivity } from "./components/modules/widget.ts"
 import { execAsync, timeout, interval } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
@@ -50,6 +51,7 @@ const compileCss = async () => {
 }
 
 const hudWins = []
+onLangChange(redrawWindows)
 const surface = (mon, name, anchor, child, extra = {}) => {
  const S = scaleOf(mon, name)
  const wrap = Box({ className: `aug-wrap ${name}-wrap`, child })
@@ -329,6 +331,12 @@ App.start({
  reply("ok")
  } else if (request.startsWith("region-shot")) {
  try { triggerRegion(request.slice(11).trim()); reply("ok") } catch (e) { print(e); reply("err") }
+ } else if (request.startsWith("screenshot-notify")) {
+ const image = request.slice("screenshot-notify".length).trim()
+ const args = ["notify-send", "-t", "2500", t("cfg.popup.screenshot_title"), t("cfg.popup.screenshot_saved_copied")]
+ if (image) args.push("-i", image)
+ execAsync(args).catch(() => {})
+ reply("ok")
  } else if (request.startsWith("modal ")) {
  try { toggleModal(request.slice(6).trim()) } catch (e) { print(e) }
  reply("ok")

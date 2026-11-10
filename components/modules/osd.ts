@@ -5,9 +5,8 @@ import GLib from "gi://GLib"
 import AstalWp from "gi://AstalWp"
 import { makePlane, tiltBar, tiltText, strokePath } from "./proj.ts"
 import { NEON, onColorChange } from "./colors.ts"
-import { TITLE } from "./fonts.ts"
+import { TITLE, ICONF } from "./fonts.ts"
 import { winScale } from "../../env.ts"
-const ICONF = "FiraCode Nerd Font"
 const read = (p) => { try { const [ok, d] = GLib.file_get_contents(p); return ok ? new TextDecoder().decode(d).trim() : "" } catch { return "" } }
 const exists = (p) => GLib.file_test(p, GLib.FileTest.EXISTS)
 const findBacklight = (): string | null => {

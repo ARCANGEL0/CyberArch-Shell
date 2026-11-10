@@ -10,6 +10,8 @@ import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr, notifIconTint } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { t, getLang, LANG_ORDER } from "./i18n.ts"
+import { measureTextWidth } from "./glass.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -46,6 +48,18 @@ const TOTALW = 700, TOTALH = 650
 const plane = makePlane({ w: TOTALW, h: TOTALH, yaw: -13, pitch: 3, roll: 0.1, focal: 1600, dist: 1600, pad: 32 })
 const MARGIN_L = 16, MARGIN_T = 199
 const CX = 68, FW = 400, BASEV = 74, FH = 43, STEP = 55
+const screenshotTitles = new Set(LANG_ORDER.map(lang => t("cfg.popup.screenshot_title", lang).trim().toLocaleLowerCase()))
+const textWidths = new Map<string, number>()
+const fitSize = (ctx: any, text: string, font: string, size: number, maxWidth: number, min = 8) => {
+    const key = getLang() + "|" + font + "|" + size + "|" + text
+    let width = textWidths.get(key)
+    if (width === undefined) {
+        width = measureTextWidth(ctx, text, font, size)
+        if (textWidths.size > 512) textWidths.clear()
+        textWidths.set(key, width)
+    }
+    return width > maxWidth ? Math.max(min, size * maxWidth / width) : size
+}
 
 let msgs: any[] = []
 let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
@@ -143,7 +157,8 @@ const drawFrame = (ctx: any, vTop: number, prog: number, body: string, app: stri
     if (prog > 0.03 && prog < 0.97) { strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], WHT, 0.7, 1.5); strokePath(ctx, plane, [[u1, v0 - 1], [u1, v1 + 1]], YEL, 0.5, 0.7) }
     const txt = clamp((prog - 0.55) / 0.3) * a
     if (txt > 0.01) {
-        glitchText(ctx, u0 + 15, v0 + FH / 2 + 3, body, NEUE, 14, NEON.notiffg, txt, clamp((prog - 0.55) / 0.4), { bold: true })
+        const bodySize = fitSize(ctx, body, NEUE, 14, u1 - u0 - 28)
+        glitchText(ctx, u0 + 15, v0 + FH / 2 + 3, body, NEUE, bodySize, NEON.notiffg, txt, clamp((prog - 0.55) / 0.4), { bold: true })
         if (!top) tiltText(ctx, plane, u1 - 5, v0 + 7, app, NEUE, 5, GREY, txt * 0.95, { bold: true, align: "r" })
     }
 }
@@ -165,24 +180,47 @@ const draw = (ctx: any) => {
 
     const pC = seg(intro, 0.52, 0.74), aC = beep(pC)
     drawIcon(ctx, png("message.png"), 67, 16, 30, aC, true, 1 - pC, isOvr("notifmail") ? NEON.notifmail : notifIconTint.value)
-    glitchText(ctx, CX + 32, 36, msgs.length > 1 ? t("cfg.popup.new_messages_plural") : t("cfg.popup.new_message"), NAVINE, 15, NEON.notifheads, aC, pC, { bold: true, glow: 0.5, shadow: 0.8 })
+    const messageLabel = msgs.length > 1 ? t("cfg.popup.new_messages_plural") : t("cfg.popup.new_message")
+    const messageSize = fitSize(ctx, messageLabel, NAVINE, 15, FW - 60)
+    glitchText(ctx, CX + 32, 36, messageLabel, NAVINE, messageSize, NEON.notifheads, aC, pC, { bold: true, glow: 0.5, shadow: 0.8 })
     const pN = seg(intro, 0.58, 0.80)
-    glitchText(ctx, CX + 2, 63, msgs[0].app, NAVINE, 20, NEON.notiftitle, clamp(pN * 1.3), pN, { bold: true, glow: 0.45 })
+    const appLabel = msgs[0].screenshot ? t("cfg.popup.screenshot_title") : msgs[0].app
+    const appSize = fitSize(ctx, appLabel, NAVINE, 20, FW - 24)
+    glitchText(ctx, CX + 2, 63, appLabel, NAVINE, appSize, NEON.notiftitle, clamp(pN * 1.3), pN, { bold: true, glow: 0.45 })
 
     const stackA = closing ? clamp(intro * 1.4) : 1
     msgs.forEach((m, i) => {
         const oa = m.out ? clamp(1 - (Date.now() - m.out) / 240) : 1
-        drawFrame(ctx, BASEV + m.y, m.prog, m.text, m.app, i === 0, stackA * oa)
+        const body = m.screenshot ? t("cfg.popup.screenshot_saved_copied") : m.text
+        const app = m.screenshot ? t("cfg.popup.screenshot_title") : m.app
+        drawFrame(ctx, BASEV + m.y, m.prog, body, app, i === 0, stackA * oa)
     })
 
     const lowY = BASEV + (msgs.length ? msgs[msgs.length - 1].y : 0) + FH + 12
     const rA = seg(intro, 0.8, 1) * stackA
     if (rA > 0.01) {
-        const uR = CX + FW, actionCol = neonBtn.value ? NEON.press : NEON.notiflbl
-        keycap(ctx, uR - 24, lowY, "E", rA, -1)
-        tiltText(ctx, plane, uR - 34, lowY + 15, t("cfg.popup.read_message"), TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
-        keycap(ctx, uR - 165, lowY, "X", rA)
-        tiltText(ctx, plane, uR - 175, lowY + 15, t("cfg.notif.dismiss"), TITLE, 12, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
+        const actionCol = neonBtn.value ? NEON.press : NEON.notiflbl
+        const readLabel = t("cfg.popup.read_message"), dismissLabel = t("cfg.notif.dismiss")
+        let actionSize = 12
+        let readWidth = measureTextWidth(ctx, readLabel, TITLE, actionSize)
+        let dismissWidth = measureTextWidth(ctx, dismissLabel, TITLE, actionSize)
+        const rowWidth = readWidth + dismissWidth + 72
+        const rowMaxWidth = FW - 36
+        if (rowWidth > rowMaxWidth) {
+            actionSize = Math.max(8, actionSize * rowMaxWidth / rowWidth)
+            readWidth = measureTextWidth(ctx, readLabel, TITLE, actionSize)
+            dismissWidth = measureTextWidth(ctx, dismissLabel, TITLE, actionSize)
+        }
+        const rightEdge = CX + FW - 12
+        const readKeyX = rightEdge - 24
+        const readTextRight = readKeyX - 8
+        const readTextLeft = readTextRight - readWidth
+        const dismissKeyX = readTextLeft - 32
+        const dismissTextRight = dismissKeyX - 8
+        keycap(ctx, readKeyX, lowY, "E", rA, -1)
+        tiltText(ctx, plane, readTextRight, lowY + 15, readLabel, TITLE, actionSize, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
+        keycap(ctx, dismissKeyX, lowY, "X", rA)
+        tiltText(ctx, plane, dismissTextRight, lowY + 15, dismissLabel, TITLE, actionSize, actionCol, rA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
     }
 
     ctx.restore()
@@ -279,10 +317,11 @@ const add = (n: any) => {
     const generic = !appName || appName.toLowerCase() === "notify-send"
     let desktopEntry = ""
     try { desktopEntry = ((n?.get_str_hint?.("desktop-entry") ?? n?.desktopEntry ?? "") + "").trim() } catch { }
+    const screenshot = [appName, summary].some(value => screenshotTitles.has(value.trim().toLocaleLowerCase()))
     const m = {
         app: (generic ? (summary || appName || "MESSAGE") : appName).toUpperCase().slice(0, 24),
         text: ((s) => s.length > 70 ? s.slice(0, 50) + " __[...]" : s)((body || summary || "//")),
-        appRaw: appName, desktopEntry,
+        screenshot, appRaw: appName, desktopEntry,
         id: n?.id ?? 0, born: Date.now(), out: 0, prog: 0, y: 0, read: false,
     }
     if (msgs.length === 0) { intro = 0; closing = false; holdUntil = 0 }

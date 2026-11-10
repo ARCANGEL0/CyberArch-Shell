@@ -8,7 +8,8 @@ import { CYBER_DIR, winScale } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
 import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
-import { t } from "./i18n.ts"
+import { t, getLang, localizeText } from "./i18n.ts"
+import { measureTextWidth } from "./glass.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
@@ -39,6 +40,17 @@ const W = 400
 const HEADER = 48, ROWH = 50, ROW_GAP = 6, MAXROWS = 7, FOOTER_H = 24
 const H = HEADER + MAXROWS * (ROWH + ROW_GAP) + FOOTER_H + 8
 const TOTALW = ICONW + W
+const textWidths = new Map<string, number>()
+const fitSize = (ctx: any, text: string, font: string, size: number, maxWidth: number, min = 8) => {
+    const key = getLang() + "|" + font + "|" + size + "|" + text
+    let width = textWidths.get(key)
+    if (width === undefined) {
+        width = measureTextWidth(ctx, text, font, size)
+        if (textWidths.size > 512) textWidths.clear()
+        textWidths.set(key, width)
+    }
+    return width > maxWidth ? Math.max(min, size * maxWidth / width) : size
+}
 const plane = makePlane({ w: TOTALW, h: H, yaw: -16, pitch: 5, roll: 1, focal: 1600, dist: 1600, pad: 26 })
 
 const MARGIN_L = 30, MARGIN_T = 170
@@ -365,8 +377,9 @@ const drawDataCorruption = (ctx: any, pa: number) => {
 
     if (headerDistort > 0.01) {
         const offset = (Math.random() - 0.5) * 3 * headerDistort
-        const hText = view === "detail" && selectedApp ? `MESSAGES > ${selectedApp}` : "MESSAGES"
-        tiltText(ctx, plane, ICONW + 58 + offset * 2, 27, hText, TITLE, 13,
+        const messagesLabel = t("cfg.notif.messages")
+        const hText = view === "detail" && selectedApp ? messagesLabel + " > " + localizeText(selectedApp) : messagesLabel
+        tiltText(ctx, plane, ICONW + 58 + offset * 2, 27, hText, TITLE, fitSize(ctx, hText, TITLE, 13, W - 90),
             [140, 80, 70], headerDistort * 0.3 * pa, { bold: true, glow: 0.2 })
     }
 
@@ -434,14 +447,19 @@ const draw = (ctx: any) => {
 
 
         tiltText(ctx, plane, ICONW + 22, 16, t("cfg.notif.network"), ICONF, 13, mC, labelA * 0.9, { bold: true, glow: 0.6 })
-        tiltText(ctx, plane, ICONW + 42, 16, "MESSAGES", RAJDHANI, 18, mC, labelA, { bold: true, glow: 0.6 })
+        const messagesLabel = t("cfg.notif.messages")
+        const messagesSize = fitSize(ctx, messagesLabel, RAJDHANI, 18, 94)
+        tiltText(ctx, plane, ICONW + 42, 16, messagesLabel, RAJDHANI, messagesSize, mC, labelA, { bold: true, glow: 0.6 })
         if (view === "detail" && selectedApp) {
             tiltText(ctx, plane, ICONW + 110, 16, ">", ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
-            tiltText(ctx, plane, ICONW + 122, 16, selectedApp, ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
+            const appSize = fitSize(ctx, selectedApp, ROBOTO_BOLD, 11, TOTALW - ICONW - 138)
+            tiltText(ctx, plane, ICONW + 122, 16, selectedApp, ROBOTO_BOLD, appSize, BCYAN, labelA, { glow: 0.6 })
         } else {
 
             tiltText(ctx, plane, ICONW + 144, 16, APPS_GLYPH, ICONF, 17, aC, labelA * 0.9, { bold: true, glow: 0.6 })
-            tiltText(ctx, plane, ICONW + 166, 16, "APPS", RAJDHANI, 18, aC, labelA, { bold: true, glow: 0.6 })
+            const appsLabel = t("cfg.notif.apps")
+            const appsSize = fitSize(ctx, appsLabel, RAJDHANI, 18, 84)
+            tiltText(ctx, plane, ICONW + 166, 16, appsLabel, RAJDHANI, appsSize, aC, labelA, { bold: true, glow: 0.6 })
         }
 
 
@@ -492,8 +510,10 @@ const draw = (ctx: any) => {
             strokePath(ctx, plane, [[ICONW + 24, my + ROWH - 1], [ICONW + W - 20, my + ROWH - 1]], GREY, 0.2 * ma, 0.5)
             drawTrayIcon(ctx, t.pixbuf, ICONW + 42, my + ROWH / 2 - 2, 22, ma)
             const nameCol: [number, number, number] = hovered ? NEON.dock : WHITE
-            tiltText(ctx, plane, ICONW + 66, my + 22, (t.title || t.id || "?").slice(0, 30), TITLE, 14, nameCol, ma, { bold: true })
-            tiltText(ctx, plane, ICONW + 66, my + 39, t.id.slice(0, 36), MONO, 9, GREY, 0.5 * ma)
+            const trayTitle = (t.title || t.id || "?").slice(0, 30)
+            tiltText(ctx, plane, ICONW + 66, my + 22, trayTitle, TITLE, fitSize(ctx, trayTitle, TITLE, 14, W - 112), nameCol, ma, { bold: true })
+            const trayId = t.id.slice(0, 36)
+            tiltText(ctx, plane, ICONW + 66, my + 39, trayId, MONO, fitSize(ctx, trayId, MONO, 9, W - 112), GREY, 0.5 * ma)
         }
         if (gContentH > visibleH) {
             const sbX = ICONW + W - 6, sbTop = HEADER + 4, sbH = visibleH - 8
@@ -502,7 +522,7 @@ const draw = (ctx: any) => {
             fillQuad(ctx, plane, sbX, sbTop, sbX + 2, sbTop + sbH, DIM_RED, 0.3 * pa)
             fillQuad(ctx, plane, sbX, thumbTop, sbX + 2, thumbTop + thumbH, NEON.overlay, 0.9 * pa)
         }
-        if (tItems.length === 0) tiltText(ctx, plane, ICONW + 22, HEADER + 26, "NO TRAY APPS", MONO, 11, GREY, 0.5 * pa)
+        if (tItems.length === 0) tiltText(ctx, plane, ICONW + 22, HEADER + 26, t("cfg.notif.no_tray_apps"), MONO, fitSize(ctx, t("cfg.notif.no_tray_apps"), MONO, 11, W - 42), GREY, 0.5 * pa)
     } else if (view === "detail" && selectedApp) {
         const detailItems = shown as any[]
 
@@ -560,7 +580,7 @@ const draw = (ctx: any) => {
             let ty = my + 17
             for (let j = 0; j < lines; j++) {
                 const line = body.slice(j * cpl, (j + 1) * cpl)
-                tiltText(ctx, plane, x0 + 6, ty, line, PLAY, 14, FC, 0.85 * ma)
+                tiltText(ctx, plane, x0 + 6, ty, line, PLAY, fitSize(ctx, line, PLAY, 14, fw - 14), FC, 0.85 * ma)
                 ty += 22
             }
         }
@@ -606,9 +626,9 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
             const appCol: [number, number, number] = hovered ? YELLOW : GREY
             const bodyCol: [number, number, number] = hovered ? GREY : GREY
             const ta = Math.min(1, ma * (hovered ? 1.1 : 1))
-            tiltText(ctx, plane, ICONW + 30, my + 16, g.app, TITLE, 14, appCol, ta, { bold: true })
+            tiltText(ctx, plane, ICONW + 30, my + 16, g.app, TITLE, fitSize(ctx, g.app, TITLE, 14, W - 76), appCol, ta, { bold: true })
             const preview = (g.last.body || g.last.title || "//").slice(0, 36)
-            tiltText(ctx, plane, ICONW + 30, my + 39, preview, TITLE, 12, bodyCol, 0.55 * ma, { bold: true })
+            tiltText(ctx, plane, ICONW + 30, my + 39, preview, TITLE, fitSize(ctx, preview, TITLE, 12, W - 76), bodyCol, 0.55 * ma, { bold: true })
         }
 
         if (gContentH > visibleH) {
@@ -638,10 +658,12 @@ const bub: [number, number][] = [[x0 + bv, y0], [x1, y0], [x1, y1 - bv], [x1 - b
             const dc: [number, number, number] = blDismissHover ? NEON.notiflbl : NEON.overlay
             const dg = blDismissHover ? 0.9 : 0.5
             tiltText(ctx, plane, ICONW + 14, FOOTER_Y + 22, XICON, ICONF, 12, dc, fA * 0.9, { bold: true, glow: dg })
-            tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, view === "detail" ? t("cfg.notif.dismiss_all") : t("cfg.notif.dismiss"), ROBOTO_BOLD, 10, dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })
+            const dismissLabel = view === "detail" ? t("cfg.notif.dismiss_all") : t("cfg.notif.dismiss")
+            tiltText(ctx, plane, ICONW + 30, FOOTER_Y + 22, dismissLabel, ROBOTO_BOLD, fitSize(ctx, dismissLabel, ROBOTO_BOLD, 10, 260), dc, fA * (blDismissHover ? 1 : 0.85), { bold: true, glow: dg })
         }
         keycap(ctx, ICONW + 326, FOOTER_Y + 7, "M", fA)
-        tiltText(ctx, plane, ICONW + 358, FOOTER_Y + 22, "CLOSE", ROBOTO_BOLD, 10, RED, fA, { bold: true, glow: 0.7, bloom: 0.3 })
+        const closeLabel = t("cfg.notif.close")
+        tiltText(ctx, plane, ICONW + W - 14, FOOTER_Y + 22, closeLabel, ROBOTO_BOLD, fitSize(ctx, closeLabel, ROBOTO_BOLD, 10, 44), RED, fA, { bold: true, align: "r", glow: 0.7, bloom: 0.3 })
     }
 
 

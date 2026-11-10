@@ -6,6 +6,7 @@ import { interval } from "astal"
 import { CYBER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, f, onColorChange, imgTint, tintSurface, neonBtn, launcherTint, launcherLabelTint } from "./colors.ts"
+import { t } from "./i18n.ts"
 import { openAppsMenu } from "./appsmenu.ts"
 import { animOn } from "./config.ts"
 
@@ -32,7 +33,7 @@ export const LauncherWindow = (mon?) => {
 
      const tx = 8, ty = 28
      const col = hover ? (neonBtn.value ? NEON.press : NEON.cyan) : (launcherLabelTint.value || NEON.dock), fl = hover ? flick : 1
-     tiltText(ctx, prompt, tx, ty, "Apps Launcher", TITLE, 15, col, (hover ? 1 : 0.95) * fl, { bold: true, glow: (hover ? 0.32 : 0.2) * fl, bloom: (hover ? 0.6 : 0.45) * fl, shadow: 1 })
+     tiltText(ctx, prompt, tx, ty, t("cfg.launcher.title"), TITLE, 15, col, (hover ? 1 : 0.95) * fl, { bold: true, glow: (hover ? 0.32 : 0.2) * fl, bloom: (hover ? 0.6 : 0.45) * fl, shadow: 1 })
 
      const chW = 46, chH = 20, chX = 130, chY = 13
      const boxPts: [number, number][] = [[chX, chY], [chX + chW, chY], [chX + chW, chY + chH], [chX, chY + chH]]

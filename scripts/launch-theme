@@ -12,6 +12,19 @@ CORE_TS="$THEME_DIR/core.ts"
 runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 display="${WAYLAND_DISPLAY:-}"
 
+hypr_socket="$runtime_dir/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/.socket.sock"
+if [ ! -S "$hypr_socket" ]; then
+    instance_socket=""
+    for candidate in "$runtime_dir"/hypr/*/.socket.sock; do
+        [ -S "$candidate" ] || continue
+        instance_socket="$candidate"
+    done
+    if [ -n "$instance_socket" ]; then
+        instance_dir="${instance_socket%/.socket.sock}"
+        export HYPRLAND_INSTANCE_SIGNATURE="${instance_dir##*/}"
+    fi
+fi
+
 if [ -z "$display" ] || [ ! -S "$runtime_dir/$display" ]; then
     display=""
     for socket in "$runtime_dir"/wayland-[0-9]*; do

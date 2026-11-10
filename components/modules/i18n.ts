@@ -1,5 +1,5 @@
-import GLib from "gi://GLib"
-import { USER_DIR } from "../../env.ts"
+import { PT } from "./i18n.pt.ts"
+import { GENERATED_TRANSLATIONS } from "./i18n.generated.ts"
 
 export type Lang = string
 
@@ -10,11 +10,11 @@ export const LANG_ORDER: Lang[] = [
 ]
 
 export const LANG_LABEL: Record<Lang, string> = {
-  en: "ENGLISH", ru: "RUSSIAN", fr: "FRENCH", es: "SPANISH", pt: "PORTUGUESE", de: "GERMAN", sv: "SWEDISH", nl: "DUTCH", no: "NORWEGIAN", da: "DANISH", fi: "FINNISH", hu: "HUNGARIAN", ro: "ROMANIAN", bg: "BULGARIAN", el: "GREEK", uk: "UKRAINIAN", be: "BELARUSIAN", sk: "SLOVAK", sl: "SLOVENIAN", hr: "CROATIAN", sr: "SERBIAN", lt: "LITHUANIAN", lv: "LATVIAN", et: "ESTONIAN", ja: "JAPANESE", zh: "CHINESE", ko: "KOREAN", th: "THAI", vi: "VIETNAMESE", id: "INDONESIAN", ms: "MALAY", ar: "ARABIC", he: "HEBREW", fa: "PERSIAN", ur: "URDU", it: "ITALIAN", tr: "TURKISH", pl: "POLISH", cz: "CZECH"
+  en: "ENGLISH", ru: "РУССКИЙ", fr: "FRANÇAIS", es: "ESPAÑOL", pt: "PORTUGUÊS", de: "DEUTSCH", sv: "SVENSKA", nl: "NEDERLANDS", no: "NORSK", da: "DANSK", fi: "SUOMI", hu: "MAGYAR", ro: "ROMÂNĂ", bg: "БЪЛГАРСКИ", el: "ΕΛΛΗΝΙΚΆ", uk: "УКРАЇНСЬКА", be: "БЕЛАРУСКАЯ", sk: "SLOVENČINA", sl: "SLOVENŠČINA", hr: "HRVATSKI", sr: "СРПСКИ", lt: "LIETUVIŲ", lv: "LATVIEŠU", et: "EESTI", ja: "日本語", zh: "中文", ko: "한국어", th: "ไทย", vi: "TIẾNG VIỆT", id: "BAHASA INDONESIA", ms: "BAHASA MELAYU", ar: "العربية", he: "עברית", fa: "فارسی", ur: "اردو", it: "ITALIANO", tr: "TÜRKÇE", pl: "POLSKI", cz: "ČEŠTINA"
 }
 
 export const FONT_BY_LANG: Record<Lang, string> = {
-  en: "", ru: "Noto Sans", fr: "", es: "", pt: "", de: "", sv: "", nl: "", no: "", da: "", fi: "", hu: "", ro: "", bg: "", el: "", uk: "Noto Sans", be: "Noto Sans", sk: "", sl: "", hr: "", sr: "", lt: "", lv: "", et: "", ja: "Noto Sans CJK JP", zh: "Noto Sans CJK SC", ko: "Noto Sans CJK KR", th: "Noto Sans Thai", vi: "", id: "", ms: "", ar: "Noto Sans Arabic", he: "Noto Sans Hebrew", fa: "Noto Sans Arabic", ur: "Noto Sans Arabic", it: "", tr: "", pl: "", cz: ""
+  en: "", ru: "Noto Sans", fr: "", es: "", pt: "", de: "", sv: "", nl: "", no: "", da: "", fi: "", hu: "Noto Sans", ro: "Noto Sans", bg: "Noto Sans", el: "Noto Sans", uk: "Noto Sans", be: "Noto Sans", sk: "Noto Sans", sl: "Noto Sans", hr: "Noto Sans", sr: "Noto Sans", lt: "Noto Sans", lv: "Noto Sans", et: "Noto Sans", ja: "Noto Sans CJK JP", zh: "Noto Sans CJK SC", ko: "Noto Sans CJK KR", th: "Noto Sans Thai", vi: "Noto Sans", id: "", ms: "", ar: "Noto Sans Arabic", he: "Noto Sans Hebrew", fa: "Noto Sans Arabic", ur: "Noto Sans Arabic", it: "", tr: "Noto Sans", pl: "Noto Sans", cz: "Noto Sans"
 }
 
 export const RTL_LANGS: Lang[] = ["ar", "he", "fa", "ur"]
@@ -23,7 +23,45 @@ export const fontForLang = (lang: Lang): string => FONT_BY_LANG[lang] ?? ""
 
 export const isRtl = (lang: Lang): boolean => ["ar", "he", "fa", "ur"].includes(lang)
 
-const EN: Record<string, string> = {
+const LOCALE_TAG: Record<Lang, string> = {
+  en: "en-GB", ru: "ru-RU", fr: "fr-FR", es: "es-ES", pt: "pt-PT", de: "de-DE", sv: "sv-SE", nl: "nl-NL", no: "nb-NO", da: "da-DK", fi: "fi-FI", hu: "hu-HU", ro: "ro-RO", bg: "bg-BG", el: "el-GR", uk: "uk-UA", be: "be-BY", sk: "sk-SK", sl: "sl-SI", hr: "hr-HR", sr: "sr-RS", lt: "lt-LT", lv: "lv-LV", et: "et-EE", ja: "ja-JP", zh: "zh-CN", ko: "ko-KR", th: "th-TH", vi: "vi-VN", id: "id-ID", ms: "ms-MY", ar: "ar-SA", he: "he-IL", fa: "fa-IR", ur: "ur-PK", it: "it-IT", tr: "tr-TR", pl: "pl-PL", cz: "cs-CZ",
+}
+export const localeForLang = (lang: Lang): string => LOCALE_TAG[lang] ?? lang
+const GEOCODER_LANG: Partial<Record<Lang, string>> = { no: "nb", cz: "cs" }
+export const geocoderLangForLang = (lang: Lang): string => GEOCODER_LANG[lang] ?? lang
+export const formatDate = (date: Date, options: Intl.DateTimeFormatOptions, lang?: Lang): string => {
+  const opts = { calendar: "gregory", ...options }
+  try { return new Intl.DateTimeFormat(localeForLang(lang ?? getLang()), opts).format(date) }
+  catch { return new Intl.DateTimeFormat("en-GB", opts).format(date) }
+}
+export const formatTime = (date: Date, seconds = false, lang?: Lang): string => formatDate(date, {
+  hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" as const } : {}),
+}, lang)
+export const localizeLocationName = (value: string, lang?: Lang, countryCode = ""): string => {
+  const currentLang = lang ?? getLang()
+  let localized = value
+  if (countryCode) {
+    try {
+      const country = new Intl.DisplayNames([localeForLang(currentLang)], { type: "region" }).of(countryCode.toUpperCase())
+      const parts = value.split(",")
+      if (country && parts.length > 1) parts[parts.length - 1] = country.toLocaleUpperCase(localeForLang(currentLang))
+      localized = parts.join(",")
+    } catch {}
+  }
+  if (currentLang !== "pt") return localized
+  return localized
+    .replace(/\bPORTO\s+DISTRICT\b/gi, "DISTRITO DO PORTO")
+    .replace(/\bTOKYO\b/gi, "TÓQUIO")
+    .replace(/\bJAPAN\b/gi, "JAPÃO")
+    .replace(/\bDISTRICT\b/gi, "DISTRITO")
+    .replace(/\bPREFECTURE\b/gi, "PREFEITURA")
+    .replace(/\bPROVINCE\b/gi, "PROVÍNCIA")
+    .replace(/\bCOUNTY\b/gi, "DISTRITO")
+    .replace(/\bUNITED STATES\b/gi, "ESTADOS UNIDOS")
+    .replace(/\bUNITED KINGDOM\b/gi, "REINO UNIDO")
+}
+
+export const EN: Record<string, string> = {
   // ============ tabs ============
   "cfg.tab.configuration": "CONFIGURATION",
   "cfg.tab.colors": "COLORS",
@@ -31,6 +69,51 @@ const EN: Record<string, string> = {
   "cfg.tab.wm": "WINDOW MANAGEMENT",
   "cfg.tab.wallpaper": "WALLPAPER",
   "cfg.tab.uninstall": "UNINSTALL",
+  "cfg.modal.audio": "AUDIO",
+  "cfg.modal.display": "DISPLAY",
+  "cfg.modal.power": "POWER",
+  "cfg.modal.theme_settings": "THEME SETTINGS",
+  "cfg.modal.terminal_theme": "TERMINAL THEME",
+  "cfg.modal.kb_conflicts": "KEYBIND CONFLICTS",
+  "cfg.modal.forecast": "ATMOSPHERIC UPLINK · 7-DAY",
+  "on": "ON",
+  "off": "OFF",
+  "ui.cancel": "CANCEL",
+  "ui.select": "SELECT",
+  "ui.select_audio": "SELECT AUDIO",
+  "ui.audio_filter": "AUDIO",
+  "ui.theme": "THEME",
+  "ui.done": "DONE",
+  "ui.open": "OPEN",
+  "ui.ok": "OK",
+  "ui.edit": "EDIT",
+  "ui.save": "SAVE",
+  "ui.replace": "REPLACE",
+  "ui.selected_apps": "SELECTED APPLICATIONS",
+  "cfg.launcher.title": "Apps Launcher",
+  "cfg.toast.select_region_record": "SELECT A REGION TO RECORD",
+  "cfg.toast.select_region_capture": "SELECT A REGION TO CAPTURE",
+  "cfg.toast.select_region_screenshot": "SELECT A REGION TO SCREENSHOT",
+  "cfg.toast.select_app_kill": "SELECT AN APP TO KILL",
+  "cfg.toast.recording_failed": "RECORDING FAILED",
+  "cfg.weather.clear": "CLEAR",
+  "cfg.weather.mainly_clear": "MAINLY CLEAR",
+  "cfg.weather.partly_cloudy": "PARTLY CLOUDY",
+  "cfg.weather.overcast": "OVERCAST",
+  "cfg.weather.fog": "FOG",
+  "cfg.weather.drizzle": "DRIZZLE",
+  "cfg.weather.freezing_drizzle": "FREEZING DRIZZLE",
+  "cfg.weather.light_rain": "LIGHT RAIN",
+  "cfg.weather.rain": "RAIN",
+  "cfg.weather.heavy_rain": "HEAVY RAIN",
+  "cfg.weather.freezing_rain": "FREEZING RAIN",
+  "cfg.weather.light_snow": "LIGHT SNOW",
+  "cfg.weather.snow": "SNOW",
+  "cfg.weather.heavy_snow": "HEAVY SNOW",
+  "cfg.weather.snow_grains": "SNOW GRAINS",
+  "cfg.weather.thunderstorm": "THUNDERSTORM",
+  "cfg.weather.offline": "OFFLINE",
+  "cfg.close": "CLOSE",
 
   // ============ drawConfig / CFG_SECTIONS ============
   "cfg.section.animations": "// ::animations",
@@ -58,15 +141,31 @@ const EN: Record<string, string> = {
   "cfg.snd.overlay.toggle": "OVERLAY SOUNDS",
   "cfg.snd.overlay.group": "OVERLAY SAMPLES",
   "cfg.snd.overlay_file": "OVERLAY",
-  "cfg.snd.kill_file": "KILL_APP",
+  "cfg.snd.kill_file": "KILL APP",
 
   "cfg.gauge.badge": "BADGE",
   "cfg.gauge.xp": "EXPERIENCE BAR",
   "cfg.gauge.health": "HEALTH BAR",
   "cfg.gauge.ram": "RAM BAR",
   "cfg.gauge.stamina": "STAMINA BAR",
+  "cfg.metric.workspace": "ACTIVE WORKSPACE",
+  "cfg.metric.cpu": "CPU USAGE",
+  "cfg.metric.cputemp": "CPU TEMPERATURE",
+  "cfg.metric.ram": "RAM USAGE",
+  "cfg.metric.ramfree": "RAM AVAILABLE",
+  "cfg.metric.swap": "SWAP USAGE",
+  "cfg.metric.disk": "STORAGE USAGE",
+  "cfg.metric.battery": "BATTERY LEVEL",
+  "cfg.metric.gpu": "GPU USAGE",
+  "cfg.metric.vram": "VRAM USAGE",
+  "cfg.metric.load": "SYSTEM LOAD",
+  "cfg.metric.net": "NETWORK LOAD",
 
   "cfg.kb_layout.label": "KEYBOARD LAYOUT",
+  "cfg.kb_layout.auto": "SYSTEM DEFAULT",
+  "cfg.kb_layout.none": "NO XKB LAYOUTS FOUND",
+  "cfg.lang.label": "LANGUAGE",
+  "cfg.back": "BACK",
 
   "cfg.load_user_dir": "LOAD USER DIR",
   "cfg.reload_cyberarch": "RELOAD CYBERARCH",
@@ -265,6 +364,8 @@ const EN: Record<string, string> = {
   "cfg.audio.master_output": "// MASTER OUTPUT",
   "cfg.audio.master_input": "// MASTER INPUT",
   "cfg.audio.mute": "MUTE",
+  "cfg.audio.mute_input": "MUTE INPUT",
+  "cfg.audio.unmute_input": "UNMUTE INPUT",
   "cfg.audio.unmute_output": "UNMUTE OUTPUT",
   "cfg.audio.mute_output": "MUTE OUTPUT",
   "cfg.audio.activity": "// ACTIVITY",
@@ -289,6 +390,85 @@ const EN: Record<string, string> = {
   "cfg.audio.set_default": "SET DEFAULT",
   "cfg.audio.already_default": "ALREADY DEFAULT",
   "cfg.audio.brightness": "BRIGHTNESS",
+  "cfg.markets.modal_title": "NETWORK TERMINAL",
+  "cfg.markets.market_feed": "MARKET FEED",
+  "cfg.markets.keystore": "KEYSTORE",
+  "cfg.markets.stock_exchange": "STOCK EXCHANGE",
+  "cfg.markets.powered_by": "POWERED BY",
+  "cfg.markets.stocks": "STOCKS",
+  "cfg.markets.crypto": "CRYPTO",
+  "cfg.markets.news": "NEWS",
+  "cfg.markets.logout": "LOGOUT",
+  "cfg.markets.tab": "TAB",
+  "cfg.markets.pinned": "PINNED <n>/<max>",
+  "cfg.markets.search_coins": "search coins…",
+  "cfg.markets.search_tickers": "search tickers…",
+  "cfg.markets.search_type": "TYPE TO SEARCH",
+  "cfg.markets.search_news": "// SEARCH… TYPE TO SEARCH LOADED NEWS",
+  "cfg.markets.search_query": "// SEARCH… <query>",
+  "cfg.markets.local": "LOCAL",
+  "cfg.markets.local_prefix": "LOCAL: <city>",
+  "cfg.markets.feeding": "FEEDING",
+  "cfg.markets.news_live": "NEWS LIVE",
+  "cfg.markets.age": "AGE <age>",
+  "cfg.markets.source": "SRC <source>",
+  "cfg.markets.reset": "RESET",
+  "cfg.markets.all": "ALL",
+  "cfg.markets.category_world": "WORLD",
+  "cfg.markets.category_business": "BUSINESS",
+  "cfg.markets.category_tech": "TECH",
+  "cfg.markets.category_science": "SCIENCE",
+  "cfg.markets.category_local": "LOCAL",
+  "cfg.markets.any_time": "ANY TIME",
+  "cfg.markets.last_24h": "24H",
+  "cfg.markets.last_7d": "7D",
+  "cfg.markets.last_30d": "30D",
+  "cfg.markets.fetching_feeds": "FETCHING FEEDS",
+  "cfg.markets.source_count": "<available>/<total> SOURCES",
+  "cfg.markets.feeds_idle": "FEEDS IDLE",
+  "cfg.markets.global_local_feeds": "GLOBAL / LOCAL FEEDS",
+  "cfg.markets.loaded": "<n> LOADED · <time>",
+  "cfg.markets.loaded_count": "<n> LOADED",
+  "cfg.markets.news_failed": "NEWS FEEDS FAILED",
+  "cfg.markets.no_feeds": "NO FEEDS RESPONDED",
+  "cfg.markets.no_new_news": "NO NEW NEWS",
+  "cfg.markets.searching": "SEARCHING",
+  "cfg.markets.match_count": "<n> MATCHES",
+  "cfg.markets.no_matches": "NO MATCHES",
+  "cfg.markets.search_failed": "SEARCH FAILED",
+  "cfg.markets.loading": "LOADING…",
+  "cfg.markets.load_more": "LOAD MORE",
+  "cfg.markets.fetching": "FETCHING",
+  "cfg.markets.no_pins": "NO PINS — DOUBLE CLICK TO ADD",
+  "cfg.markets.news_loading": "NEWS LOADING…",
+  "cfg.markets.fetch_next": "fetch next market chunk",
+  "cfg.markets.fetching_next": "fetching next market chunk",
+  "cfg.markets.unavailable": "UNAVAILABLE",
+  "cfg.markets.pin": "PIN",
+  "cfg.markets.unpin": "UNPIN",
+  "cfg.markets.no_market_data": "NO MARKET DATA",
+  "cfg.markets.open_article": "OPEN ARTICLE",
+  "cfg.markets.fetching_description": "FETCHING SOURCE DESCRIPTION…",
+  "cfg.markets.no_description": "This feed did not include a description. Open the article for the full story.",
+  "cfg.markets.empty_fetching": "FETCHING NEWS",
+  "cfg.markets.empty_no_headlines": "NO HEADLINES MATCH",
+  "cfg.markets.empty_no_news": "NO NEWS FOUND",
+  "cfg.markets.empty_change_filters": "Change the filters or clear the search.",
+  "cfg.markets.empty_try_again": "Try loading the feeds again in a moment.",
+  "cfg.markets.rank": "RANK",
+  "cfg.markets.market_cap": "MKT CAP",
+  "cfg.markets.volume_24h": "VOL 24H",
+  "cfg.markets.supply": "SUPPLY",
+  "cfg.markets.high_24h": "HIGH 24H",
+  "cfg.markets.low_24h": "LOW 24H",
+  "cfg.markets.exchange": "EXCHANGE",
+  "cfg.markets.open": "OPEN",
+  "cfg.markets.high": "HIGH",
+  "cfg.markets.low": "LOW",
+  "cfg.markets.volume": "VOLUME",
+  "cfg.markets.range_52w": "52W",
+  "cfg.markets.rss_not_requested": "RSS: NOT REQUESTED",
+  "cfg.markets.validate_failed": "CANNOT VALIDATE <id>",
 
   // ============ WifiCtrl ============
   "cfg.wifi.title": "NETWORK",
@@ -323,7 +503,6 @@ const EN: Record<string, string> = {
   "cfg.bluetooth.connect": "CONNECT",
   "cfg.bluetooth.unpair": "UNPAIR",
   "cfg.bluetooth.pair": "PAIR",
-  "cfg.bluetooth.paired": "PAIRED",
   "cfg.bluetooth.connected": "CONNECTED",
 
   // ============ PwrCtrl ============
@@ -334,6 +513,16 @@ const EN: Record<string, string> = {
 
   // ============ SysCtrl / sys.ts ============
   "cfg.sys.power_cell": "POWER CELL",
+  "cfg.sys.ac_connected": "AC CONNECTED",
+  "cfg.sys.cpu": "CPU",
+  "cfg.sys.direct_supply": "DIRECT SUPPLY",
+  "cfg.sys.draw_history": "DRAW HISTORY",
+  "cfg.sys.gpu": "GPU",
+  "cfg.sys.scroll_procs": "SCROLL PROCESSES",
+  "cfg.sys.tab.init": "STARTUP",
+  "cfg.sys.tab.logs": "LOGS",
+  "cfg.sys.tab.proc": "PROCESS LIST",
+  "cfg.sys.tab.sys": "SYSTEM",
   "cfg.sys.ac_powered": "AC POWERED",
   "cfg.sys.fully_charged": "✓ FULLY CHARGED",
   "cfg.sys.charging": "⚡ CHARGING",
@@ -349,21 +538,25 @@ const EN: Record<string, string> = {
   "cfg.sys.uplink": "UPLINK",
   "cfg.sys.downlink": "DOWNLINK",
   "cfg.sys.storage": "STORAGE",
-  "cfg.sys.processes": "PROCESSES",
+  "cfg.sys.processes": "RUNNING PROCESSES",
+  "cfg.sys.processes_short": "PROCESSES",
   "cfg.sys.force_kill": "FORCE KILL",
-  "cfg.sys.select_proc": "SELECT A PROC",
-  "cfg.sys.sys_info": "SYS_INFO",
+  "cfg.sys.select_proc": "SELECT A PROCESS",
+  "cfg.sys.sys_info": "SYSTEM INFO",
   "cfg.sys.gpu_load": "GPU LOAD",
   "cfg.sys.cores": "CORES",
   "cfg.sys.uptime": "UPTIME",
-  "cfg.sys.machine_name": "MACHINE_NAME",
-  "cfg.sys.active_user": "ACTIVE_USER",
+  "cfg.sys.machine_name": "MACHINE NAME",
+  "cfg.sys.active_user": "ACTIVE USER",
   "cfg.sys.os": "OS",
   "cfg.sys.kernel": "KERNEL",
   "cfg.sys.arch": "ARCH",
-  "cfg.sys.cpu_model": "CPU_MODEL",
-  "cfg.sys.gpu_model": "GPU_MODEL",
+  "cfg.sys.cpu_model": "CPU MODEL",
+  "cfg.sys.gpu_model": "GPU MODEL",
   "cfg.sys.mem": "MEMORY",
+  "cfg.sys.used": "IN USE",
+  "cfg.sys.cache": "CACHE",
+  "cfg.sys.process": "PROCESS",
   "cfg.sys.swap": "SWAP",
   "cfg.sys.disk": "DISK",
   "cfg.sys.battery": "BATTERY",
@@ -372,12 +565,43 @@ const EN: Record<string, string> = {
   "cfg.sys.shell": "SHELL",
   "cfg.sys.terminal": "TERMINAL",
   "cfg.sys.resolution": "RESOLUTION",
-  "cfg.sys.packages": "PACKAGES",
-  "cfg.sys.init_daemon": "INIT_DAEMON",
+  "cfg.sys.packages": "INSTALLED PACKAGES",
+  "cfg.sys.init_daemon": "STARTUP SERVICE",
   "cfg.sys.total": "TOTAL",
   "cfg.sys.on_boot": "ON BOOT",
   "cfg.sys.off": "OFF",
-  "cfg.sys.info_logs": "INFO_LOGS",
+  "cfg.sys.load": "LOAD",
+  "cfg.sys.enabled_on_boot": "ENABLED ON BOOT",
+  "cfg.sys.disabled_on_boot": "DISABLED ON BOOT",
+  "cfg.sys.scroll_init_hint": "SCROLL SERVICES · CLICK BUTTON TO TOGGLE · ESC CLOSES",
+  "cfg.sys.scroll_logs_hint": "JOURNAL LOG · AUTO-REFRESH · ESC CLOSES",
+  "cfg.sys.info_logs": "INFO LOGS",
+  "cfg.wm.section.transparency": "// ::window transparency",
+  "cfg.wm.section.glow_shadow": "// ::glow & shadow",
+  "cfg.wm.section.borders": "// ::borders",
+  "cfg.wm.section.corners": "// ::corners",
+  "cfg.wm.window_transparency": "WINDOW BACKGROUND TRANSPARENCY",
+  "cfg.wm.opacity_level": "OPACITY LEVEL",
+  "cfg.wm.application_mode": "APPLICATION MODE",
+  "cfg.wm.window_glow": "WINDOW GLOW",
+  "cfg.wm.glow_range": "GLOW RANGE",
+  "cfg.wm.glow_intensity": "GLOW INTENSITY",
+  "cfg.wm.window_shadow": "WINDOW SHADOW",
+  "cfg.wm.shadow_colour": "SHADOW COLOUR",
+  "cfg.wm.shadow_strength": "SHADOW STRENGTH",
+  "cfg.wm.shadow_range": "SHADOW RANGE",
+  "cfg.wm.window_borders": "WINDOW BORDERS",
+  "cfg.wm.border_width": "BORDER WIDTH",
+  "cfg.wm.border_colour": "BORDER COLOUR",
+  "cfg.wm.corner_style": "CORNER STYLE",
+  "cfg.wm.corner_size": "CORNER SIZE",
+  "cfg.wm.mode.off": "GLOBAL ONLY",
+  "cfg.wm.mode.only": "ONLY SELECTED APPS",
+  "cfg.wm.mode.except": "ALL EXCEPT SELECTED",
+  "cfg.wm.corner.round": "ROUNDED",
+  "cfg.wm.corner.bevel": "BEVELED",
+  "cfg.wm.corner.sharp": "SHARP",
+  "cfg.wm.none": "NONE",
 
   // ============ AurCtrl ============
   "cfg.aur.upgrade": "SYSTEM UPGRADE",
@@ -389,6 +613,57 @@ const EN: Record<string, string> = {
   "cfg.cyberarch.update_now": "UPDATE NOW",
   "cfg.cyberarch.check_again": "CHECK AGAIN",
   "cfg.cyberarch.new_release": "NEW RELEASE",
+  "cfg.cyberarch.checking": "// CHECKING FOR A NEW RELEASE …",
+  "cfg.cyberarch.up_to_date": "CYBERARCH UP TO DATE",
+  "cfg.cyberarch.running": "// running v",
+  "cfg.cyberarch.changes_since": "// what changed since v",
+  "cfg.cyberarch.no_notes": "no release notes for this version",
+  "cfg.cyberarch.version_available": "NEW VERSION V<version> AVAILABLE",
+  "cfg.cyberarch.update_prompt": "UPDATE CYBERARCH NOW?",
+  "cfg.cyberarch.installed": "CYBERARCH UPDATED!",
+  "cfg.cyberarch.now_on": "NOW ON V<version>",
+  "cfg.aur.available": "PACKAGE REPOSITORY UPDATES AVAILABLE!",
+  "cfg.aur.new_gigs": "AVAILABLE PACKAGE UPDATES:",
+  "cfg.aur.upgrade_short": "UPGRADE",
+  "cfg.aur.dismiss": "DISMISS",
+  "cfg.aur.review_proceed": "// review, then proceed with upgrade",
+  "cfg.time.matches": "<n> MATCHES",
+  "cfg.time.no_matches": "NO MATCHES",
+  "cfg.time.zones": "<n> ZONES",
+  "cfg.time.passcode": "PASSCODE",
+  "cfg.time.disable_sync_first": "DISABLE NET SYNC FIRST",
+  "cfg.time.format_error": "FORMAT · YYYY-MM-DD HH:MM:SS",
+  "cfg.time.timezone_set": "TIMEZONE SET · <zone>",
+  "cfg.time.clock_adjust": "CLOCK ADJUSTED · <minutes> MIN",
+  "cfg.time.manual_time_set": "TIME SET · <stamp>",
+  "cfg.time.sync_enabled": "NETWORK SYNC ENABLED",
+  "cfg.time.sync_disabled": "NETWORK SYNC DISABLED",
+  "cfg.time.search_failed": "CITY SEARCH FAILED",
+  "cfg.region.output_record": "OUTPUT     // ~/VIDEOS/RECORDINGS",
+  "cfg.region.output_capture": "OUTPUT     // ~/PICTURES/SCREENSHOTS",
+  "cfg.region.status_waiting": "STATUS     // AWAITING INPUT",
+  "cfg.region.netwatch_feed": "NETWATCH   // FEED INTERCEPT",
+  "cfg.region.netwatch_signal": "NETWATCH   // SIGNAL INTERCEPT",
+  "cfg.region.signal_intercept": "SIGNAL INTERCEPT",
+  "cfg.apps.footer": "[ TYPE ] SEARCH    [ SCROLL / ARROW KEYS ] NAVIGATE    [ ENTER / CLICK ] LAUNCH    [ ESC ] CLOSE",
+  "cfg.apps.running": "// CYBERDECK.OS — RUNNING",
+  "cfg.apps.no_match": "// NO MATCH",
+  "cfg.apps.no_apps": "// NO APPS",
+  "cfg.apps.search": "SEARCH…",
+  "cfg.apps.password": "PASSWORD…",
+  "cfg.apps.pick_app": "PICK APP",
+  "cfg.apps.ready": "READY",
+  "cfg.apps.select_an_app": "// KEYBIND — SELECT AN APP",
+  "cfg.apps.pick_footer": "[ SCROLL / CLICK ] PICK   [ ESC ] BACK",
+  "cfg.sidepanel.low": "LOW <value>",
+  "cfg.sidepanel.feels_hum_wind": "FEELS <feels> · HUM <humidity>% · WIND <wind>",
+  "cfg.sidepanel.city_hint": "TYPE ▸ CLICK A RESULT · ESC CANCELS",
+  "cfg.sidepanel.search_failed": "SEARCH FAILED",
+  "cfg.sidepanel.precipitation": "PRECIPITATION",
+  "cfg.sidepanel.wind_max": "WIND MAX",
+  "cfg.sidepanel.uv_index": "UV INDEX",
+  "cfg.sidepanel.sunrise": "SUNRISE",
+  "cfg.sidepanel.sunset": "SUNSET",
 
   // ============ KeysCtrl ============
   "cfg.keys.prefix_mod": "// PREFIX <mod> + KEY",
@@ -506,7 +781,6 @@ const EN: Record<string, string> = {
   "cfg.time.cmd_timedatectl": "CMD  timedatectl ...",
   "cfg.time.authorize": "AUTHORIZE",
   "cfg.time.cancel": "CANCEL",
-  "cfg.time.passcode": "PASSCODE",
   "cfg.time.date_placeholder": "YYYY-MM-DD",
   "cfg.time.time_placeholder": "HH:MM:SS",
   "cfg.time.weekday_sunday": "SUNDAY",
@@ -532,36 +806,17 @@ const EN: Record<string, string> = {
   // ============ cmodal.ts sys.ts ============
   "cfg.sys.tab_sys": "SYSTEM MONITOR",
   "cfg.sys.tab_pwr": "POWER CELL",
-  "cfg.sys.machine_name": "MACHINE_NAME",
-  "cfg.sys.active_user": "ACTIVE_USER",
-  "cfg.sys.os": "OS",
-  "cfg.sys.kernel": "KERNEL",
-  "cfg.sys.arch": "ARCH",
-  "cfg.sys.core_cpu": "CORE_CPU",
+  "cfg.sys.core_cpu": "CPU CORES",
   "cfg.sys.threads": "THREADS",
-  "cfg.sys.cpu_model": "CPU_MODEL",
-  "cfg.sys.cpu_freq": "CPU_FREQ",
-  "cfg.sys.cpu_cache": "CPU_CACHE",
-  "cfg.sys.gpu_model": "GPU_MODEL",
-  "cfg.sys.gpu_driver": "GPU_DRIVER",
-  "cfg.sys.gpu_vram": "GPU_VRAM",
-  "cfg.sys.gpu_temp": "GPU_TEMP",
-  "cfg.sys.memory": "MEMORY",
-  "cfg.sys.swap": "SWAP",
-  "cfg.sys.disk": "DISK",
-  "cfg.sys.battery": "BATTERY",
-  "cfg.sys.wm": "WM",
-  "cfg.sys.session": "SESSION",
-  "cfg.sys.shell": "SHELL",
-  "cfg.sys.terminal": "TERMINAL",
-  "cfg.sys.icon_theme": "ICON_THEME",
-  "cfg.sys.gtk_theme": "GTK_THEME",
-  "cfg.sys.resolution": "RESOLUTION",
-  "cfg.sys.packages": "PACKAGES",
-  "cfg.sys.processes": "PROCESSES",
-  "cfg.sys.load_avg": "LOAD_AVG",
-  "cfg.sys.local_ip": "LOCAL_IP",
-  "cfg.sys.uptime": "UPTIME",
+  "cfg.sys.cpu_freq": "CPU FREQUENCY",
+  "cfg.sys.cpu_cache": "CPU CACHE",
+  "cfg.sys.gpu_driver": "GPU DRIVER",
+  "cfg.sys.gpu_vram": "GPU VRAM",
+  "cfg.sys.gpu_temp": "GPU TEMPERATURE",
+  "cfg.sys.icon_theme": "ICON THEME",
+  "cfg.sys.gtk_theme": "GTK THEME",
+  "cfg.sys.load_avg": "LOAD AVERAGE",
+  "cfg.sys.local_ip": "LOCAL IP",
 
   // ============ anim.ts ============
   "cfg.anim.breach_title": "BREACH PROTOCOL // <title>",
@@ -571,15 +826,15 @@ const EN: Record<string, string> = {
   "cfg.anim.capturing": "CAPTURING",
   "cfg.anim.time": "TIME",
   "cfg.anim.scanner": "SCANNER",
-  "cfg.anim.rec": "REC",
+  "cfg.anim.rec": "RECORDING",
   "cfg.anim.hd": "HD",
   "cfg.anim.f_5_6": "F 5.6",
   "cfg.anim.iso_100": "ISO 100",
   "cfg.anim.camera_user": "CAMERA 01: <user>",
   "cfg.anim.power_connected": "POWER CONNECTED",
   "cfg.anim.cyberdeck_recorder": "CYBERDECK RECORDER",
-  "cfg.anim.rec_res": "REC <W>x<H>",
-  "cfg.anim.sys_capture": "// SYS.CAPTURE",
+  "cfg.anim.rec_res": "RECORDING <W>x<H>",
+  "cfg.anim.sys_capture": "// SYSTEM CAPTURE",
   "cfg.anim.use_key_r": "__/ USE [ KEY + R ] TO STOP RECORDING",
   "cfg.anim.rec_started": "RECORDING STARTED",
   "cfg.anim.rec_stopped": "RECORDING STOPPED",
@@ -595,48 +850,13 @@ const EN: Record<string, string> = {
   "cfg.dock.key.p": "P",
 
   // ============ cmodal.ts sys.ts ============
-  "cfg.sys.tab_sys": "SYSTEM MONITOR",
-  "cfg.sys.tab_pwr": "POWER CELL",
-  "cfg.sys.machine_name": "MACHINE_NAME",
-  "cfg.sys.active_user": "ACTIVE_USER",
-  "cfg.sys.os": "OS",
-  "cfg.sys.kernel": "KERNEL",
-  "cfg.sys.arch": "ARCH",
-  "cfg.sys.core_cpu": "CORE_CPU",
-  "cfg.sys.threads": "THREADS",
-  "cfg.sys.cpu_model": "CPU_MODEL",
-  "cfg.sys.cpu_freq": "CPU_FREQ",
-  "cfg.sys.cpu_cache": "CPU_CACHE",
-  "cfg.sys.gpu_model": "GPU_MODEL",
-  "cfg.sys.gpu_driver": "GPU_DRIVER",
-  "cfg.sys.gpu_vram": "GPU_VRAM",
-  "cfg.sys.gpu_temp": "GPU_TEMP",
-  "cfg.sys.memory": "MEMORY",
-  "cfg.sys.swap": "SWAP",
-  "cfg.sys.disk": "DISK",
-  "cfg.sys.battery": "BATTERY",
-  "cfg.sys.wm": "WM",
-  "cfg.sys.session": "SESSION",
-  "cfg.sys.shell": "SHELL",
-  "cfg.sys.terminal": "TERMINAL",
-  "cfg.sys.icon_theme": "ICON_THEME",
-  "cfg.sys.gtk_theme": "GTK_THEME",
-  "cfg.sys.resolution": "RESOLUTION",
-  "cfg.sys.packages": "PACKAGES",
-  "cfg.sys.processes": "PROCESSES",
-  "cfg.sys.load_avg": "LOAD_AVG",
-  "cfg.sys.local_ip": "LOCAL_IP",
-  "cfg.sys.uptime": "UPTIME",
-  "cfg.sys.tab_sys": "SYSTEM MONITOR",
-  "cfg.sys.tab_pwr": "POWER CELL",
 
   // ============ notifpopup ============
   "cfg.popup.connection_header": "CONNECTION 201.89.43",
   "cfg.popup.new_messages_plural": "NEW MESSAGES",
   "cfg.popup.new_message_singular": "NEW MESSAGE",
-  "cfg.popup.read_message": "READ MESSAGE",
-  "cfg.popup.key_e": "E",
-  "cfg.popup.key_x": "X",
+  "cfg.popup.screenshot_title": "SCREENSHOT",
+  "cfg.popup.screenshot_saved_copied": "SAVED TO SCREENSHOTS & COPIED",
 
   // ============ KeysCtrl (userbinds.ts) ============
   "cfg.keys.dispatcher.custom_app": "CUSTOM APP",
@@ -644,20 +864,122 @@ const EN: Record<string, string> = {
   "cfg.keys.dispatcher.layout": "LAYOUT",
   "cfg.keys.dispatcher.close_window": "CLOSE WINDOW",
   "cfg.keys.dispatcher.cycle_window": "CYCLE WINDOW",
-  "cfg.keybinds.dispatcher.toggle_float": "TOGGLE FLOAT",
-  "cfg.keybinds.dispatcher.fullscreen": "FULLSCREEN",
-  "cfg.keybinds.dispatcher.move_window": "MOVE WINDOW",
-  "cfg.keybinds.dispatcher.resize_window": "RESIZE WINDOW",
-  "cfg.keybinds.dispatcher.focus_dir": "FOCUS DIR",
-  "cfg.keybinds.dispatcher.workspace": "WORKSPACE",
+  "cfg.keys.dispatcher.toggle_hud": "TOGGLE HUD",
+  "cfg.keys.dispatcher.vol": "VOLUME",
+  "cfg.keys.dispatcher.brt": "BRIGHTNESS",
+  "cfg.keys.dispatcher.aur": "AUDIO UPLINK",
+  "cfg.keys.dispatcher.aurdis": "DISMISS AUDIO UPLINK",
+  "cfg.keys.dispatcher.update": "SYSTEM UPDATE",
+  "cfg.keys.dispatcher.notif": "NOTIFICATIONS",
+  "cfg.keys.dispatcher.player": "MEDIA PLAYER",
+  "cfg.keys.dispatcher.wifi": "NETWORK STATUS",
+  "cfg.keys.dispatcher.bt": "BLUETOOTH",
+  "cfg.keys.dispatcher.pwr": "POWER MENU",
+  "cfg.keys.dispatcher.forecast": "WEATHER FORECAST",
+  "cfg.keys.dispatcher.clock": "CLOCK",
+  "cfg.keys.dispatcher.markets": "MARKET FEED",
+  "cfg.keys.dispatcher.bat": "BATTERY STATUS",
+  "cfg.keys.dispatcher.sys": "SYSTEM MONITOR",
+  "cfg.keys.dispatcher.keys": "KEYBINDINGS",
+  "cfg.keys.dispatcher.settings": "THEME SETTINGS",
+  "cfg.keys.dispatcher.termtheme": "TERMINAL THEME",
+  "cfg.keys.dispatcher.notifrd": "READ NOTIFICATION",
+  "cfg.keys.dispatcher.notifdis": "DISMISS NOTIFICATION",
+  "cfg.keys.dispatcher.rec": "SCREEN RECORDING",
+  "cfg.keys.dispatcher.term": "TERMINAL",
+  "cfg.keys.dispatcher.shot": "SCREENSHOT",
+  "cfg.keys.dispatcher.kill": "CLOSE WINDOW",
+  "cfg.keys.dispatcher.lock": "LOCK SCREEN",
+  "cfg.keys.dispatcher.win_full": "FULLSCREEN WINDOW",
+  "cfg.keys.dispatcher.win_float": "TOGGLE FLOATING",
+  "cfg.keys.dispatcher.win_close": "CLOSE WINDOW",
+  "cfg.keys.dispatcher.win_fleft": "FOCUS LEFT",
+  "cfg.keys.dispatcher.win_fright": "FOCUS RIGHT",
+  "cfg.keys.dispatcher.win_fup": "FOCUS UP",
+  "cfg.keys.dispatcher.win_fdown": "FOCUS DOWN",
+  "cfg.keys.dispatcher.win_mleft": "MOVE LEFT",
+  "cfg.keys.dispatcher.win_mright": "MOVE RIGHT",
+  "cfg.keys.dispatcher.win_mup": "MOVE UP",
+  "cfg.keys.dispatcher.win_mdown": "MOVE DOWN",
+  "cfg.keys.dispatcher.win_rleft": "RESIZE LEFT",
+  "cfg.keys.dispatcher.win_rright": "RESIZE RIGHT",
+  "cfg.keys.dispatcher.win_rup": "RESIZE UP",
+  "cfg.keys.dispatcher.win_rdown": "RESIZE DOWN",
+
+  "cfg.keyhelp.app_launcher": "APP LAUNCHER",
+  "cfg.keyhelp.help_menu": "HELP MENU",
+  "cfg.keyhelp.hud_overlay": "HUD OVERLAY",
+  "cfg.keyhelp.volume": "VOLUME",
+  "cfg.keyhelp.brightness": "BRIGHTNESS",
+  "cfg.keyhelp.system_upgrade": "SYSTEM UPGRADE",
+  "cfg.keyhelp.dismiss_update": "DISMISS UPDATE",
+  "cfg.keyhelp.cyberarch_update": "CYBERARCH UPDATE",
+  "cfg.keyhelp.microphone": "MICROPHONE",
+  "cfg.keyhelp.markets": "MARKETS",
+  "cfg.keyhelp.music_player": "MUSIC PLAYER",
+  "cfg.keyhelp.networks": "NETWORKS",
+  "cfg.keyhelp.bluetooth": "BLUETOOTH",
+  "cfg.keyhelp.forecast": "FORECAST",
+  "cfg.keyhelp.power_menu": "POWER MENU",
+  "cfg.keyhelp.battery": "BATTERY",
+  "cfg.keyhelp.cpu_ram": "CPU / RAM",
+  "cfg.keyhelp.lockscreen": "LOCKSCREEN",
+  "cfg.keyhelp.screen_record": "SCREEN RECORD",
+  "cfg.keyhelp.screenshot": "SCREENSHOT",
+  "cfg.keyhelp.terminal": "TERMINAL",
+  "cfg.keyhelp.kill_mode": "KILL MODE",
+  "cfg.keyhelp.time_timezone": "TIME / TIMEZONE",
+  "cfg.keyhelp.terminal_theme": "TERMINAL THEME",
+  "cfg.keyhelp.prefix": "// PREFIX <mods> + KEY",
+  "cfg.keyhelp.section_hyprland": "// HYPRLAND",
+  "cfg.keyhelp.fullscreen_toggle": "FULLSCREEN TOGGLE",
+  "cfg.keyhelp.float_tile_toggle": "FLOAT / TILE TOGGLE",
+  "cfg.keyhelp.focus_window": "FOCUS WINDOW",
+  "cfg.keyhelp.move_window": "MOVE WINDOW",
+  "cfg.keyhelp.resize_window": "RESIZE WINDOW",
+  "cfg.keyhelp.window_workspace": "WINDOW → WORKSPACE",
+  "cfg.keyhelp.peek_desktop": "PEEK DESKTOP",
+  "cfg.keyhelp.esc_close": "ESC TO CLOSE",
 }
 
-// fill gaps: any Lang missing a key falls back to EN via t()
+const langs: Partial<Record<Lang, Record<string, string>>> = {
+  en: EN,
+  pt: PT,
+  ...GENERATED_TRANSLATIONS,
+}
+
 for (const l of LANG_ORDER) {
   if (!langs[l]) langs[l] = {}
-  for (const k of Object.keys(EN)) {
-    if (langs[l][k] === undefined) langs[l][k] = EN[k]
+}
+
+const literalTranslations: Partial<Record<Lang, Map<string, string>>> = {}
+const translatedValues: Partial<Record<Lang, Set<string>>> = {}
+const buildLiteralTranslations = (targetLang: Lang): void => {
+  if (literalTranslations[targetLang] && translatedValues[targetLang]) return
+  const targetCatalog = langs[targetLang] ?? EN
+  const candidates = new Map<string, Set<string>>()
+  const translated = new Set<string>()
+  for (const [key, english] of Object.entries(EN)) {
+    const target = targetCatalog[key] ?? english
+    if (target !== english) translated.add(target)
+    for (const sourceLang of LANG_ORDER) {
+      const sourceCatalog = langs[sourceLang] ?? EN
+      const source = sourceCatalog[key] ?? english
+      if (source === target) continue
+      let values = candidates.get(source)
+      if (!values) { values = new Set(); candidates.set(source, values) }
+      values.add(target)
+    }
   }
+  const reverse = new Map<string, string>()
+  for (const [source, values] of candidates) {
+    if (values.size === 1) {
+      const target = values.values().next().value
+      if (target && target !== source) reverse.set(source, target)
+    }
+  }
+  literalTranslations[targetLang] = reverse
+  translatedValues[targetLang] = translated
 }
 
 let langCurrent: Lang = "en"
@@ -669,6 +991,11 @@ export const onLangChange = (cb: () => void): (() => void) => {
 export const notifyLangChange = () => { for (const cb of [...changeBus]) { try { cb() } catch (e) { print("[i18n] notify:", e) } } }
 
 export const getLang = (): Lang => langCurrent
+export const localizeText = (text: string): string => {
+  buildLiteralTranslations(langCurrent)
+  if (translatedValues[langCurrent]?.has(text)) return text
+  return literalTranslations[langCurrent]?.get(text) ?? text
+}
 export const setLang = (lang: Lang): void => {
   if (!LANG_ORDER.includes(lang)) return
   langCurrent = lang

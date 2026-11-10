@@ -8,6 +8,9 @@ import GLib from "gi://GLib"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, CYBER_DIR, winScale, monW, monH } from "../../env.ts"
 import { NEON, USER, USER_A, f, onColorChange, menuBg, glassMode } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
+import { getLang, fontForLang, localizeText, t } from "./i18n.ts"
+import Pango from "gi://Pango?version=1.0"
+import PangoCairo from "gi://PangoCairo?version=1.0"
 
 const Cairo = (imports as any).cairo
 
@@ -51,6 +54,27 @@ import { TITLE, MONO, ICONF } from "./fonts.ts"
 
 const FOOTER_APPS = "[ TYPE ] SEARCH    [ SCROLL / ARROW KEYS ] NAVIGATE    [ ENTER / CLICK ] LAUNCH    [ ESC ] CLOSE"
 let wheelCfg: any = { title: "APPS", subtitle: "// CYBERDECK.OS — RUNNING", footer: FOOTER_APPS, searchable: true, onActivate: null, onSecondary: null, onReset: null, emptyText: "// NO APPS" }
+
+const showWheelText = (ctx, x, y, value, family, size, color, alpha, bold = true) => {
+ const font = fontForLang(getLang()) || family
+ if (["ar", "he", "fa", "ur"].includes(getLang()) || !!fontForLang(getLang())) {
+     const layout = PangoCairo.create_layout(ctx), desc = Pango.FontDescription.new()
+     desc.set_family(font); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+     layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(String(value), -1)
+     ctx.setSourceRGBA(color[0], color[1], color[2], alpha)
+     ctx.moveTo(x, y - layout.get_baseline() / Pango.SCALE); PangoCairo.show_layout(ctx, layout)
+     return
+ }
+ ctx.selectFontFace(font, 0, bold ? 1 : 0); ctx.setFontSize(size)
+ ctx.setSourceRGBA(color[0], color[1], color[2], alpha); ctx.moveTo(x, y); ctx.showText(String(value))
+}
+const wheelTextWidth = (ctx, value, family, size, bold = true) => {
+ const font = fontForLang(getLang()) || family
+ const layout = PangoCairo.create_layout(ctx), desc = Pango.FontDescription.new()
+ desc.set_family(font); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+ layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(String(value), -1)
+ return layout.get_pixel_size()[0]
+}
 
 const VISIBLE = 9
 const ROW_H = 50, ROW_W = 400, LIST_X = 150
@@ -106,6 +130,11 @@ const iconFor = (app) => {
 }
 
 const truncate = (s, n) => (s && s.length > n) ? s.slice(0, n - 1) + "…" : (s || "")
+const fitWheelText = (ctx, value, font, size, maxWidth) => {
+ const chars = Array.from(String(value || ""))
+ while (chars.length && wheelTextWidth(ctx, chars.join(""), font, size, true) > maxWidth) chars.pop()
+ return chars.length < Array.from(String(value || "")).length ? `${chars.join("")}…` : chars.join("")
+}
 
 
 const itemPath = (ctx, bx, by, bw, bh) => {
@@ -156,13 +185,17 @@ const drawRow = (ctx, entry, x, ry, num, A, focused) => {
  itemPath(ctx, bx, by, bw, h); ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], (focused ? 0.97 : 0.72) * A); ctx.setLineWidth(1.6); ctx.stroke()
 
 
- ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(15); ctx.setSourceRGBA(1, 1, 1, (focused ? 1 : 0.9) * A)
- let nm2 = truncate(entry.label, 22)
+ const uiFont = fontForLang(getLang()) || TITLE
+ const monoFont = fontForLang(getLang()) || MONO
+ ctx.selectFontFace(uiFont, 0, 1); ctx.setFontSize(15)
+ let nm2 = fitWheelText(ctx, entry.label, uiFont, 15, bw - 74)
  if (searchFlash > 0.03) nm2 = nm2.split("").map((c) => (c === " " || Math.random() > searchFlash * 0.85) ? c : GLYPH[(Math.random() * GLYPH.length) | 0]).join("")
- ctx.moveTo(bx + 20, by + h / 2 - 2); ctx.showText(nm2)
- const bg = (entry.badge || "").toString().slice(0, 14)
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(8); const bgw = Math.max(46, ctx.textExtents(bg).width + 10)
- ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.85 * A); ctx.setLineWidth(0.8); ctx.rectangle(bx + 20, by + h / 2 + 6, bgw, 13); ctx.stroke(); ctx.moveTo(bx + 24, by + h / 2 + 16); ctx.showText(bg)
+ showWheelText(ctx, bx + 20, by + h / 2 - 2, nm2, uiFont, 15, [1, 1, 1], (focused ? 1 : 0.9) * A)
+ const badgeMaxW = Math.max(24, bw - 74)
+ const bg = fitWheelText(ctx, localizeText((entry.badge || "").toString().slice(0, 14)), monoFont, 8, badgeMaxW - 10)
+ const bgw = Math.min(badgeMaxW, Math.max(24, wheelTextWidth(ctx, bg, monoFont, 8, true) + 10))
+ ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.85 * A); ctx.setLineWidth(0.8); ctx.rectangle(bx + 20, by + h / 2 + 6, bgw, 13); ctx.stroke()
+ showWheelText(ctx, bx + 24, by + h / 2 + 16, bg, monoFont, 8, USER.wheelfg, 0.85 * A)
 
 
  if (entry.glyph) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(22); const gw = ctx.textExtents(entry.glyph).width; ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.92 * A * gl); ctx.moveTo(bx + bw - 34 - gw / 2, by + h / 2 + 8); ctx.showText(entry.glyph) }
@@ -227,23 +260,29 @@ const draw = (ctx) => {
 const drawContent = (ctx) => {
  const n = filtered.length
  const top = bandTop(), cy = centerY(), bandH = VISIBLE * ROW_H
+ const uiFont = fontForLang(getLang()) || TITLE
+ const monoFont = fontForLang(getLang()) || MONO
+ const title = localizeText(wheelCfg.title)
+ const subtitle = localizeText(wheelCfg.subtitle)
+ const footer = localizeText(wheelCfg.footer)
+ const emptyText = localizeText(wheelCfg.emptyText)
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.55); ctx.moveTo(LIST_X, top - 46); ctx.showText(wheelCfg.subtitle)
- ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(22)
- const titleW = ctx.textExtents(wheelCfg.title).width
- ctx.setOperator(12); ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.4); ctx.moveTo(LIST_X + 1, top - 16); ctx.showText(wheelCfg.title); ctx.setOperator(2)
- ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.97); ctx.moveTo(LIST_X, top - 16); ctx.showText(wheelCfg.title)
+ showWheelText(ctx, LIST_X, top - 46, subtitle, monoFont, 11, USER.press, 0.55)
+ ctx.selectFontFace(uiFont, 0, 1); ctx.setFontSize(22)
+ const titleW = wheelTextWidth(ctx, title, uiFont, 22, true)
+ ctx.setOperator(12); showWheelText(ctx, LIST_X + 1, top - 16, title, uiFont, 22, USER.wheelfg, 0.4); ctx.setOperator(2)
+ showWheelText(ctx, LIST_X, top - 16, title, uiFont, 22, USER.wheelfg, 0.97)
  if (wheelCfg.searchable) {
-     ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(13)
+     ctx.selectFontFace(monoFont, 0, 1); ctx.setFontSize(13)
      const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
      const shown = wheelCfg.masked ? "*".repeat(query.length) : query.toUpperCase()
-     ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], query ? 0.95 : 0.4); ctx.moveTo(LIST_X + titleW + 24, top - 16); ctx.showText("› " + (query ? shown + cur : wheelCfg.masked ? "PASSWORD…" : "SEARCH…"))
+     const prompt = query ? shown + cur : wheelCfg.masked ? t("cfg.apps.password") : t("cfg.apps.search")
+     showWheelText(ctx, LIST_X + titleW + 24, top - 16, "› " + prompt, monoFont, 13, USER.wheelfg, query ? 0.95 : 0.4)
  }
  ctx.setSourceRGBA(USER.wheelfg[0], USER.wheelfg[1], USER.wheelfg[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(LIST_X, top - 8); ctx.lineTo(LIST_X + ROW_W, top - 8); ctx.stroke()
 
  if (n === 0) {
-     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(18); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.85)
-     ctx.moveTo(LIST_X + 30, cy); ctx.showText(query && apps.length > 0 ? "// NO MATCH" : wheelCfg.emptyText)
+     showWheelText(ctx, LIST_X + 30, cy, query && apps.length > 0 ? t("cfg.apps.no_match") : emptyText, uiFont, 18, USER.press, 0.85)
  } else {
 
 
@@ -270,8 +309,7 @@ const drawContent = (ctx) => {
      if (searchFlash > 0.02) drawSearchGlitch(ctx, top, bandH)
  }
 
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(10); ctx.setSourceRGBA(USER.press[0], USER.press[1], USER.press[2], 0.5)
- ctx.moveTo(LIST_X, top + bandH + 30); ctx.showText(wheelCfg.footer)
+ showWheelText(ctx, LIST_X, top + bandH + 30, footer, monoFont, 10, USER.press, 0.5)
 }
 
 const stopAnim = () => { if (animT) { animT.cancel(); animT = null } }

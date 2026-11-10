@@ -6,13 +6,14 @@ import Gio from "gi://Gio"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { PALETTES, getPaletteName, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha, USER, onColorChange } from "./colors.ts"
 import { closeAllModals, createModal, drawBtn, drawToggle, drawSlider, sectionHeader, drawKeyCap, btnPath } from "./cmodal.ts"
-import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
+import { TITLE, MONO, CYAN, ACC, HEADER, txt, txtForLanguage, drawGlass, Cairo, ch, measureTextWidth } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
-import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL, LAYOUT_LABEL, readHyprKbLayout } from "./config.ts"
-import { t, getLang, setLang, isRtl, langFont, LANG_OPTS, LANG_LABEL } from "./i18n.ts"
+import { openWheel, closeWheel, buildAppEntries } from "./appsmenu.ts"
+import { cfgBool, cfgStr, setCfg, toggleCfg, resetCfg, adoptSound, clearSound, GAUGE_OPTS, METRIC_LABEL, readHyprKbLayout } from "./config.ts"
+import { t, getLang, isRtl, langFont, localizeText, LANG_LABEL, LANG_ORDER } from "./i18n.ts"
 import {
     wmBool, wmNum, wmStr, setWm, toggleWm, resetWm, wmCornersIs,
-    CORNER_OPTS, CORNER_LABEL, OPACITY_MODES, OPACITY_MODE_LABEL, type WmVal,
+    CORNER_OPTS, OPACITY_MODES, type WmVal,
 } from "./wmconfig.ts"
 import { USER_DIR, CYBER_DIR, WALLPAPERS_PATH, WALLPAPER_LUA, LAYOUT_WIDTH, LAYOUT_HEIGHT, monitorLayoutSize } from "../../env.ts"
 import {
@@ -47,8 +48,8 @@ export const readTune = () => {
 export const applyColors = (name: string) => { closeAllModals(); applyPalette(name); saveUserColors(); selPalette = name; sh(`"${CYBER_DIR}/scripts/theme-wallpaper" "${name}"`) }
 
 export const TABS: [string, string][] = [
-    ["CONFIGURATION", "anim"], ["COLORS", "colors"], ["KEYBINDS", "keybinds"],
-    ["WINDOW MANAGEMENT", "wm"], ["WALLPAPER", "wall"], ["UNINSTALL", "uninstall"],
+    ["cfg.tab.configuration", "anim"], ["cfg.tab.colors", "colors"], ["cfg.tab.keybinds", "keybinds"],
+    ["cfg.tab.wm", "wm"], ["cfg.tab.wallpaper", "wall"], ["cfg.tab.uninstall", "uninstall"],
 ]
 let ctrl: any = null
 
@@ -179,7 +180,8 @@ export const drawColors = (ctx, g, x, y, w) => {
         }
         yAcc += 8
     }
-    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    const lastRowCenter = yAcc - 8 - CROW_H / 2
+    const maxScroll = Math.max(0, lastRowCenter - visHeight / 2)
     kbMaxScroll = maxScroll
     if (kbScroll > maxScroll) kbScroll = maxScroll
     if (kbScroll < 0) kbScroll = 0
@@ -207,7 +209,7 @@ export const drawColors = (ctx, g, x, y, w) => {
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
         ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
     }
-    drawBtn(ctx, g.push, x, footY, w, 38, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 13)
+    drawBtn(ctx, g.push, x, footY, w - 8, 38, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 13)
 }
 
 const noPush = (_r: any) => {}
@@ -217,9 +219,11 @@ const drawColorRow = (ctx, g, x, ry, w, key: string, label: string, alp: boolean
     ctx.setSourceRGBA(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255, 0.95)
     ctx.rectangle(x, ry + 4, 19, 19); ctx.fill()
     ctx.setSourceRGBA(1, 1, 1, 0.28); ctx.setLineWidth(1); ctx.rectangle(x + 0.5, ry + 4.5, 18, 18); ctx.stroke()
-    txt(ctx, x + 28, ry + 21, label, TITLE, 12, g.accent, 0.9, 1)
-    const ed = !!hexEdit && hexEdit.key === key
     const hx = x + 238
+    const labelFont = langFont(getLang()) || TITLE
+    const shownLabel = fitTxt(ctx, localizeText(label), labelFont, 12, hx - x - 36)
+    txt(ctx, x + 28, ry + 21, shownLabel, labelFont, 12, g.accent, 0.9, 1)
+    const ed = !!hexEdit && hexEdit.key === key
     if (ed) {
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.14); ctx.rectangle(hx - 5, ry + 6, 74, 17); ctx.fill()
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1); ctx.rectangle(hx - 4.5, ry + 6.5, 73, 16); ctx.stroke()
@@ -367,7 +371,6 @@ let kbCommandText = ""
 const ROW_H = 42
 const SUB_GAP = 12
 const CAP_H = 26
-const SCROLL_PAD = 56
 const THEMEMOD_TOP = 18
 
 type RowEntry =
@@ -712,7 +715,7 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
     const deletePending = rawLineOf != null && kbDeleteConfirm != null && kbDeleteConfirm.raw_line === rawLineOf
 
     if (isThememod) {
-        txt(ctx, x, y + 4, "THEME KEY", MONO, 10.5, g.accent, 0.9, 1)
+        txt(ctx, x, y + 4, t("cfg.keybinds.theme_key"), MONO, 10.5, g.accent, 0.9, 1)
         let cx = x + 76
         const parts = row.combo.split("+").map(s => s.trim()).filter(Boolean)
         for (let i = 0; i < parts.length; i++) {
@@ -727,24 +730,33 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
         return
     }
 
-    const label = row.kind === "user-bind" ? row.label : row.kind === "user-add" ? row.label : row.action.label
-    const labelCol: any = deletePending ? [1, 0.4, 0.44] : (isRebound ? [1, 0.84, 0.12] : g.col)
-    txt(ctx, x, y + 4, label, TITLE, 12.5, labelCol, 0.97, 1)
-    const labelW = ctx.textExtents(label).width
-
-    let cx = x + Math.min(w - 265, labelW + 28)
+    const rawLabel = row.kind === "user-bind" ? row.label : row.kind === "user-add" ? row.label : row.action.label
+    const label = localizeText(rawLabel)
+    const labelFont = langFont(getLang()) || TITLE
     const parts = row.combo.split("+").map(s => s.trim()).filter(Boolean)
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
+    const chipGroupW = parts.reduce((sum, part) => sum + Math.max(26 * (13 / 11), ctx.textExtents(part).width + 16) + 9, 0)
+    const trailingLabel = isUser ? t("cfg.keybinds.badge.user") : isRebound ? t("cfg.keybinds.badge.rebound") : ""
+    const trailingW = trailingLabel ? measureTextWidth(ctx, trailingLabel, MONO, 9, 1) + 14 : 0
+    const rightEdge = x + w - (isUser ? 36 : 6)
+    const maxLabelW = Math.max(20, rightEdge - x - chipGroupW - trailingW - 34)
+    const shownLabel = fitTxt(ctx, label, labelFont, 12.5, maxLabelW)
+    const labelCol: any = deletePending ? [1, 0.4, 0.44] : (isRebound ? [1, 0.84, 0.12] : g.col)
+    txt(ctx, x, y + 4, shownLabel, labelFont, 12.5, labelCol, 0.97, 1)
+    const labelW = measureTextWidth(ctx, shownLabel, labelFont, 12.5, 1)
+
+    let cx = x + labelW + 28
     const chipCol = isRebound ? [1, 0.84, 0.12] : (USER.cyan as any)
     if (deletePending) {
         const red: any = [1, 0.4, 0.44]
-        txt(ctx, cx, y + 3, "DELETE?", MONO, 9, red, 0.98, 1, 0)
-        drawBtn(ctx, g.push, x + w - 84, y - 9, 36, 20, "YES", () => {
+        txt(ctx, cx, y + 3, t("cfg.keybinds.delete_prompt"), MONO, 9, red, 0.98, 1, 0)
+        drawBtn(ctx, g.push, x + w - 84, y - 9, 36, 20, t("cfg.keybinds.yes"), () => {
             const r = removeCustom(rawLineOf as number)
             kbStatus = r.ok ? { ok: true, msg: `// DELETED ${kbDeleteConfirm!.combo}` } : { ok: false, msg: "// DELETE FAILED" }
             kbDeleteConfirm = null
             ctrl.requestDraw()
         }, false, red, "", 9)
-        drawBtn(ctx, g.push, x + w - 44, y - 9, 36, 20, "NO", () => {
+        drawBtn(ctx, g.push, x + w - 44, y - 9, 36, 20, t("cfg.keybinds.no"), () => {
             kbDeleteConfirm = null
             ctrl.requestDraw()
         }, false, g.col, "", 9)
@@ -767,9 +779,9 @@ const drawChipRow = (ctx, g, x, y, w, row: RowEntry, keyPrefix: string) => {
         cx += chipW + 9
     }
     if (isRebound) {
-        txt(ctx, cx + 6, y + 1, "REBOUND", MONO, 9, [1, 0.84, 0.12], 0.95, 1, 0)
+        txt(ctx, cx + 6, y + 1, t("cfg.keybinds.badge.rebound"), MONO, 9, [1, 0.84, 0.12], 0.95, 1, 0)
     } else if (isUser) {
-        txt(ctx, cx + 6, y + 1, "USER", MONO, 9, g.accent, 0.88, 1, 0)
+        txt(ctx, cx + 6, y + 1, t("cfg.keybinds.badge.user"), MONO, 9, g.accent, 0.88, 1, 0)
     }
     if (isUser && rawLineOf != null) {
         const tsz = 13, tx = x + w - tsz - 16, ty = y - 8
@@ -844,7 +856,7 @@ const drawCaptureForm = (ctx, g, x, y, w) => {
                 kbAddStep = "capture"
                 ctrl.requestDraw()
             }, false, [0.42, 1, 0.6], "", 9)
-            drawBtn(ctx, g.push, x + bw + 6, cy, bw, 26, "BACK", () => {
+            drawBtn(ctx, g.push, x + bw + 6, cy, bw, 26, t("cfg.back"), () => {
                 kbAddStep = "prompt"
                 ctrl.requestDraw()
             }, false, g.col, "", 9)
@@ -863,7 +875,7 @@ const drawCaptureForm = (ctx, g, x, y, w) => {
             txt(ctx, x + 12, cy + fieldH / 2 + 4, "// apps wheel is open — scroll/click to pick", MONO, 10, g.col, 0.6, 1, 0)
             cy += fieldH + 6
             const bw = (w - 6) / 2
-            drawBtn(ctx, g.push, x, cy, bw, 26, "BACK", () => {
+            drawBtn(ctx, g.push, x, cy, bw, 26, t("cfg.back"), () => {
                 kbAddStep = "prompt"
                 ctrl.requestDraw()
             }, false, g.col, "", 9)
@@ -954,10 +966,10 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
     const gap = 8
     const totalW = addBtnW + gap + reloadBtnW
     const startX = x + (w - totalW) / 2
-    drawBtn(ctx, g.push, startX, cy, addBtnW, 26, "+ ADD KEYBIND", () => {
+    drawBtn(ctx, g.push, startX, cy, addBtnW, 26, t("cfg.keybinds.add"), () => {
         startCapture("newuser", { label: "" })
     }, false, g.col, "", 10)
-    drawBtn(ctx, g.push, startX + addBtnW + gap, cy, reloadBtnW, 26, "RELOAD HYPRLAND", () => {
+    drawBtn(ctx, g.push, startX + addBtnW + gap, cy, reloadBtnW, 26, t("cfg.keybinds.reload"), () => {
         reloadHyprland()
         kbStatus = { ok: true, msg: "// HYPRLAND RELOADED" }
         ctrl.requestDraw()
@@ -983,7 +995,7 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
         const r = rows[i]
         if (r.kind === "theme") {
             if (lastSection !== "theme") {
-                layout.push({ y: yAcc, h: 32, kind: "section", label: "// THEME KEYBINDS", rowIdx: -1 })
+                layout.push({ y: yAcc, h: 32, kind: "section", label: "cfg.keybinds.section.theme", rowIdx: -1 })
                 yAcc += 32
                 lastSection = "theme"
                 lastSubgroup = null
@@ -995,7 +1007,7 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
             }
         } else if (r.kind === "user-bind" || r.kind === "user-add") {
             if (lastSection !== "user") {
-                layout.push({ y: yAcc, h: 32, kind: "section", label: "// USER KEYBINDS", rowIdx: -1 })
+                layout.push({ y: yAcc, h: 32, kind: "section", label: "cfg.keybinds.section.user", rowIdx: -1 })
                 yAcc += 32
                 lastSection = "user"
                 lastSubgroup = null
@@ -1008,7 +1020,8 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
         layout.push({ y: yAcc, h: ROW_H, kind: "section", label: "", rowIdx: i })
         yAcc += ROW_H
     }
-    const totalH = yAcc + SCROLL_PAD
+    const bottomPad = Math.max(0, visHeight / 2 - ROW_H / 2)
+    const totalH = yAcc + bottomPad
     const maxScroll = Math.max(0, totalH - visHeight)
     kbMaxScroll = maxScroll
     if (kbScroll > maxScroll) kbScroll = maxScroll
@@ -1021,11 +1034,12 @@ export const drawKeybinds = (ctx, g, x, y, w) => {
     for (const item of layout) {
         const drawY = visTop + item.y - kbScroll
         if (item.kind === "section" && item.label) {
-            sectionHeader(ctx, g, x, drawY + 6, item.label, w)
+            sectionHeader(ctx, g, x, drawY + 6, t(item.label), w)
             continue
         }
         if (item.kind === "sub") {
-            drawSubHeader(ctx, g, x, drawY + 2, w, item.label)
+            const labelKey = item.label === "HUD" ? "cfg.keybinds.section.deck" : item.label === "TOOLS" ? "cfg.keybinds.section.tools" : "cfg.keybinds.section.window"
+            drawSubHeader(ctx, g, x, drawY + 2, w, t(labelKey))
             continue
         }
         const i = item.rowIdx
@@ -1509,7 +1523,7 @@ export const drawWallRing = (ctx, g, x, y, w) => {
 }
 
 export const drawWallBrowse = (ctx, g, x, y, w) => {
-    drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
+    drawBtn(ctx, g.push, x, y, 90, 26, `◂ ${t("cfg.back")}`, () => {
         wallOpen = null
         wallScroll = 0
         ctrl.requestDraw()
@@ -1540,7 +1554,7 @@ export const drawWallBrowse = (ctx, g, x, y, w) => {
     const cur = readCurrentWallpaper()
     const totalRows = Math.ceil(wallFiles.length / cols)
     const contentH = totalRows * rowH
-    wallMaxScroll = Math.max(0, contentH - visHeight)
+    wallMaxScroll = Math.max(0, contentH - (visHeight + rowH) / 2)
     if (wallScroll > wallMaxScroll) wallScroll = wallMaxScroll
     if (wallScroll < 0) wallScroll = 0
 
@@ -1595,7 +1609,7 @@ export const drawWallBrowse = (ctx, g, x, y, w) => {
 }
 
 export const drawWallPicker = (ctx, g, x, y, w) => {
-    drawBtn(ctx, g.push, x, y, 90, 26, "◂ BACK", () => {
+    drawBtn(ctx, g.push, x, y, 90, 26, `◂ ${t("cfg.back")}`, () => {
         closePicker()
     }, false, g.col, "", 10)
 
@@ -1652,7 +1666,7 @@ export const drawWallPicker = (ctx, g, x, y, w) => {
     const rowH = THUMB_H + 34
     const totalRows = Math.ceil(wallPickerEntries.length / cols)
     const contentH = totalRows * rowH
-    wallPickerMaxScroll = Math.max(0, contentH - visHeight)
+    wallPickerMaxScroll = Math.max(0, contentH - (visHeight + rowH) / 2)
     if (wallPickerScroll > wallPickerMaxScroll) wallPickerScroll = wallPickerMaxScroll
     if (wallPickerScroll < 0) wallPickerScroll = 0
 
@@ -1751,7 +1765,10 @@ const hsvToRgb = (h: number, s: number, v: number): [number, number, number] => 
 
 const openWmPicker = (key: string) => {
     const cur = hexToRgb(wmStr(key))
-    if (cur) wmColorPick = { key, ...rgbToHsv(cur[0], cur[1], cur[2]) }
+    if (cur) {
+        const [h, s, v] = rgbToHsv(cur[0], cur[1], cur[2])
+        wmColorPick = { key, h, s, v }
+    }
     else wmColorPick = { key, h: 0, s: 0.85, v: 0.95 }
     wmOpen = null
     ctrl.requestDraw()
@@ -1789,68 +1806,82 @@ const drawWmSlider = (ctx, g, x, ry, w, key, min, max, fmt) => {
 
 const WM_SECTIONS: { title: string; keys: string[]; rows: { t: "tog" | "sld" | "sel" | "col" | "car" | "apps" | "corner"; k: string; label: string; grp?: string }[] }[] = [
     {
-        title: "// ::window transparency",
+        title: "cfg.wm.section.transparency",
         keys: ["wmOpacity", "wmOpacityVal", "wmOpacityMode", "wmOpacityApps"],
         rows: [
-            { t: "tog", k: "wmOpacity", label: "WINDOW BACKGROUND TRANSPARENCY" },
-            { t: "sld", k: "wmOpacityVal", label: "OPACITY LEVEL" },
-            { t: "sel", k: "wmOpacityMode", label: "APPLICATION MODE" },
-            { t: "apps", k: "wmOpacityApps", label: "SELECTED APPLICATIONS" },
+            { t: "tog", k: "wmOpacity", label: "cfg.wm.window_transparency" },
+            { t: "sld", k: "wmOpacityVal", label: "cfg.wm.opacity_level" },
+            { t: "sel", k: "wmOpacityMode", label: "cfg.wm.application_mode" },
+            { t: "apps", k: "wmOpacityApps", label: "ui.selected_apps" },
         ],
     },
     {
-        title: "// ::glow & shadow",
+        title: "cfg.wm.section.glow_shadow",
         keys: ["wmGlow", "wmGlowRange", "wmGlowRp", "wmShadow", "wmShadowColor", "wmShadowAlpha", "wmShadowRange"],
         rows: [
-            { t: "tog", k: "wmGlow", label: "WINDOW GLOW" },
-            { t: "sld", k: "wmGlowRange", label: "GLOW RANGE" },
-            { t: "sld", k: "wmGlowRp", label: "GLOW INTENSITY" },
-            { t: "tog", k: "wmShadow", label: "WINDOW SHADOW" },
-            { t: "col", k: "wmShadowColor", label: "SHADOW COLOUR" },
-            { t: "sld", k: "wmShadowAlpha", label: "SHADOW STRENGTH" },
-            { t: "sld", k: "wmShadowRange", label: "SHADOW RANGE" },
+            { t: "tog", k: "wmGlow", label: "cfg.wm.window_glow" },
+            { t: "sld", k: "wmGlowRange", label: "cfg.wm.glow_range" },
+            { t: "sld", k: "wmGlowRp", label: "cfg.wm.glow_intensity" },
+            { t: "tog", k: "wmShadow", label: "cfg.wm.window_shadow" },
+            { t: "col", k: "wmShadowColor", label: "cfg.wm.shadow_colour" },
+            { t: "sld", k: "wmShadowAlpha", label: "cfg.wm.shadow_strength" },
+            { t: "sld", k: "wmShadowRange", label: "cfg.wm.shadow_range" },
         ],
     },
     {
-        title: "// ::borders",
+        title: "cfg.wm.section.borders",
         keys: ["wmBorders", "wmBorderSize", "wmBorderColor"],
         rows: [
-            { t: "tog", k: "wmBorders", label: "WINDOW BORDERS" },
-            { t: "sld", k: "wmBorderSize", label: "BORDER WIDTH" },
-            { t: "col", k: "wmBorderColor", label: "BORDER COLOUR" },
+            { t: "tog", k: "wmBorders", label: "cfg.wm.window_borders" },
+            { t: "sld", k: "wmBorderSize", label: "cfg.wm.border_width" },
+            { t: "col", k: "wmBorderColor", label: "cfg.wm.border_colour" },
         ],
     },
     {
-        title: "// ::corners",
+        title: "cfg.wm.section.corners",
         keys: ["wmCorners", "wmRounding"],
         rows: [
-            { t: "sel", k: "wmCorners", label: "CORNER STYLE" },
-            { t: "sld", k: "wmRounding", label: "CORNER SIZE" },
+            { t: "sel", k: "wmCorners", label: "cfg.wm.corner_style" },
+            { t: "sld", k: "wmRounding", label: "cfg.wm.corner_size" },
         ],
     },
 ]
 
+const wmOptionLabel = (key: string, value: string) => {
+    if (key === "wmCorners") return t(`cfg.wm.corner.${value}`)
+    if (key === "wmOpacityMode") return t(`cfg.wm.mode.${value}`)
+    return value
+}
+
 const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     const push = hit ? g.push : noPush
     const lx = r.grp ? x + 30 : x + 16
+    const labelFont = langFont(getLang()) || TITLE
     const dis = r.k === "wmOpacityVal" ? !wmBool("wmOpacity")
         : r.k === "wmRounding" ? wmCornersIs("sharp")
         : false
 
     if (r.t === "car") {
         const open = wmExpand[r.k] === true
-        drawBtn(ctx, push, x + 16, ry + 4, 300, 24, `${open ? "▾" : "▸"}  ${r.label}`, () => { wmExpand[r.k] = !open; wmOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : g.col, "", 12)
+        drawBtn(ctx, push, x + 16, ry + 4, 300, 24, `${open ? "▾" : "▸"}  ${t(r.label)}`, () => { wmExpand[r.k] = !open; wmOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : g.col, "", 12)
         return
     }
 
+    const labelMaxRight = r.t === "tog" ? x + w - 72
+        : r.t === "sld" ? x + w - 310
+        : r.t === "col" ? x + w - 152
+        : r.t === "apps" ? lx + 236
+        : x + w - 310
+    const labelText = fitTxt(ctx, t(r.label), labelFont, 12, Math.max(20, labelMaxRight - lx))
+
     if (r.t === "tog") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
+        txt(ctx, lx, ry + 21, labelText, labelFont, 12, g.col, 0.9)
         drawToggle(ctx, push, x + w - 58, ry + 4, wmBool(r.k), () => { toggleWm(r.k) }, false, g.col, 1.35, USER.cyan as any)
         return
     }
 
     if (r.t === "sld") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, dis ? [0.5, 0.54, 0.58] : g.col, dis ? 0.38 : 0.9)
+        txt(ctx, lx, ry + 21, labelText, labelFont, 12, dis ? [0.5, 0.54, 0.58] : g.col, dis ? 0.38 : 0.9)
         if (dis) return
         const fmts: Record<string, (v: number) => string> = {
             wmOpacityVal: (v) => `${Math.round(v * 100)}%`,
@@ -1870,15 +1901,15 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     }
 
     if (r.t === "col") {
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
+        txt(ctx, lx, ry + 21, labelText, labelFont, 12, g.col, 0.9)
         const cur = wmStr(r.k)
         const rgb = hexToRgb(cur)
         const picking = wmColorPick?.key === r.k
-        const label = cur ? `#${cur}` : "THEME"
+        const label = cur ? `#${cur}` : t("ui.theme")
         drawColorCell(ctx, g, x + w - 140, ry + 4, 24, rgb)
         push({ kind: "btn", bx0: x + w - 144, by0: ry + 2, bx1: x + w - 56, by1: ry + 30, on: () => { if (!picking) openWmPicker(r.k) } })
         txt(ctx, x + w - 110, ry + 21, label, MONO, 11, rgb ? g.accent : g.col, 0.9)
-        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, picking ? "OPEN" : "PICK", () => {
+        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, picking ? t("ui.open") : t("cfg.pick"), () => {
             if (!picking) openWmPicker(r.k)
         }, picking, g.col, "", 11)
         return
@@ -1888,12 +1919,12 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
         const apps = wmStr(r.k).split(",").map((s) => s.trim()).filter(Boolean)
         const mode = wmStr("wmOpacityMode")
         const editing = wmAppEditing && wmAppText !== ""
-        const shown = editing ? `${wmAppText}_` : apps.length ? apps.join(", ") : "NONE"
+        const shown = editing ? `${wmAppText}_` : apps.length ? apps.join(", ") : t("cfg.wm.none")
         const editable = mode !== "off"
-        txt(ctx, lx, ry + 21, r.label, TITLE, 12, editable ? g.col : [0.5, 0.54, 0.58], editable ? 0.9 : 0.38)
+        txt(ctx, lx, ry + 21, labelText, labelFont, 12, editable ? g.col : [0.5, 0.54, 0.58], editable ? 0.9 : 0.38)
         if (!editable) return
         txt(ctx, lx + 250, ry + 21, fitTxt(ctx, shown, MONO, 10.5, w - 420), MONO, 10.5, editing ? g.accent : g.col, editing ? 1 : 0.7)
-        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, editing ? "OK" : "EDIT", () => {
+        drawBtn(ctx, push, x + w - 52, ry + 4, 48, 24, editing ? t("ui.ok") : t("ui.edit"), () => {
             if (editing) commitWmApps()
             else { wmAppEditing = true; wmAppText = ""; ctrl.requestDraw() }
         }, editing, g.col, "", 11)
@@ -1903,10 +1934,9 @@ const drawWmRow = (ctx, g, x, ry, w, r, hit) => {
     const isCorner = r.k === "wmCorners"
     const isMode = r.k === "wmOpacityMode"
     const opts = isCorner ? CORNER_OPTS : isMode ? OPACITY_MODES : []
-    const labels = isCorner ? CORNER_LABEL : isMode ? OPACITY_MODE_LABEL : {}
     const cur = wmStr(r.k), open = wmOpen === r.k
-    txt(ctx, lx, ry + 21, r.label, TITLE, 12, g.col, 0.9)
-    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${labels[cur] ?? cur}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
+    txt(ctx, lx, ry + 21, labelText, labelFont, 12, g.col, 0.9)
+    drawBtn(ctx, push, x + w - 306, ry + 3, 298, 26, `${wmOptionLabel(r.k, cur)}   ${open ? "▴" : "▾"}`, () => { wmOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
 }
 
 export const drawWm = (ctx, g, x, y, w) => {
@@ -1924,7 +1954,8 @@ export const drawWm = (ctx, g, x, y, w) => {
         yAcc += 10
     }
 
-    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    const lastRowCenter = yAcc - 10 - GROW_H / 2
+    const maxScroll = Math.max(0, lastRowCenter - visHeight / 2)
     kbMaxScroll = maxScroll
     if (kbScroll > maxScroll) kbScroll = maxScroll
     if (kbScroll < 0) kbScroll = 0
@@ -1939,15 +1970,18 @@ export const drawWm = (ctx, g, x, y, w) => {
         const ry = visTop + it.y - kbScroll
         if (it.kind === "sec") {
             if (ry + GSEC_H < visTop || ry > visBottom) continue
-            sectionHeader(ctx, g, x, ry + 16, it.sec!.title, w - 92, 12)
+            const defaults = t("cfg.defaults")
+            ctx.selectFontFace(langFont(getLang()) || TITLE, 0, 1); ctx.setFontSize(11)
+            const defaultsW = Math.max(88, Math.min(132, measureTextWidth(ctx, defaults, langFont(getLang()) || TITLE, 11, 1) + 22))
+            sectionHeader(ctx, g, x, ry + 16, t(it.sec!.title), w - defaultsW - 20, 12)
             const shown = ry >= visTop - 1 && ry + 24 <= visBottom + 1
-            drawBtn(ctx, (shown && !wmColorPick && !wmOpen) ? g.push : noPush, x + w - 88, ry + 1, 88, 22, "DEFAULTS", () => { resetWm(it.sec!.keys); wmOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
+            drawBtn(ctx, (shown && !wmColorPick && !wmOpen) ? g.push : noPush, x + w - defaultsW - 8, ry + 1, defaultsW, 22, defaults, () => { resetWm(it.sec!.keys); wmOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
             continue
         }
         if (ry + GROW_H < visTop || ry > visBottom) continue
         const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
         const r = it.row!
-        if (r.t === "sel" && wmOpen === r.k) pop = { key: r.k, bx: x + w - 302, by: ry + 29, bw: 300 }
+        if (r.t === "sel" && wmOpen === r.k) pop = { key: r.k, bx: x + w - 306, by: ry + 29, bw: 298 }
         if (r.t === "col" && wmColorPick?.key === r.k) colAnchor = ry
         drawWmRow(ctx, g, x, ry, w, r, hit && !wmOpen && !wmColorPick)
     }
@@ -1965,7 +1999,6 @@ export const drawWm = (ctx, g, x, y, w) => {
     if (pop) {
         const isCorner = pop.key === "wmCorners"
         const opts = isCorner ? CORNER_OPTS : OPACITY_MODES
-        const labels = isCorner ? CORNER_LABEL : OPACITY_MODE_LABEL
         const ih = 27, listH = opts.length * ih + 8
         let ly = pop.by + 2
         if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
@@ -1974,7 +2007,7 @@ export const drawWm = (ctx, g, x, y, w) => {
         ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
         const cur = wmStr(pop.key)
         opts.forEach((o, i) => {
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, labels[o] ?? o, () => { setWm(pop!.key, o); wmOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
+            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, wmOptionLabel(pop!.key, o), () => { setWm(pop!.key, o); wmOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
         })
         g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { wmOpen = null; ctrl.requestDraw() } })
     }
@@ -2025,8 +2058,8 @@ export const drawWm = (ctx, g, x, y, w) => {
         ctx.setSourceRGBA(1, 1, 1, 0.95); ctx.setLineWidth(1.6)
         ctx.newPath(); ctx.moveTo(hcx, hy - 4); ctx.lineTo(hcx, hy + hh + 4); ctx.stroke()
 
-        drawBtn(ctx, g.push, px + 16, py + pH - 38, 96, 28, "THEME", () => { setWm(p.key, ""); closeWmPicker() }, false, [1, 0.4, 0.44], "", 11)
-        drawBtn(ctx, g.push, px + 124, py + pH - 38, 96, 28, "DONE", () => closeWmPicker(), true, g.col, "", 11)
+        drawBtn(ctx, g.push, px + 16, py + pH - 38, 96, 28, t("ui.theme"), () => { setWm(p.key, ""); closeWmPicker() }, false, [1, 0.4, 0.44], "", 11)
+        drawBtn(ctx, g.push, px + 124, py + pH - 38, 96, 28, t("ui.done"), () => closeWmPicker(), true, g.col, "", 11)
 
         g.push({
             kind: "sld2", key: "wmPickSV", bx0: sx - 3, by0: sy - 3, bx1: sx + svw + 3, by1: sy + svh + 3,
@@ -2050,44 +2083,44 @@ type CfgKind = "tog" | "snd" | "sel" | "car"
 type CfgRow = { t: CfgKind; k: string; label: string; dep?: string; grp?: string; master?: boolean }
 
 const CFG_SECTIONS: [string, CfgRow[]][] = [
-    ["// ::animations", [
-        { t: "tog", k: "anim", label: "TOGGLE ANIMATIONS", master: true },
-        { t: "tog", k: "animWorkspace", label: "WORKSPACE-SWITCH ANIMATION" },
-        { t: "tog", k: "animGlitch", label: "WORKSPACE GLITCH OVERLAY" },
-        { t: "tog", k: "animModal", label: "MODAL / SYSTEM POPUP ANIMATIONS" },
-        { t: "tog", k: "animGauge", label: "MONITOR GAUGES ANIMATION" },
-        { t: "tog", k: "animNotif", label: "NOTIFICATION ANIMATIONS" },
-        { t: "tog", k: "animMusic", label: "MUSIC PLAYER ANIMATIONS" },
-        { t: "tog", k: "animWheel", label: "QUICKHACK WHEEL ANIMATIONS" },
+    ["cfg.section.animations", [
+        { t: "tog", k: "anim", label: "cfg.anim.toggle", master: true },
+        { t: "tog", k: "animWorkspace", label: "cfg.anim.workspace" },
+        { t: "tog", k: "animGlitch", label: "cfg.anim.glitch" },
+        { t: "tog", k: "animModal", label: "cfg.anim.modal" },
+        { t: "tog", k: "animGauge", label: "cfg.anim.gauge" },
+        { t: "tog", k: "animNotif", label: "cfg.anim.notif" },
+        { t: "tog", k: "animMusic", label: "cfg.anim.music" },
+        { t: "tog", k: "animWheel", label: "cfg.anim.wheel" },
     ]],
 
-    ["// ::sound", [
-        { t: "tog", k: "snd", label: "THEME SOUNDS & NOTIFICATIONS", master: true },
+    ["cfg.section.sound", [
+        { t: "tog", k: "snd", label: "cfg.snd.toggle", master: true },
 
-        { t: "tog", k: "sndNotif", label: "NOTIFICATION SOUNDS" },
-        { t: "snd", k: "sndNotifFile", label: "NOTIFY" },
+        { t: "tog", k: "sndNotif", label: "cfg.snd.notif" },
+        { t: "snd", k: "sndNotifFile", label: "cfg.snd.notif_file" },
 
-        { t: "tog", k: "sndWheel", label: "QUICKHACK WHEEL SOUNDS" },
-        { t: "car", k: "wheelGrp", label: "WHEEL SAMPLES", dep: "sndWheel" },
-            { t: "snd", k: "sndWheelStart", label: "START", grp: "wheelGrp" },
-            { t: "snd", k: "sndWheelActive", label: "ACTIVE", grp: "wheelGrp" },
-            { t: "snd", k: "sndWheelEnd", label: "END", grp: "wheelGrp" },
+        { t: "tog", k: "sndWheel", label: "cfg.snd.wheel.toggle" },
+        { t: "car", k: "wheelGrp", label: "cfg.snd.wheel.group", dep: "sndWheel" },
+            { t: "snd", k: "sndWheelStart", label: "cfg.snd.wheel_start", grp: "wheelGrp" },
+            { t: "snd", k: "sndWheelActive", label: "cfg.snd.wheel_active", grp: "wheelGrp" },
+            { t: "snd", k: "sndWheelEnd", label: "cfg.snd.wheel_end", grp: "wheelGrp" },
 
-        { t: "tog", k: "sndOverlay", label: "OVERLAY SOUNDS" },
-        { t: "car", k: "ovlGrp", label: "OVERLAY SAMPLES", dep: "sndOverlay" },
-            { t: "snd", k: "sndOverlayFile", label: "OVERLAY", grp: "ovlGrp" },
-            { t: "snd", k: "sndKillFile", label: "KILL_APP", grp: "ovlGrp" },
+        { t: "tog", k: "sndOverlay", label: "cfg.snd.overlay.toggle" },
+        { t: "car", k: "ovlGrp", label: "cfg.snd.overlay.group", dep: "sndOverlay" },
+            { t: "snd", k: "sndOverlayFile", label: "cfg.snd.overlay_file", grp: "ovlGrp" },
+            { t: "snd", k: "sndKillFile", label: "cfg.snd.kill_file", grp: "ovlGrp" },
     ]],
 
-    ["// ::gauge monitors", [
-        { t: "sel", k: "gaugeBadge", label: "BADGE" }, { t: "sel", k: "gaugeXp", label: "EXPERIENCE BAR" },
-        { t: "sel", k: "gaugeHealth", label: "HEALTH BAR" }, { t: "sel", k: "gaugeRam", label: "RAM BAR" },
-        { t: "sel", k: "gaugeStamina", label: "STAMINA BAR" },
+    ["cfg.section.gauge", [
+        { t: "sel", k: "gaugeBadge", label: "cfg.gauge.badge" }, { t: "sel", k: "gaugeXp", label: "cfg.gauge.xp" },
+        { t: "sel", k: "gaugeHealth", label: "cfg.gauge.health" }, { t: "sel", k: "gaugeRam", label: "cfg.gauge.ram" },
+        { t: "sel", k: "gaugeStamina", label: "cfg.gauge.stamina" },
     ]],
 
-    ["// ::keyboard", [
-        { t: "sel", k: "kbLayout", label: "KEYBOARD LAYOUT" },
-        { t: "sel", k: "lang", label: t("cfg.lang.label") },
+    ["cfg.section.keyboard", [
+        { t: "sel", k: "kbLayout", label: "cfg.kb_layout.label" },
+        { t: "sel", k: "lang", label: "cfg.lang.label" },
     ]],
 ]
 
@@ -2102,12 +2135,45 @@ const CFG_FALLBACK: Record<string, string> = {
     sndWheelStart: "kiroshi_on.ogg", sndWheelActive: "kiroshi_menu.ogg", sndWheelEnd: "kiroshi_off.ogg",
     sndOverlayFile: "active.ogg", sndKillFile: "kill.ogg",
 }
-const OPT_LABEL: Record<string, string> = { ...METRIC_LABEL, ...LAYOUT_LABEL }
+const OPT_LABEL: Record<string, string> = { ...METRIC_LABEL }
 
 let cfgOpen: string | null = null
 let kbLayoutLive = ""
-let langDirty = false
 const refreshKbLive = () => { readHyprKbLayout().then(v => { if (v && v !== kbLayoutLive) { kbLayoutLive = v; ctrl?.requestDraw() } }).catch(() => {}) }
+type ConfigPickerPage = "kbLayout" | "lang"
+type XkbLayoutOption = { code: string; description: string }
+let configPickerPage: ConfigPickerPage | null = null
+let configPickerScroll = 0
+let configPickerMaxScroll = 0
+const decodeXml = (s: string) => s.replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_m, e) => {
+    if (e[0] === "#") {
+        const value = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
+        return Number.isFinite(value) ? String.fromCodePoint(value) : _m
+    }
+    return ({ amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'" } as Record<string, string>)[e.toLowerCase()] ?? _m
+})
+const xkbLayoutsFromSystem = (): XkbLayoutOption[] => {
+    for (const path of ["/usr/share/X11/xkb/rules/evdev.xml", "/usr/share/X11/xkb/rules/base.xml"]) {
+        try {
+            const [ok, bytes] = GLib.file_get_contents(path)
+            if (!ok) continue
+            const xml = new TextDecoder().decode(bytes)
+            const found = new Map<string, string>()
+            const layouts = /<layout(?:\s[^>]*)?>([\s\S]*?)<\/layout>/g
+            let match: RegExpExecArray | null
+            while ((match = layouts.exec(xml))) {
+                const item = /<configItem>([\s\S]*?)<\/configItem>/.exec(match[1])?.[1]
+                if (!item) continue
+                const code = /<name>([\s\S]*?)<\/name>/.exec(item)?.[1]?.trim()
+                const description = /<description>([\s\S]*?)<\/description>/.exec(item)?.[1]?.trim()
+                if (code && /^[a-zA-Z0-9_+-]+$/.test(code)) found.set(code, decodeXml(description || code))
+            }
+            if (found.size) return [...found].map(([code, description]) => ({ code, description }))
+        } catch {}
+    }
+    return []
+}
+const XKB_LAYOUTS = xkbLayoutsFromSystem()
 let cfgExpand: Record<string, boolean> = {}
 let extPicker = ""
 sh("for c in zenity kdialog yad; do command -v $c >/dev/null 2>&1 && { echo $c; break; }; done").then((o) => { extPicker = String(o || "").trim() })
@@ -2122,9 +2188,9 @@ const cfgLocked = (k: string): boolean => {
 
 const pickGtk = (key: string) => {
     try {
-        const dlg = new Gtk.FileChooserDialog({ title: "SELECT AUDIO", action: Gtk.FileChooserAction.OPEN, modal: true })
-        dlg.add_button("CANCEL", Gtk.ResponseType.CANCEL); dlg.add_button("SELECT", Gtk.ResponseType.ACCEPT)
-        const flt = new Gtk.FileFilter(); flt.set_name("AUDIO")
+        const dlg = new Gtk.FileChooserDialog({ title: t("ui.select_audio"), action: Gtk.FileChooserAction.OPEN, modal: true })
+        dlg.add_button(t("ui.cancel"), Gtk.ResponseType.CANCEL); dlg.add_button(t("ui.select"), Gtk.ResponseType.ACCEPT)
+        const flt = new Gtk.FileFilter(); flt.set_name(t("ui.audio_filter"))
         for (const p of ["*.ogg", "*.oga", "*.mp3", "*.wav", "*.flac", "*.opus"]) flt.add_pattern(p)
         dlg.add_filter(flt)
         try { dlg.set_current_folder(GLib.get_home_dir()) } catch {}
@@ -2135,11 +2201,12 @@ const pickGtk = (key: string) => {
 }
 const pickSound = (key: string) => {
     if (!extPicker) { pickGtk(key); return }
+    const title = t("ui.select_audio"), filter = t("ui.audio_filter")
     const cmd = extPicker === "kdialog"
-        ? `kdialog --getopenfilename "$HOME" 'Audio (*.ogg *.oga *.mp3 *.wav *.flac *.opus)' 2>/dev/null`
+        ? `kdialog --getopenfilename "$HOME" '${filter} (*.ogg *.oga *.mp3 *.wav *.flac *.opus)' 2>/dev/null`
         : extPicker === "yad"
-            ? `yad --file --title="SELECT AUDIO" --file-filter='AUDIO | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
-            : `zenity --file-selection --title="SELECT AUDIO" --file-filter='AUDIO | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
+            ? `yad --file --title="${title}" --file-filter='${filter} | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
+            : `zenity --file-selection --title="${title}" --file-filter='${filter} | *.ogg *.oga *.mp3 *.wav *.flac *.opus' 2>/dev/null`
     sh(cmd).then((o) => {
         const p = String(o || "").trim().split("\n")[0]
         if (p) { adoptSound(key, p); ctrl.requestDraw() }
@@ -2147,11 +2214,89 @@ const pickSound = (key: string) => {
 }
 
 const fitTxt = (ctx, s: string, font: string, fs: number, maxW: number) => {
-    ctx.selectFontFace(font, 0, 0); ctx.setFontSize(fs)
-    if (ctx.textExtents(s).width <= maxW) return s
-    let out = s
-    while (out.length > 1 && ctx.textExtents(out + "…").width > maxW) out = out.slice(0, -1)
-    return out + "…"
+    const safeMax = Math.max(0, maxW - 2)
+    if (measureTextWidth(ctx, s, font, fs, 1) <= safeMax) return s
+    const chars = Array.from(s)
+    while (chars.length && measureTextWidth(ctx, `${chars.join("")}…`, font, fs, 1) > safeMax) chars.pop()
+    return chars.length ? `${chars.join("")}…` : (measureTextWidth(ctx, "…", font, fs, 1) <= maxW ? "…" : "")
+}
+
+const openConfigPicker = (page: ConfigPickerPage) => {
+    configPickerPage = page
+    configPickerScroll = 0
+    configPickerMaxScroll = 0
+    cfgOpen = null
+    if (page === "kbLayout") refreshKbLive()
+    ctrl.requestDraw()
+}
+
+const closeConfigPicker = () => {
+    configPickerPage = null
+    configPickerScroll = 0
+    configPickerMaxScroll = 0
+    ctrl.requestDraw()
+}
+
+const chooseConfigValue = (value: string) => {
+    const page = configPickerPage
+    if (!page) return
+    setCfg(page, value)
+    if (page === "kbLayout") { kbLayoutLive = value; refreshKbLive() }
+    closeConfigPicker()
+}
+
+const layoutDescription = (code: string) => {
+    const first = code.split(",")[0].trim()
+    return XKB_LAYOUTS.find(layout => layout.code === first)?.description ?? code
+}
+
+const drawConfigPicker = (ctx, g, x, y, w) => {
+    const page = configPickerPage as ConfigPickerPage
+    const title = page === "kbLayout" ? t("cfg.kb_layout.label") : t("cfg.lang.label")
+    drawBtn(ctx, g.push, x, y, 96, 28, `◂ ${t("cfg.back")}`, closeConfigPicker, false, g.col, "", 11)
+    txt(ctx, x + 112, y + 19, title, TITLE, 13, g.accent, 0.96, 1)
+
+    const listTop = y + 42, listBottom = g.Y + g.h - 14
+    const listHeight = Math.max(0, listBottom - listTop), rowH = 36
+    const rows: { code: string; label: string; disabled?: boolean }[] = page === "kbLayout"
+        ? [{ code: "", label: t("cfg.kb_layout.auto") }, ...XKB_LAYOUTS.map(layout => ({ code: layout.code, label: layout.description }))]
+        : LANG_ORDER.map(code => ({ code, label: LANG_LABEL[code] ?? code.toUpperCase() }))
+    if (page === "kbLayout" && XKB_LAYOUTS.length === 0) rows.push({ code: "", label: t("cfg.kb_layout.none"), disabled: true })
+    const totalHeight = rows.length * rowH
+    configPickerMaxScroll = Math.max(0, totalHeight - (listHeight + rowH) / 2)
+    configPickerScroll = Math.max(0, Math.min(configPickerScroll, configPickerMaxScroll))
+    const selected = page === "kbLayout" ? cfgStr("kbLayout") : cfgStr("lang")
+
+    ctx.save(); ctx.rectangle(x - 4, listTop, w + 8, listHeight); ctx.clip()
+    rows.forEach((row, i) => {
+        const ry = listTop + i * rowH - configPickerScroll
+        if (ry + rowH < listTop || ry > listBottom) return
+        const key = `cfg-choice:${page}:${i}`
+        const active = !row.disabled && selected === row.code
+        const hovered = g.push.hoverKey === key
+        const color: any = hovered && !row.disabled ? USER.cyan : g.col
+        btnPath(ctx, x, ry + 2, w, rowH - 4)
+        ctx.setSourceRGBA(color[0] * 0.12, color[1] * 0.1, color[2] * 0.12, active ? 0.44 : hovered ? 0.38 : 0.2); ctx.fill()
+        ctx.setSourceRGBA(color[0], color[1], color[2], active ? 0.95 : hovered ? 0.9 : 0.56); ctx.setLineWidth(active ? 1.2 : 0.8); ctx.stroke()
+        const rowFont = langFont(row.code) || TITLE
+        const shown = fitTxt(ctx, row.label, rowFont, 11.5, w - 130)
+        txtForLanguage(ctx, x + 14, ry + 22, shown, rowFont, 11.5, active ? g.accent : g.col, row.disabled ? 0.48 : active ? 1 : 0.88, row.code, 1)
+        const code = row.code || "AUTO"
+        ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9.5)
+        const codeWidth = measureTextWidth(ctx, code, MONO, 9.5)
+        txt(ctx, x + w - 14 - codeWidth, ry + 21, code, MONO, 9.5, active ? g.accent : g.col, row.disabled ? 0.38 : 0.7)
+        if (!row.disabled) g.push({ kind: "btn", hoverable: true, key, bx0: x, by0: ry + 2, bx1: x + w, by1: ry + rowH - 2, on: () => chooseConfigValue(row.code) })
+    })
+    ctx.restore()
+
+    if (configPickerMaxScroll > 0) {
+        const thumbH = Math.max(24, listHeight * listHeight / totalHeight)
+        const thumbY = listTop + (listHeight - thumbH) * (configPickerScroll / configPickerMaxScroll)
+        ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.38); ctx.setLineWidth(2)
+        ctx.newPath(); ctx.moveTo(x + w + 4, listTop); ctx.lineTo(x + w + 4, listBottom); ctx.stroke()
+        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
+        ctx.newPath(); ctx.moveTo(x + w + 4, thumbY); ctx.lineTo(x + w + 4, thumbY + thumbH); ctx.stroke()
+    }
 }
 
 const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
@@ -2161,40 +2306,53 @@ const drawCfgRow = (ctx, g, x, ry, w, r: CfgRow, hit: boolean) => {
 
     if (r.t === "car") {
         const open = cfgExpand[r.k] === true
-        drawBtn(ctx, push, x + 16, ry + 4, 260, 24, `${open ? "▾" : "▸"}  ${r.label}`, () => { cfgExpand[r.k] = !open; cfgOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : (dis ? [0.5, 0.54, 0.58] : g.col), "", 12)
+        drawBtn(ctx, push, x + 16, ry + 4, 260, 24, `${open ? "▾" : "▸"}  ${t(r.label)}`, () => { cfgExpand[r.k] = !open; cfgOpen = null; ctrl.requestDraw() }, open, open ? (USER.cyan as any) : (dis ? [0.5, 0.54, 0.58] : g.col), "", 12)
         return
     }
 
-    txt(ctx, lx, ry + 21, r.label, TITLE, r.master ? 13 : 12, lcol, la, 1, r.master ? 0.3 : 0)
+    const labelFont = langFont(getLang()) || TITLE
+    const labelMaxRight = r.t === "tog" ? x + w - 72
+        : r.t === "snd" ? lx + 112
+        : x + w - 310
+    const labelText = fitTxt(ctx, t(r.label), labelFont, r.master ? 13 : 12, Math.max(20, labelMaxRight - lx))
 
     if (r.t === "tog") {
+        txt(ctx, lx, ry + 21, labelText, labelFont, r.master ? 13 : 12, lcol, la, 1, r.master ? 0.3 : 0)
         drawToggle(ctx, push, x + w - 58, ry + 4, cfgBool(r.k), () => { toggleCfg(r.k); cfgOpen = null; ctrl.requestDraw() }, dis, g.col, 1.35, USER.cyan as any)
         return
     }
+
+    txt(ctx, lx, ry + 21, labelText, labelFont, r.master ? 13 : 12, lcol, la, 1, r.master ? 0.3 : 0)
 
     if (r.t === "snd") {
         const cur = cfgStr(r.k)
         const shown = cur ? baseName(cur) : `DEFAULT :: ${CFG_FALLBACK[r.k] ?? ""}`
         const tx = lx + 120
         txt(ctx, tx, ry + 21, fitTxt(ctx, shown, MONO, 10.5, x + w - 140 - tx), MONO, 10.5, cur ? g.accent : g.col, dis ? 0.32 : cur ? 0.85 : 0.55)
-        drawBtn(ctx, push, x + w - 122, ry + 4, 76, 24, "PICK", () => pickSound(r.k), false, dis ? [0.5, 0.54, 0.58] : g.col, "", 12)
+        drawBtn(ctx, push, x + w - 122, ry + 4, 76, 24, t("cfg.pick"), () => pickSound(r.k), false, dis ? [0.5, 0.54, 0.58] : g.col, "", 12)
         if (cur) drawBtn(ctx, push, x + w - 38, ry + 4, 32, 24, "×", () => { clearSound(r.k); ctrl.requestDraw() }, false, dis ? [0.5, 0.54, 0.58] : [1, 0.4, 0.44], "", 12)
         return
     }
 
     const cur = cfgStr(r.k), open = cfgOpen === r.k
-    const shown = r.k === "kbLayout" && cur === "" ? (kbLayoutLive || "AUTO") : (r.k === "lang" ? (cur === "en" ? LANG_LABEL["en"] || "AUTO" : cur) : cur)
-    drawBtn(ctx, push, x + w - 302, ry + 3, 300, 26, `${OPT_LABEL[shown] ?? shown}   ${open ? "▴" : "▾"}`, () => { cfgOpen = open ? null : r.k; ctrl.requestDraw() }, open, g.col, "", 12.5)
+    const shown = r.k === "kbLayout"
+        ? (cur || kbLayoutLive ? `${layoutDescription(cur || kbLayoutLive)} (${cur || kbLayoutLive})` : t("cfg.kb_layout.auto"))
+        : r.k === "lang" ? (LANG_LABEL[cur] ?? cur.toUpperCase()) : (OPT_LABEL[cur] ? t(OPT_LABEL[cur]) : cur)
+    drawBtn(ctx, push, x + w - 306, ry + 3, 298, 26, `${shown}   ${open ? "▴" : "▾"}`, () => {
+        if (r.k === "kbLayout" || r.k === "lang") openConfigPicker(r.k)
+        else { cfgOpen = open ? null : r.k; ctrl.requestDraw() }
+    }, open, g.col, "", 12.5)
 }
 
 export const drawConfig = (ctx, g, x, y, w) => {
+    if (configPickerPage) { drawConfigPicker(ctx, g, x, y, w); return }
     const gate = cfgOpen ? noPush : g.push
     const bh = 38, half = (w - 10) / 2
-    drawBtn(ctx, gate, x, y, half, bh, "LOAD USER DIR", () => sh(`xdg-open "${USER_DIR}"`), false, g.col, "", 13)
-    drawBtn(ctx, gate, x + half + 10, y, half, bh, "RELOAD CYBERARCH", () => { reloadHyprland() }, false, g.col, "", 13)
+    drawBtn(ctx, gate, x, y, half, bh, t("cfg.load_user_dir"), () => sh(`xdg-open "${USER_DIR}"`), false, g.col, "", 13)
+    drawBtn(ctx, gate, x + half + 10, y, half, bh, t("cfg.reload_cyberarch"), () => { reloadHyprland() }, false, g.col, "", 13)
 
     // dropped the external gtk window from pr #33, layout settings live in-menu now, theme styled
-    drawBtn(ctx, gate, x, y + bh + 8, w, 32, 'HUD LAYOUT', () => openHudLayout(), false, g.col, '', 13)
+    drawBtn(ctx, gate, x, y + bh + 8, w, 32, t("cfg.hud_layout"), () => openHudLayout(), false, g.col, '', 13)
     const visTop = y + bh + 52, visBottom = g.Y + g.h - 14, visHeight = visBottom - visTop
 
     const layout: { y: number; kind: "sec" | "row"; label: string; row?: CfgRow; keys?: string[] }[] = []
@@ -2209,12 +2367,11 @@ export const drawConfig = (ctx, g, x, y, w) => {
         yAcc += 10
     }
 
-    const maxScroll = Math.max(0, yAcc + 12 - visHeight)
+    const bottomSpace = Math.max(0, visHeight / 2 - 39)
+    const maxScroll = Math.max(0, yAcc + 12 + bottomSpace - visHeight)
     kbMaxScroll = maxScroll
     if (kbScroll > maxScroll) kbScroll = maxScroll
     if (kbScroll < 0) kbScroll = 0
-
-    let pop: { key: string; bx: number; by: number; bw: number } | null = null
 
     ctx.save()
     ctx.rectangle(x - 4, visTop, w + 8, visHeight)
@@ -2223,15 +2380,17 @@ export const drawConfig = (ctx, g, x, y, w) => {
         const ry = visTop + it.y - kbScroll
         if (it.kind === "sec") {
             if (ry + GSEC_H < visTop || ry > visBottom) continue
-            sectionHeader(ctx, g, x, ry + 16, it.label, w - 92, 12)
+            const defaults = t("cfg.defaults")
+            ctx.selectFontFace(langFont(getLang()) || TITLE, 0, 1); ctx.setFontSize(11)
+            const defaultsW = Math.max(88, Math.min(132, measureTextWidth(ctx, defaults, langFont(getLang()) || TITLE, 11, 1) + 22))
+            sectionHeader(ctx, g, x, ry + 16, t(it.label), w - defaultsW - 20, 12)
             const shown = ry >= visTop - 1 && ry + 24 <= visBottom + 1
-            drawBtn(ctx, shown ? gate : noPush, x + w - 88, ry + 1, 88, 22, "DEFAULTS", () => { resetCfg(it.keys ?? []); cfgOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
+            drawBtn(ctx, shown ? gate : noPush, x + w - defaultsW - 8, ry + 1, defaultsW, 22, defaults, () => { resetCfg(it.keys ?? []); cfgOpen = null; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 11)
             continue
         }
         if (ry + GROW_H < visTop || ry > visBottom) continue
         const hit = ry >= visTop - 1 && ry + GROW_H <= visBottom + 1
         const r = it.row!
-        if (r.t === "sel" && cfgOpen === r.k) pop = { key: r.k, bx: x + w - 302, by: ry + 29, bw: 300 }
         drawCfgRow(ctx, g, x, ry, w, r, hit && !cfgOpen)
     }
     ctx.restore()
@@ -2245,24 +2404,6 @@ export const drawConfig = (ctx, g, x, y, w) => {
         ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
     }
 
-    if (pop) {
-        let opts = GAUGE_OPTS[pop.key] ?? []
-        if (pop.key === "kbLayout" && kbLayoutLive && !opts.includes(kbLayoutLive)) opts = [kbLayoutLive, ...opts]
-        if (pop.key === "lang") opts = LANG_OPTS
-        const ih = 27, listH = opts.length * ih + 8
-        let ly = pop.by + 2
-        if (ly + listH > visBottom) ly = Math.max(visTop, pop.by - 33 - listH)
-        ctx.setSourceRGBA(0.02, 0.05, 0.07, 0.97); ctx.rectangle(pop.bx, ly, pop.bw, listH); ctx.fill()
-        ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.7); ctx.setLineWidth(1)
-        ctx.rectangle(pop.bx + 0.5, ly + 0.5, pop.bw - 1, listH - 1); ctx.stroke()
-        const cur = cfgStr(pop.key)
-        opts.forEach((o, i) => {
-            const isLang = pop.key === "lang"
-            const label = isLang ? (o === "en" ? LANG_LABEL["en"] || "AUTO" : LANG_LABEL[o] ?? o) : (OPT_LABEL[o] ?? o)
-            drawBtn(ctx, g.push, pop!.bx + 3, ly + 3 + i * ih, pop!.bw - 6, ih - 2, label, () => { setCfg(pop!.key, o); if (pop.key === "lang") setLang(o); cfgOpen = null; ctrl.requestDraw() }, cur === o, cur === o ? (USER.cyan as any) : g.col, "", 12)
-        })
-        g.push({ kind: "btn", bx0: g.X, by0: g.Y, bx1: g.X + g.w, by1: g.Y + g.h, on: () => { cfgOpen = null; ctrl.requestDraw() } })
-    }
 }
 
 let hudLayoutOpen = false
@@ -2299,8 +2440,8 @@ const hudMarkCustom = () => { hudDraft.profile = "Custom"; ctrl.requestDraw() }
 
 const drawHudLayout = (ctx, g, x, y, w) => {
     const gate = (hudProfileOpen || hudCornerOpen) ? noPush : g.push
-    drawBtn(ctx, gate, x, y, 90, 26, "◂ BACK", closeHudLayout, false, g.col, "", 10)
-    txt(ctx, x + 104, y + 17, "// HUD LAYOUT", MONO, 10, g.accent, 0.9, 1)
+    drawBtn(ctx, gate, x, y, 90, 26, `◂ ${t("cfg.back")}`, closeHudLayout, false, g.col, "", 10)
+    txt(ctx, x + 104, y + 17, t("cfg.hud_layout"), MONO, 10, g.accent, 0.9, 1)
 
     if (hudStatus) {
         ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
@@ -2453,7 +2594,7 @@ export const ThemeSettingsCtrl = () => {
 
     modal = createModal({
         name: "themesettings",
-        tabTitle: "THEME SETTINGS",
+        tabTitle: () => t("cfg.modal.theme_settings"),
         W: LAYOUT_WIDTH,
         H: LAYOUT_HEIGHT,
         sizeForMonitor: monitorLayoutSize,
@@ -2465,6 +2606,8 @@ export const ThemeSettingsCtrl = () => {
         onOpen: () => {
             st.tab = TABS[0][1]
             setKbScroll(0)
+            configPickerPage = null
+            configPickerScroll = 0
             uninstallConfirm = false
             uninstallStatus = ""
             releaseKeys()
@@ -2472,22 +2615,30 @@ export const ThemeSettingsCtrl = () => {
             refreshKbLive()
         },
         onClose: () => {
+            configPickerPage = null
             if (kbCaptureKind || kbListening) cancelCapture()
             else releaseKeys()
             stopModalStats()
         },
         onScroll: (d) => {
+            if (st.tab === "anim" && configPickerPage) {
+                configPickerScroll = Math.max(0, Math.min(configPickerMaxScroll, configPickerScroll + d * 36))
+                modal.requestDraw()
+                return
+            }
             if (st.tab === "wall" && wallPickerOpen) {
                 setWallPickerScroll(wallPickerScroll + d * 36)
                 modal.requestDraw()
                 return
             }
+            if (st.tab === "wall" && wallOpen && !wallPickerOpen) {
+                wallScroll = Math.max(0, Math.min(wallMaxScroll, wallScroll + d * 36))
+                modal.requestDraw()
+                return
+            }
             if (["keybinds", "wm", "anim", "colors"].includes(st.tab)) {
-                const next = kbScroll + d * 36
-                if (next >= 0 && next <= kbMaxScroll) {
-                    setKbScroll(next)
-                    modal.requestDraw()
-                }
+                setKbScroll(Math.max(0, Math.min(kbMaxScroll, kbScroll + d * 36)))
+                modal.requestDraw()
             }
         },
         onKeyRaw: (k, m, pressed) => { colorsKeyRaw(k, m, pressed) },
@@ -2498,6 +2649,10 @@ export const ThemeSettingsCtrl = () => {
             }
             if (st.tab === "wall" && wallPickerOpen && wallPickerKey(k)) return true
             if (k === Gdk.KEY_Escape) {
+                if (st.tab === "anim" && configPickerPage) {
+                    closeConfigPicker()
+                    return true
+                }
                 if (st.tab === "uninstall" && uninstallConfirm) {
                     uninstallConfirm = false
                     modal.requestDraw()
@@ -2541,6 +2696,8 @@ export const ThemeSettingsCtrl = () => {
                 if (next >= 0 && next < TABS.length) {
                     st.tab = TABS[next][1]
                     setKbScroll(0)
+                    configPickerPage = null
+                    configPickerScroll = 0
                     cfgOpen = null
                     hudLayoutOpen = false
                     if (st.tab === "anim") refreshKbLive()
@@ -2580,10 +2737,11 @@ export const ThemeSettingsCtrl = () => {
 
             ctx.selectFontFace(TITLE, 0, 1)
             ctx.setFontSize(13)
-            const tabWidth = TABS.reduce((total, [label]) => total + ctx.textExtents(label).width + 30, 0)
+            const tabWidth = TABS.reduce((total, [labelKey]) => total + measureTextWidth(ctx, t(labelKey), TITLE, 13, 1) + 30, 0)
             let tx = X + W / 2 - tabWidth / 2
-            TABS.forEach(([label, id]) => {
-                const tw = ctx.textExtents(label).width
+            TABS.forEach(([labelKey, id]) => {
+                const label = t(labelKey)
+                const tw = measureTextWidth(ctx, label, TITLE, 13, 1)
                 const active = st.tab === id
                 const hovered = g.push.hoverKey === `tab:${id}`
                 const color: any = active || hovered ? acc : base
@@ -2599,6 +2757,8 @@ export const ThemeSettingsCtrl = () => {
                     on: () => {
                         st.tab = id
                         setKbScroll(0)
+                        configPickerPage = null
+                        configPickerScroll = 0
                         cfgOpen = null
                         hudLayoutOpen = false
                         if (id === "anim") refreshKbLive()

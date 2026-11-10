@@ -12,6 +12,8 @@ import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, tintSurfaceFlat, imgTint, circleTint, neonBtn, aurTitleTint, isOvr } from "./colors.ts"
 import { animOn } from "./config.ts"
+import { t, getLang, fontForLang } from "./i18n.ts"
+import { measureTextWidth } from "./glass.ts"
 
 const Cairo = (imports as any).cairo
 
@@ -54,8 +56,8 @@ let lastList: string[] = []
 let phase = "hidden", phaseStart = 0
 let recheck: any = null, tRecheck: any = null
 let mode = "update", autoT: any = null
-let cTitle = "AUR UPDATE AVAILABLE!", cLabel = "NEW GIGS AVAILABLE:", cValue = "", cShowU = true
-let cUKey = "U", cULbl = "UPGRADE"
+let cTitle = t("cfg.aur.available"), cLabel = t("cfg.aur.new_gigs"), cValue = "", cShowU = true
+let cUKey = "U", cULbl = t("cfg.aur.upgrade_short")
 let tVer = "", tLocal = "", tBody: string[] = [], tDismissed = false, aurPending = false
 
 
@@ -142,8 +144,8 @@ const placeWin = () => {
 
 export const showAurBar = () => {
     if (dismissed || count <= 0 || phase !== "hidden") return
-    mode = "update"; cTitle = "AUR UPDATE AVAILABLE!"; cLabel = "NEW GIGS AVAILABLE:"; cValue = `${count}`; cShowU = true
-    cUKey = "U"; cULbl = "UPGRADE"
+    mode = "update"; cTitle = t("cfg.aur.available"); cLabel = t("cfg.aur.new_gigs"); cValue = `${count}`; cShowU = true
+    cUKey = "U"; cULbl = t("cfg.aur.upgrade_short")
     placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
@@ -151,8 +153,8 @@ export const showAurBar = () => {
 
 export const showThemeBar = () => {
     if (tDismissed || !tVer || phase !== "hidden") return
-    mode = "theme"; cTitle = `NEW VERSION V${tVer} AVAILABLE`; cLabel = "UPDATE CYBERARCH NOW?"; cValue = ""; cShowU = true
-    cUKey = "Q"; cULbl = "UPDATE NOW"
+    mode = "theme"; cTitle = t("cfg.cyberarch.version_available").replace("<version>", tVer); cLabel = t("cfg.cyberarch.update_prompt"); cValue = ""; cShowU = true
+    cUKey = "Q"; cULbl = t("cfg.cyberarch.update_now")
     placeWin()
     if (win) win.visible = true
     phase = "circle"; phaseStart = Date.now(); kick()
@@ -189,7 +191,12 @@ const projPath = (ctx: any, pts: [number, number][]) => {
     ctx.closePath()
 }
 const pfill = (ctx: any, pts: [number, number][], c: number[], a: number) => { projPath(ctx, pts); rgba(ctx, c, a); ctx.fill() }
-const uwidth = (ctx: any, font: string, size: number, text: string) => { ctx.selectFontFace(font, 0, 0); ctx.setFontSize(size); return ctx.textExtents(text).width }
+const uwidth = (ctx: any, font: string, size: number, text: string) => measureTextWidth(ctx, text, fontForLang(getLang()) || font, size, 1)
+const fitNoticeText = (ctx: any, text: string, font: string, size: number, maxWidth: number) => {
+    const chars = Array.from(text)
+    while (chars.length && uwidth(ctx, font, size, `${chars.join("")}…`) > maxWidth) chars.pop()
+    return chars.length < Array.from(text).length ? (chars.length ? `${chars.join("")}…` : "") : text
+}
 
 
 const pimg = (ctx: any, surf: any, cu: number, cv: number, boxW: number, boxH: number, a: number, extraRot = 0, flat = false, colorOverride: [number, number, number] | null = null) => {
@@ -276,8 +283,11 @@ const draw = (ctx: any) => {
         ctx.save(); projPath(ctx, [[BARX, y0 - 7], [BARX + bw, y0 - 7], [BARX + bw, y1 + 7], [BARX, y1 + 7]]); ctx.clip()
         const tcx = BARX + 18
         pfill(ctx, [[tcx, ROWY - 7], [tcx + 8, ROWY + 5], [tcx - 8, ROWY + 5]], BLACK, 0.92 * V.textA)
-        const tfs = cTitle.length > 22 ? 13 : 16
-        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, cTitle, TFONT, tfs, neonBtn.value ? NEON.press : NEON.aurtitle, 0.95 * V.textA, { align: "l", bold: true, glow: (glassMode.value || neonBtn.value || aurTitleTint.value || isOvr("aurtitle")) ? 0.55 : 0 } as any)
+        const titleFont = fontForLang(getLang()) || TFONT
+        let tfs = cTitle.length > 22 ? 13 : 16
+        while (tfs > 8 && uwidth(ctx, titleFont, tfs, cTitle) > BW - 88) tfs -= 0.5
+        const title = fitNoticeText(ctx, cTitle, titleFont, tfs, BW - 88)
+        tiltText(ctx, plane, BARX + 34, ROWY + tfs * 0.34, title, titleFont, tfs, neonBtn.value ? NEON.press : NEON.aurtitle, 0.95 * V.textA, { align: "l", bold: true, glow: (glassMode.value || neonBtn.value || aurTitleTint.value || isOvr("aurtitle")) ? 0.55 : 0 } as any)
         ctx.restore()
 
         if (V.badgeA > 0.01) pimg(ctx, png("updt.png"), BARX + BW - 45, ROWY, 54, 46, V.badgeA, BADGE_ROT, true, (imgTint.value && !glassMode.value) ? BLACK : null)
@@ -292,23 +302,29 @@ const draw = (ctx: any) => {
         ctx.save(); ctx.translate(pgx, pgy); ctx.rotate(GIGS_ROT); ctx.translate(-pgx, -pgy)
         pfill(ctx, [[tx0 + ts, tyT], [tx0 + ts, tyT + ts], [tx0, tyT + ts]], ac(LBL), 0.95 * A)
         strokePath(ctx, plane, [[tx0, tyT + ts], [tx0 + ts, tyT]], GRBRT, 0.5 * A, 1)
-        const gfs = 14
-        tiltText(ctx, plane, tx0 + ts + 8, GIGSY, cLabel, GFONT, gfs, ac(LBL), 0.96 * A, { align: "l" } as any)
+        let gfs = 14
+        const labelX = tx0 + ts + 8
+        const labelWidth = (size: number) => Math.max(24, BARX + BW - 18 - labelX - (cValue ? uwidth(ctx, GFONT, size + 1, cValue) + 7 : 0))
+        while (gfs > 8 && uwidth(ctx, GFONT, gfs, cLabel) > labelWidth(gfs)) gfs -= 0.5
+        const labelMaxW = labelWidth(gfs)
+        const label = fitNoticeText(ctx, cLabel, GFONT, gfs, labelMaxW)
+        tiltText(ctx, plane, labelX, GIGSY, label, GFONT, gfs, ac(LBL), 0.96 * A, { align: "l" } as any)
         if (cValue) {
-            const lw = uwidth(ctx, GFONT, gfs, cLabel)
-            tiltText(ctx, plane, tx0 + ts + 8 + lw + 7, GIGSY, cValue, GFONT, gfs + 1, ac(LBL), 0.98 * A, { align: "l" } as any)
+            const lw = uwidth(ctx, GFONT, gfs, label)
+            tiltText(ctx, plane, labelX + lw + 7, GIGSY, cValue, GFONT, gfs + 1, ac(LBL), 0.98 * A, { align: "l" } as any)
         }
         ctx.restore()
 
 
-        const w2 = 26 + uwidth(ctx, TITLE, 11, "DISMISS")
+        const dismissLabel = t("cfg.aur.dismiss")
+        const w2 = 26 + uwidth(ctx, TITLE, 11, dismissLabel)
         if (cShowU) {
             const w1 = 26 + uwidth(ctx, TITLE, 11, cULbl), gap = 18
             let tx = BARX + BW - (w1 + gap + w2)
             tx += ptip(ctx, tx, TIPY, cUKey, cULbl, A) + gap
-            ptip(ctx, tx, TIPY, "J", "DISMISS", A)
+            ptip(ctx, tx, TIPY, "J", dismissLabel, A)
         } else {
-            ptip(ctx, BARX + BW - w2, TIPY, "J", "DISMISS", A)
+            ptip(ctx, BARX + BW - w2, TIPY, "J", dismissLabel, A)
         }
     }
 }
@@ -328,7 +344,7 @@ const bootCheck = () => {
     const applied = takeStamp()
     if (applied) {
         getAurUpdates()
-        timeout(2500, () => showInstalled("CYBERARCH UPDATED!", `NOW ON V${applied}`))
+        timeout(2500, () => showInstalled(t("cfg.cyberarch.installed"), t("cfg.cyberarch.now_on").replace("<version>", applied)))
         return
     }
     Promise.all([getThemeUpdate(), getAurUpdates()]).then(([t, r]) => {

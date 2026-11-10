@@ -6,9 +6,10 @@ import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
 import { USER, USER_A, isOvr, glassAlpha, neonBtn, onColorChange } from "./colors.ts"
 import { makePlane, Plane } from "./proj.ts"
+import { getLang, isRtl, fontForLang, localizeText, type Lang } from "./i18n.ts"
 
 export const Cairo: any = (imports as any).cairo
-import { TITLE, MONO, ICONF } from "./fonts.ts"
+import { TITLE, MONO, ICONF, isIconGlyph } from "./fonts.ts"
 export { TITLE, MONO, ICONF }
 export const CYAN: [number, number, number] = [...USER.dock] as [number, number, number]
 const syncCyan = () => {
@@ -80,24 +81,26 @@ export const drawGlass = (ctx, x, y, w, h, col: [number, number, number] = CYAN,
 
 let _txtfx = false
 export const setTxtFX = (v) => { _txtfx = v }
-export const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => {
-    const fnt = fontForLang(getLang()) || font
-    if (isRtl(getLang())) {
-        const tw = ctx.textExtents(s).width
-        ctx.save()
-        ctx.translate(x + tw, y)
-        ctx.scale(-1, 1)
-        ctx.selectFontFace(fnt, 0, bold); ctx.setFontSize(size)
-        if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(0, 0); ctx.showText(s); ctx.setOperator(2) }
+const drawText = (ctx, x, y, s, font, size, col, a, bold, glow, lang: Lang) => {
+    const iconFont = font === ICONF && typeof s === "string" && isIconGlyph(s)
+    if (!iconFont && typeof s === "string") s = localizeText(s)
+    const fnt = iconFont ? font : fontForLang(lang) || font
+    if (!iconFont && (isRtl(lang) || !!fontForLang(lang))) {
+        const layout = PangoCairo.create_layout(ctx)
+        const desc = Pango.FontDescription.new()
+        desc.set_family(fnt); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+        layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(String(s), -1)
+        const base = layout.get_baseline() / Pango.SCALE
+        const show = (dx = 0, dy = 0) => { ctx.moveTo(x + dx, y + dy - base); PangoCairo.show_layout(ctx, layout) }
+        if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); show(0.6, 0); ctx.setOperator(2) }
         if (_txtfx) {
             ctx.setOperator(12)
-            ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); ctx.moveTo(0.8, 0.6); ctx.showText(s)
-            ctx.setSourceRGBA(1, 0.12, 0.16, 0.45 * a); ctx.moveTo(-1.5, 0); ctx.showText(s)
-            ctx.setSourceRGBA(1, 0.55, 0.3, 0.3 * a); ctx.moveTo(1.5, 0); ctx.showText(s)
+            ctx.setSourceRGBA(col[0], col[1], col[2], 0.3 * a); show(0.8, 0.6)
+            ctx.setSourceRGBA(1, 0.12, 0.16, 0.45 * a); show(-1.5, 0)
+            ctx.setSourceRGBA(1, 0.55, 0.3, 0.3 * a); show(1.5, 0)
             ctx.setOperator(2)
         }
-        ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(0, 0); ctx.showText(s)
-        ctx.restore()
+        ctx.setSourceRGBA(col[0], col[1], col[2], a); show()
     } else {
         ctx.selectFontFace(fnt, 0, bold); ctx.setFontSize(size)
         if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, y); ctx.showText(s); ctx.setOperator(2) }
@@ -111,12 +114,32 @@ export const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => {
         ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, y); ctx.showText(s)
     }
 }
-export const pango = (ctx, x, yBase, s, family, bold, px, col, a) => {
+export const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => drawText(ctx, x, y, s, font, size, col, a, bold, glow, getLang())
+export const txtForLanguage = (ctx, x, y, s, font, size, col, a, language: Lang, bold = 0, glow = 0) => drawText(ctx, x, y, s, font, size, col, a, bold, glow, language)
+export const measureTextWidth = (ctx, s, font, size, bold = 0, language: Lang = getLang()) => {
+    const iconFont = font === ICONF && typeof s === "string" && isIconGlyph(s)
+    if (!iconFont && typeof s === "string") s = localizeText(s)
+    const family = iconFont ? font : fontForLang(language) || font
     try {
         const layout = PangoCairo.create_layout(ctx)
         const desc = Pango.FontDescription.new()
+        desc.set_family(family); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+        layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(String(s), -1)
+        return layout.get_pixel_size()[0]
+    } catch {
+        ctx.selectFontFace(family, 0, bold); ctx.setFontSize(size)
+        return ctx.textExtents(String(s)).width
+    }
+}
+export const pango = (ctx, x, yBase, s, family, bold, px, col, a) => {
+    try {
+        const iconFont = family === ICONF && typeof s === "string" && isIconGlyph(s)
+        if (!iconFont && typeof s === "string") s = localizeText(s)
+        family = iconFont ? family : fontForLang(getLang()) || family
+        const layout = PangoCairo.create_layout(ctx)
+        const desc = Pango.FontDescription.new()
         desc.set_family(family); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(px * Pango.SCALE)
-        layout.set_font_description(desc); layout.set_text(s, -1)
+        layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(String(s), -1)
         const base = layout.get_baseline() / Pango.SCALE
         ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, yBase - base); PangoCairo.show_layout(ctx, layout)
     } catch (e) { txt(ctx, x, yBase, s, family, px, col, a, bold ? 1 : 0, 0) }

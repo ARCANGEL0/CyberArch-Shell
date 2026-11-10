@@ -206,6 +206,7 @@ local function applyDefaults(mod)
     end
 end
 
+CD.bind("SUPER + TAB", app("scripts/launcher"), "APP LAUNCHER")
 CD.bind("SUPER + T", hl.dsp.exec_cmd("rio"), "RIO TERMINAL")
 CD.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("cool-retro-term"), "RETRO TERMINAL")
 CD.bind("SUPER + ALT + D", hl.dsp.exec_cmd("discord"), "DISCORD")

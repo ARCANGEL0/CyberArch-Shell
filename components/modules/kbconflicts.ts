@@ -2,6 +2,7 @@ import { execAsync } from "astal"
 import { CYBER_DIR } from "../../env.ts"
 import { createModal, drawBtn, registerCModal } from "./cmodal.ts"
 import { txt as gtxt, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO } from "./glass.ts"
+import { t } from "./i18n.ts"
 
 export type KbConflict = { combo: string, where: string, theme: string, label: string }
 
@@ -19,7 +20,7 @@ const prettyCombo = (c: string) => c.split("+").filter(Boolean).join(" + ").toUp
 const ensure = () => {
     if (modal) return
     modal = createModal({
-        name: "kbconflicts", tabTitle: "KEYBIND CONFLICTS", W: 560, H: 460, hud: true,
+        name: "kbconflicts", tabTitle: () => t("cfg.modal.kb_conflicts"), W: 560, H: 460, hud: true,
         onOpen: () => { scroll = 0 },
         onScroll: (d: number) => {
             scroll = Math.max(0, Math.min(Math.max(0, conflicts.length - 1), scroll + d))

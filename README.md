@@ -197,6 +197,7 @@ Keybinds are bound by key name, so they only fire under the right keyboard layou
 | Keybind | Action |
 | --- | --- |
 | `SUPER` / `SUPER + Space` | App launcher |
+| `SUPER + TAB` | App launcher |
 | `SUPER + SHIFT + Z` | Toggle HUD above / below windows |
 | `SUPER + SHIFT + V` | Volume & Microphone modal |
 | `SUPER + SHIFT + I` | Brightness modal |

@@ -19,7 +19,10 @@
 
 
 import { RGB, f } from "./colors.ts"
-import { TITLE } from "./fonts.ts"
+import { ICONF, TITLE, isIconGlyph } from "./fonts.ts"
+import { getLang, isRtl, fontForLang, localizeText } from "./i18n.ts"
+import Pango from "gi://Pango?version=1.0"
+import PangoCairo from "gi://PangoCairo?version=1.0"
 type Ctx = any
 const Cairo: any = (imports as any).cairo
 const D2R = Math.PI / 180
@@ -168,39 +171,54 @@ export const tiltText = (
     font: string, size: number, color: RGB, alpha: number,
     opts: { glow?: number; bloom?: number; shadow?: number; align?: "l" | "r" | "c"; bold?: boolean; extraRotate?: number; vcenter?: boolean } = {},
 ) => {
+    const iconFont = font === ICONF && isIconGlyph(text)
+    if (!iconFont) text = localizeText(text)
     const [sx, sy] = pl.project(u, v)
     const s = pl.scaleAt(u, v)
     const ang = pl.angleAt(u, v)
     const [r, g, b] = f(color)
-    const fnt = fontForLang(getLang()) || font
+    const lang = getLang(), rtl = !iconFont && isRtl(lang), fnt = iconFont ? font : fontForLang(lang) || font
     ctx.save()
     ctx.translate(sx, sy)
     ctx.rotate(ang + (opts.extraRotate || 0))
     ctx.scale(s, s)
-    if (isRtl(getLang())) {
-        const tw = ctx.textExtents(text).width
-        ctx.translate(tw, 0)
-        ctx.scale(-1, 1)
-        ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
-        ctx.setFontSize(size)
-    } else {
-        ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
-        ctx.setFontSize(size)
+    ctx.selectFontFace(fnt, 0, opts.bold ? 1 : 0)
+    ctx.setFontSize(size)
+    let rtlLayout: any = null, rtlBase = 0, rtlWidth = 0, rtlHeight = 0
+    if (rtl) {
+        rtlLayout = PangoCairo.create_layout(ctx)
+        const desc = Pango.FontDescription.new()
+        desc.set_family(fnt); desc.set_weight(opts.bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+        rtlLayout.set_font_description(desc); rtlLayout.set_auto_dir(true); rtlLayout.set_text(text, -1)
+        const [pw, ph] = rtlLayout.get_pixel_size(); rtlWidth = pw; rtlHeight = ph; rtlBase = rtlLayout.get_baseline() / Pango.SCALE
     }
-    if (opts.align === "r") { const te = ctx.textExtents(text); ox = -te.width }
-    else if (opts.align === "c") { const te = ctx.textExtents(text); ox = -te.width / 2 }
-    if (opts.vcenter) { const te = ctx.textExtents(text); oy = -te.height / 2 - te.y }
+    const textWidth = () => rtlLayout ? rtlWidth : ctx.textExtents(text).width
+    const showAt = (x, y) => {
+        if (rtlLayout) { ctx.moveTo(x, y - rtlBase); PangoCairo.show_layout(ctx, rtlLayout) }
+        else { ctx.moveTo(x, y); ctx.showText(text) }
+    }
+    let ox = 0, oy = 0
+    if (opts.align === "r") ox = -textWidth()
+    else if (opts.align === "c") ox = -textWidth() / 2
+    if (opts.vcenter) { const te = rtlLayout ? null : ctx.textExtents(text); oy = rtlLayout ? -rtlHeight / 2 : -te.height / 2 - te.y }
     const shadowAmt = opts.shadow || 0
     if (shadowAmt > 0) {
-        const tw = ctx.textExtents(text).width
+        const tw = textWidth()
         if (tw > 0) {
             const pad = Math.ceil(size)
             const originX = pad, originY = Math.ceil(size * 1.2)
             const sw = Math.ceil(tw + pad * 2), sh = Math.ceil(size * 2.3)
             const surf = new Cairo.ImageSurface(Cairo.Format.ARGB32, sw, sh)
             const sc = new Cairo.Context(surf)
-            sc.selectFontFace(font, 0, opts.bold ? 1 : 0); sc.setFontSize(size)
-            sc.setSourceRGBA(r, g, b, 1); sc.moveTo(originX, originY); sc.showText(text); surf.flush()
+            sc.selectFontFace(fnt, 0, opts.bold ? 1 : 0); sc.setFontSize(size)
+            sc.setSourceRGBA(r, g, b, 1)
+            if (rtl) {
+                const shadowLayout = PangoCairo.create_layout(sc), shadowDesc = Pango.FontDescription.new()
+                shadowDesc.set_family(fnt); shadowDesc.set_weight(opts.bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); shadowDesc.set_absolute_size(size * Pango.SCALE)
+                shadowLayout.set_font_description(shadowDesc); shadowLayout.set_auto_dir(true); shadowLayout.set_text(text, -1)
+                sc.moveTo(originX, originY - shadowLayout.get_baseline() / Pango.SCALE); PangoCairo.show_layout(sc, shadowLayout)
+            } else { sc.moveTo(originX, originY); sc.showText(text) }
+            surf.flush()
             const ds = 4, bw = Math.max(1, Math.round(sw / ds)), bh = Math.max(1, Math.round(sh / ds))
             const small = new Cairo.ImageSurface(Cairo.Format.ARGB32, bw, bh)
             const smc = new Cairo.Context(small)
@@ -224,7 +242,7 @@ export const tiltText = (
             for (let k = 0; k < 8; k++) {
                 const a2 = k / 8 * Math.PI * 2
                 ctx.setSourceRGBA(r, g, b, ba * bloomAmt)
-                ctx.moveTo(ox + Math.cos(a2) * rad, oy + Math.sin(a2) * rad); ctx.showText(text)
+                showAt(ox + Math.cos(a2) * rad, oy + Math.sin(a2) * rad)
             }
         ctx.setOperator(2)
     }
@@ -232,12 +250,11 @@ export const tiltText = (
     ctx.setOperator(12)
     for (const [dx, dy, a] of [[-1.2, 0, 0.12], [1.2, 0, 0.12], [0, -1.2, 0.12], [0, 1.2, 0.12], [-0.8, -0.8, 0.08], [0.8, -0.8, 0.08], [-0.8, 0.8, 0.08], [0.8, 0.8, 0.08]] as const) {
         ctx.setSourceRGBA(r, g, b, a * glowIntensity * 2)
-        ctx.moveTo(ox + dx, oy + dy); ctx.showText(text)
+        showAt(ox + dx, oy + dy)
     }
     ctx.setOperator(2)
     ctx.setSourceRGBA(r, g, b, alpha)
-    ctx.moveTo(ox, oy)
-    ctx.showText(text)
+    showAt(ox, oy)
     ctx.restore()
 }
 

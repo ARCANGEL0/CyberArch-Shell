@@ -6,10 +6,11 @@ import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, fillQuad, strokePath } from "./proj.ts"
 import { NEON, USER, onColorChange, tintSurface, imgTint, neonBtn } from "./colors.ts"
 import { createModal } from "./cmodal.ts"
-import { txt as gtxt, pango as gpango, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
+import { txt as gtxt, pango as gpango, measureTextWidth, RACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad, CYAN, ACC } from "./glass.ts"
 import { TITLE, MONO, ENIXE, FROSTBITE_WIDE, GUNSHIP_ITAL } from "./fonts.ts"
 import { requestProvider, jsonProvider, providerText, providerResults } from "./providers.ts"
 import { deduplicateNews } from "./provider-client.js"
+import { t, getLang, localeForLang, formatDate, onLangChange } from "./i18n.ts"
 
 const Cairo = (imports as any).cairo
 
@@ -19,6 +20,17 @@ const UP_RGB: [number, number, number] = [80, 240, 150]
 const DOWN_RGB: [number, number, number] = [255, 70, 84]
 const YEL = (): [number, number, number] => USER.amber
 const DIMC = (): [number, number, number] => USER.dim
+const mt = (key: string, values: Record<string, string | number> = {}) => {
+    let value = t(`cfg.markets.${key}`)
+    for (const [name, replacement] of Object.entries(values)) value = value.replace(`<${name}>`, String(replacement))
+    return value
+}
+const categoryLabel = (category: string) => category === "ALL" ? mt("all") : mt(`category_${category.toLowerCase()}`)
+const regionLabel = (region: string) => ["GLOBAL", "LOCAL"].includes(region) ? mt(`category_${region.toLowerCase()}`) : region
+let mHintKey = "search_type", mHintValues: Record<string, string | number> = {}
+const setMHint = (key: string, values: Record<string, string | number> = {}) => { mHintKey = key; mHintValues = values; mHint = mt(key, values) }
+let newsHintKey = "global_local_feeds", newsHintValues: Record<string, string | number> = {}
+const setNewsHint = (key: string, values: Record<string, string | number> = {}) => { newsHintKey = key; newsHintValues = values; newsHint = mt(key, values) }
 
 const STORE = `${USER_DIR}/markets.json`
 const MAXPIN = 5
@@ -119,7 +131,7 @@ let mkModal: any = null
 onColorChange(() => areas.forEach(a => a?.queue_draw()))
 let mQuery = ""
 let mResults: any[] = []
-let mHint = "TYPE TO SEARCH"
+let mHint = mt(mHintKey)
 let mScroll = 0
 let browse: any = { stocks: [], crypto: [] }
 let browsePage: any = { stocks: 0, crypto: 0 }
@@ -136,19 +148,19 @@ let newsHasMore = true
 let newsSel = ""
 let newsScroll = 0
 let newsBusy = false
-let newsHint = "GLOBAL / LOCAL FEEDS"
-let newsCity = "LOCAL"
+let newsHint = mt(newsHintKey)
+let newsCity = mt("local")
 let newsUpdated = 0
 let newsSearch = ""
 let newsCategoryFilter = "ALL"
 let newsDateFilter = "ANY"
 let newsSourceFilter = "ALL"
-const newsProviders=()=>Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(providerText).join(" | ")||"RSS: NOT REQUESTED"
+const newsProviders=()=>Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(providerText).join(" | ")||mt("rss_not_requested")
 const newsFeedStatus=()=>{
-    if(newsBusy)return "FETCHING FEEDS"
+    if(newsBusy)return mt("fetching_feeds")
     const states=Object.keys(providerResults).filter(key=>key.startsWith("RSS:")).map(key=>providerResults[key]?.state)
     const available=states.filter(state=>state==="live"||state==="cached"||state==="stale").length
-    return states.length?`${available}/${states.length} SOURCES`:"FEEDS IDLE"
+    return states.length?mt("source_count",{available,total:states.length}):mt("feeds_idle")
 }
 const pendingSeries = new Set<string>()
 const ICONS: any = {}
@@ -180,6 +192,13 @@ const DEFAULT_MARKETS: Record<string, any[]> = {
 }
 
 const redraw = () => areas.forEach((a) => a?.queue_draw())
+onLangChange(() => {
+    mHint = mt(mHintKey, mHintValues)
+    if (newsHintKey === "loaded") newsHintValues = { n: newsRows.length, time: new Date(newsUpdated).toLocaleTimeString(localeForLang(getLang()), { hour: "2-digit", minute: "2-digit" }) }
+    newsHint = mt(newsHintKey, newsHintValues)
+    mkModal?.requestDraw()
+    redraw()
+})
 
 const loadPins = () => {
     try {
@@ -259,10 +278,15 @@ const chgFmt = (c: number) => `${c >= 0 ? "+" : ""}${c.toFixed(2)}%`
 const relTime = (ts: number) => {
     if (!ts) return "--"
     const mins = Math.max(1, Math.round((Date.now() - ts) / 60000))
-    if (mins < 60) return `${mins}m ago`
+    const formatter = () => new Intl.RelativeTimeFormat(localeForLang(getLang()), { numeric: "always", style: "short" })
+    if (mins < 60) return formatter().format(-mins, "minute")
     const hrs = Math.round(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.round(hrs / 24)}d ago`
+    if (hrs < 24) return formatter().format(-hrs, "hour")
+    return formatter().format(-Math.round(hrs / 24), "day")
+}
+const publishedLabel = (article: any) => {
+    const time = Date.parse(article?.published || "") || article?.ts
+    return time ? formatDate(new Date(time), { dateStyle: "medium", timeStyle: "short" }) : String(article?.published || "")
 }
 
 const sameDay = (a: number, b = Date.now()) => {
@@ -279,13 +303,13 @@ const readCity = () => {
             if (ok) {
                 const o = JSON.parse(new TextDecoder().decode(data))
                 return {
-                    name: String(o.name || "LOCAL").trim(),
-                    full: String(o.full || o.name || "LOCAL").trim(),
+                    name: String(o.name || mt("local")).trim(),
+                    full: String(o.full || o.name || mt("local")).trim(),
                 }
             }
         } catch { }
     }
-    return { name: "LOCAL", full: "LOCAL" }
+    return { name: mt("local"), full: mt("local") }
 }
 
 const countryCode = (full: string) => {
@@ -391,12 +415,33 @@ const marketRowPath = (ctx: any, bx: number, by: number, bw: number, bh: number)
 }
 
 const textWidth = (ctx: any, text: string, font: string, size: number, bold = 0) => {
-    ctx.save()
-    ctx.selectFontFace(font, 0, bold)
-    ctx.setFontSize(size)
-    const w = ctx.textExtents(text).width
-    ctx.restore()
-    return w
+    return measureTextWidth(ctx, text, font, size, bold)
+}
+const fitMarketText = (ctx: any, text: string, font: string, size: number, width: number, minSize = 6) => {
+    let fontSize = size
+    while (fontSize > minSize && textWidth(ctx, text, font, fontSize, 1) > width) fontSize -= 0.5
+    let fitted = text
+    if (textWidth(ctx, fitted, font, fontSize, 1) > width) {
+        const chars = Array.from(text)
+        while (chars.length && textWidth(ctx, `${chars.join("")}…`, font, fontSize, 1) > width) chars.pop()
+        fitted = chars.length ? `${chars.join("")}…` : "…"
+    }
+    return { text: fitted, size: fontSize }
+}
+const fitMarketFieldText = (ctx: any, text: string, font: string, size: number, width: number, keepTail = false) => {
+    if (width <= 0) return { text: "", size: 8 }
+    let fontSize = size
+    while (fontSize > 8 && textWidth(ctx, text, font, fontSize, 1) > width) fontSize -= 0.5
+    if (textWidth(ctx, text, font, fontSize, 1) <= width) return { text, size: fontSize }
+    const chars = Array.from(text)
+    if (keepTail) {
+        while (chars.length && textWidth(ctx, `…${chars.join("")}`, font, fontSize, 1) > width) chars.shift()
+        const fitted = chars.length ? `…${chars.join("")}` : (textWidth(ctx, "…", font, fontSize, 1) <= width ? "…" : "")
+        return { text: fitted, size: fontSize }
+    }
+    while (chars.length && textWidth(ctx, `${chars.join("")}…`, font, fontSize, 1) > width) chars.pop()
+    const fitted = chars.length ? `${chars.join("")}…` : (textWidth(ctx, "…", font, fontSize, 1) <= width ? "…" : "")
+    return { text: fitted, size: fontSize }
 }
 
 const drawMetricCell = (ctx: any, x: number, y: number, w: number, h: number, label: string, value: string, col: any) => {
@@ -553,7 +598,7 @@ const requestArticleDescription = (article: any) => {
 }
 
 const buildLocalNewsUrl = (name: string, full: string) => {
-    const q = encodeURIComponent(`${full || name || "LOCAL"} when:7d`)
+    const q = encodeURIComponent(`${full || name || mt("local")} when:7d`)
     const cc = countryCode(full || name)
     return `https://news.google.com/rss/search?q=${q}&hl=en-${cc}&gl=${cc}&ceid=${cc}:en`
 }
@@ -571,7 +616,7 @@ const newsFeedsForPage = (city: any, page: number) => {
     const extra: any[] = []
     for (let i = 0; i < EXTRA_FEEDS_PER_PAGE; i++)
         extra.push(EXTRA_NEWS_FEEDS[(extraStart + i) % EXTRA_NEWS_FEEDS.length])
-    const cityName = city.name || "LOCAL"
+    const cityName = city.name || mt("local")
     const cityFull = city.full || cityName
     const localQuery = page % 2 === 0 ? `${cityFull} news when:${Math.max(7, days)}d` : `${cityName} breaking local news when:${Math.max(7, days)}d`
     return [
@@ -580,7 +625,7 @@ const newsFeedsForPage = (city: any, page: number) => {
             return { feed: `GOOGLE ${page + 1}.${i + 1}`, url: buildGoogleNewsUrl(query, cc), region: "GLOBAL", category: item.category }
         }),
         ...extra,
-        { feed: `LOCAL ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull, category: "LOCAL" },
+        { feed: `${mt("local")} ${cityName}`, url: buildGoogleNewsUrl(localQuery, cc), region: cityFull, category: "LOCAL" },
     ]
 }
 
@@ -821,7 +866,7 @@ const refreshNews = async () => {
     mkModal?.requestDraw()
     try {
         const city = readCity()
-        newsCity = city.full || city.name || "LOCAL"
+        newsCity = city.full || city.name || mt("local")
         newsPage = 0
         newsHasMore = true
         newsRows = []
@@ -831,9 +876,10 @@ const refreshNews = async () => {
         const visibleRows = newsFilteredRows()
         newsSel = visibleRows.some((r: any) => r.id === newsSel) ? newsSel : (visibleRows[0]?.id || "")
         newsUpdated = Date.now()
-        newsHint = newsRows.length ? `${newsRows.length} LOADED · ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "NO FEEDS RESPONDED"
+        if (newsRows.length) setNewsHint("loaded", { n: newsRows.length, time: new Date(newsUpdated).toLocaleTimeString(localeForLang(getLang()), { hour: "2-digit", minute: "2-digit" }) })
+        else setNewsHint("no_feeds")
     } catch (e) {
-        newsHint = "NEWS FEEDS FAILED"
+        setNewsHint("news_failed")
         print("[cyber] news:", e)
     } finally {
         newsBusy = false
@@ -866,7 +912,7 @@ const togglePin = async (kind: string, id: string) => {
         try{
          const value=JSON.parse(await curl(kind==="crypto"?`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(id)}`:`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(id)}?interval=1d&range=1d`))
          if(kind==="crypto"?!value.some(row=>row.id===id):!value.chart?.result?.[0]?.meta)throw Error("Symbol unavailable")
-        }catch(error){mHint=`Cannot validate ${id}: ${error}`;mkModal?.requestDraw();return false}
+        }catch(error){setMHint("validate_failed", { id });mkModal?.requestDraw();return false}
         pins[kind].push(id)
     }
     savePins(); refreshAll(); redraw(); mkModal?.requestDraw()
@@ -881,8 +927,8 @@ const queueSearch = () => {
 const runSearch = async () => {
     if (tab === "news") return
     const q = mQuery.trim()
-    if (q.length < 2) { mResults = []; mHint = "TYPE TO SEARCH"; mkModal?.requestDraw(); return }
-    mHint = "SEARCHING"; mkModal?.requestDraw()
+    if (q.length < 2) { mResults = []; setMHint("search_type"); mkModal?.requestDraw(); return }
+    setMHint("searching"); mkModal?.requestDraw()
     try {
         if (tab === "crypto") {
             const j = JSON.parse(await curl(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`))
@@ -892,8 +938,9 @@ const runSearch = async () => {
             mResults = (j.quotes || []).filter((r: any) => r.symbol).slice(0, 80)
                 .map((r: any) => ({ id: r.symbol, sym: r.symbol, name: r.shortname || r.longname || r.symbol }))
         }
-        mHint = mResults.length ? `${mResults.length} MATCHES` : "NO MATCHES"
-    } catch (e) { mHint = "SEARCH FAILED"; print("[cyber] market search:", e) }
+        if (mResults.length) setMHint("match_count", { n: mResults.length })
+        else setMHint("no_matches")
+    } catch (e) { setMHint("search_failed"); print("[cyber] market search:", e) }
     mScroll = 0
     mkModal?.requestDraw()
 }
@@ -979,13 +1026,13 @@ const getMarketRows = (kind: string) => {
 const marketDisplayRows = (kind: string) => {
     const rows = getMarketRows(kind)
     if (mResults.length || (!browseMore[kind] && !browseBusy[kind])) return rows
-    return rows.concat([{ id: "__load_more__", sym: browseBusy[kind] ? "LOADING" : "LOAD MORE", name: browseBusy[kind] ? "fetching next market chunk" : "fetch next market chunk", loadMore: true }])
+    return rows.concat([{ id: "__load_more__", sym: browseBusy[kind] ? mt("loading") : mt("load_more"), name: browseBusy[kind] ? mt("fetching_next") : mt("fetch_next"), loadMore: true }])
 }
 
 const newsDisplayRows = () => {
     const rows = newsFilteredRows()
     if (!newsHasMore && !newsBusy) return rows
-    return rows.concat([{ id: "__news_load_more__", title: newsBusy ? "LOADING..." : "LOAD MORE", source: newsBusy ? "FETCHING" : `${newsRows.length} LOADED`, ts: Date.now(), loadMore: true }])
+    return rows.concat([{ id: "__news_load_more__", title: newsBusy ? mt("loading") : mt("load_more"), source: newsBusy ? mt("fetching") : mt("loaded_count", { n: newsRows.length }), ts: Date.now(), loadMore: true }])
 }
 
 const newsSourceOptions = () => ["ALL", ...Array.from(new Set(newsRows.map((row: any) => clean(row.source || row.feed)).filter(Boolean))).sort()]
@@ -1028,15 +1075,16 @@ const loadNextNews = async () => {
     mkModal?.requestDraw()
     try {
         const city = readCity()
-        newsCity = city.full || city.name || "LOCAL"
+        newsCity = city.full || city.name || mt("local")
         const added = await appendNewsBatch(city)
         newsUpdated = Date.now()
         if (newsRows.length > before) newsScroll = Math.max(0, before - 1)
-        newsHint = added > 0 ? `${newsRows.length} LOADED · ${new Date(newsUpdated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "NO NEW NEWS"
+        if (added > 0) setNewsHint("loaded", { n: newsRows.length, time: new Date(newsUpdated).toLocaleTimeString(localeForLang(getLang()), { hour: "2-digit", minute: "2-digit" }) })
+        else setNewsHint("no_new_news")
         const visibleRows = newsFilteredRows()
         if (!visibleRows.some((r: any) => r.id === newsSel)) newsSel = visibleRows[0]?.id || ""
     } catch (e) {
-        newsHint = "NEWS FEEDS FAILED"
+        setNewsHint("news_failed")
         print("[cyber] news more:", e)
     } finally {
         newsBusy = false
@@ -1056,7 +1104,7 @@ const switchTab = (next: string) => {
     tab = next
     mResults = []
     mQuery = ""
-    mHint = "TYPE TO SEARCH"
+    setMHint("search_type")
     mScroll = 0
     newsScroll = 0
     if (tab === "news") refreshNews().catch(() => { })
@@ -1187,10 +1235,10 @@ export const MarketsPanel = (mon?: any) => {
         const list = viewTab === "news"
             ? (newsMini.length >= 5 ? newsMini : newsRows).slice(0, 5)
             : (pins[viewTab] || [])
-        tiltText(ctx, MARKET_PLANE, RX0, 16, "MARKET FEED", TITLE, 13, NEON.mktacc, 0.95, { bold: true, glow: 0.3 })
+        tiltText(ctx, MARKET_PLANE, RX0, 16, mt("market_feed"), TITLE, 13, NEON.mktacc, 0.95, { bold: true, glow: 0.3 })
         area.set_tooltip_text(viewTab==="news"?newsProviders():[providerText("CoinGecko prices"),providerText("CoinGecko history"),providerText("Yahoo prices"),providerText("Yahoo history")].join("\n"))
         tiltText(ctx,MARKET_PLANE,RX0,190,viewTab==="news"?`NEWS ${newsFeedStatus()}`:providerText(viewTab==="crypto"?"CoinGecko prices":"Yahoo prices").slice(0,54),MONO,6,NEON.dim,.8)
-        const tabs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
+        const tabs = [[mt("stocks"), "stocks"], [mt("crypto"), "crypto"], [mt("news"), "news"]]
         let tx = RX1 - 162
         for (const [label, id] of tabs) {
             const on = viewTab === id
@@ -1204,7 +1252,7 @@ export const MarketsPanel = (mon?: any) => {
         fillQuad(ctx, MARKET_PLANE, RX0 - 2, 24, RX1 + 2, 196, [0, 0, 0], 0.014)
         fillQuad(ctx, MARKET_PLANE, RX0, 24, RX1, 25, NEON.mktacc, 0.35)
         if (!list.length) {
-            tiltText(ctx, MARKET_PLANE, RX0, 48, viewTab === "news" ? "NEWS LOADING..." : "NO PINS - DOUBLE CLICK TO ADD", MONO, 8, NEON.dim, 0.6)
+            tiltText(ctx, MARKET_PLANE, RX0, 48, viewTab === "news" ? mt("news_loading") : mt("no_pins"), MONO, 8, NEON.dim, 0.6)
             return false
         }
         if (viewTab === "news") {
@@ -1300,7 +1348,7 @@ export const MarketsPanel = (mon?: any) => {
                 tab = hit
                 mResults = []
                 mQuery = ""
-                mHint = "TYPE TO SEARCH"
+                setMHint("search_type")
                 mScroll = 0
                 refreshAll()
                 if (hit === "news") refreshNews().catch(() => { })
@@ -1344,15 +1392,22 @@ const drawMarketModal = (ctx: any, g: any) => {
     const railY = navY + navH + 6
     const railH = 30
     const addr = marketAddress(selection)
-    const addrW = Math.max(420, w - 190)
-    const addrX = x + 176
+    const keystoreText = mt("keystore")
+    const keystoreW = Math.max(170, Math.min(250, Math.ceil(textWidth(ctx, keystoreText, ENIXE, 16, 1) + 50)))
+    const addrW = Math.max(420, w - keystoreW - 20)
+    const addrX = x + keystoreW + 6
 
     ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.50)
-    ctx.rectangle(x, chromeY, 170, chromeH)
+    ctx.rectangle(x, chromeY, keystoreW, chromeH)
     ctx.setLineWidth(1)
     ctx.stroke()
     drawIcon(ctx, "keystore.png", x + 10, chromeY + 3, 23, 23, 0.95)
-    gtxt(ctx, x + 40, chromeY + 20, "KEYSTORE", ENIXE, 16, ACC, 0.98, 1)
+    const keystoreLabel = fitMarketText(ctx, keystoreText, ENIXE, 16, keystoreW - 48, 8)
+    ctx.save()
+    ctx.rectangle(x + 40, chromeY + 1, keystoreW - 46, chromeH - 2)
+    ctx.clip()
+    gtxt(ctx, x + 40, chromeY + 20, keystoreLabel.text, ENIXE, keystoreLabel.size, ACC, 0.98, 1)
+    ctx.restore()
 
     ctx.setSourceRGBA(0.04, 0.15, 0.18, 0.74)
     ctx.rectangle(addrX, chromeY, addrW, chromeH)
@@ -1365,7 +1420,7 @@ const drawMarketModal = (ctx: any, g: any) => {
     ctx.clip()
     gtxt(ctx, addrX + 12, chromeY + 19, addr, GMONO, 12, ACC, 0.98, 1)
     ctx.restore()
-    const powered = "POWERED BY"
+    const powered = mt("powered_by")
     const netwatch = "NETWATCH"
     const pw = textWidth(ctx, powered, FROSTBITE_WIDE, 6.8, 1)
     const nw = textWidth(ctx, netwatch, GUNSHIP_ITAL, 8.4, 1)
@@ -1380,9 +1435,15 @@ const drawMarketModal = (ctx: any, g: any) => {
     ctx.rectangle(x, navY, w, navH)
     ctx.stroke()
 
-    drawIcon(ctx, "nc_stock.png", x + 10, navY + 5, 78, 52, 0.9)
+    const logoX = x + 10, logoY = navY + 5, logoW = 78, logoH = 52
+    drawIcon(ctx, "nc_stock.png", logoX, logoY, logoW, logoH, 0.9)
+    ctx.setSourceRGBA(0.01, 0.05, 0.07, 0.92)
+    ctx.rectangle(logoX, logoY + 39, logoW, 13)
+    ctx.fill()
+    const logoLabel = fitMarketText(ctx, mt("stock_exchange"), GTITLE, 7, logoW - 4)
+    gtxt(ctx, logoX + (logoW - textWidth(ctx, logoLabel.text, GTITLE, logoLabel.size, 1)) / 2, logoY + 49, logoLabel.text, GTITLE, logoLabel.size, ACC, 0.86, 1)
 
-    const tabDefs = [["STOCKS", "stocks"], ["CRYPTO", "crypto"], ["NEWS", "news"]]
+    const tabDefs = [[mt("stocks"), "stocks"], [mt("crypto"), "crypto"], [mt("news"), "news"]]
     const tabGap = 28
     const tabBoxes = tabDefs.map(([label, id]) => ({ label, id, bw: Math.ceil(textWidth(ctx, label, GTITLE, 13, 1) + 34) }))
     const tabsW = tabBoxes.reduce((sum, t) => sum + t.bw, 0) + tabGap * (tabBoxes.length - 1)
@@ -1424,12 +1485,13 @@ const drawMarketModal = (ctx: any, g: any) => {
     ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], logoutHv ? 0.58 + logoutPulse * 0.28 : 0.24)
     ctx.setLineWidth(logoutHv ? 1.2 : 1)
     ctx.stroke()
-    gtxt(ctx, logoutX + 24, logoutY + 20, "LOGOUT", TITLE, 13, ACC, logoutHv ? 1 : 0.9, 1, logoutHv ? 0.16 + logoutPulse * 0.16 : 0)
+    const logoutLabel = fitMarketText(ctx, mt("logout"), TITLE, 13, logoutW - 16)
+    gtxt(ctx, logoutX + (logoutW - textWidth(ctx, logoutLabel.text, TITLE, logoutLabel.size, 1)) / 2, logoutY + 20, logoutLabel.text, TITLE, logoutLabel.size, ACC, logoutHv ? 1 : 0.9, 1, logoutHv ? 0.16 + logoutPulse * 0.16 : 0)
     g.push({ kind: "logout", key: "logout", hoverable: true, bx0: logoutX, by0: logoutY, bx1: logoutX + logoutW, by1: logoutY + 30, on: () => mkModal.close() })
 
     if (tab !== "news") {
-        gtxt(ctx, x + w - 244, navY + 55, "TAB", GMONO, 8, RACC, 0.45)
-        gtxt(ctx, x + w - 202, navY + 55, `PINNED ${pins[tab].length}/${MAXPIN}`, GMONO, 8.5, RACC, 0.72)
+        gtxt(ctx, x + w - 244, navY + 55, mt("tab"), GMONO, 8, RACC, 0.45)
+        gtxt(ctx, x + w - 202, navY + 55, mt("pinned", { n: pins[tab].length, max: MAXPIN }), GMONO, 8.5, RACC, 0.72)
     } else {
         // updt: keep the feed status in the gap before LOGOUT.
         const statusRight = logoutX - 12
@@ -1448,8 +1510,18 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.setLineWidth(1)
         ctx.stroke()
         const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
-        gpango(ctx, x + 14, railY + 19, mQuery ? mQuery + cur : (tab === "crypto" ? "search coins..." : "search tickers..."), GTITLE, false, 13, mQuery ? YEL() : RACC, mQuery ? 0.97 : 0.45)
-        gtxt(ctx, x + w - ctx.textExtents(mHint).width - 12, railY + 18, mHint, GMONO, 9, RACC, 0.62)
+        const hint = fitMarketText(ctx, mHint, GMONO, 9, Math.min(220, w * 0.3))
+        const hintW = textWidth(ctx, hint.text, GMONO, hint.size, 1)
+        const hintX = x + w - hintW - 12
+        const inputX = x + 14
+        const inputW = Math.max(0, hintX - inputX - 10)
+        const inputText = fitMarketFieldText(ctx, mQuery ? mQuery + cur : mt(tab === "crypto" ? "search_coins" : "search_tickers"), GTITLE, 13, inputW, Boolean(mQuery))
+        ctx.save()
+        ctx.rectangle(inputX - 2, railY + 1, inputW + 4, railH - 2)
+        ctx.clip()
+        gpango(ctx, inputX, railY + 19, inputText.text, GTITLE, false, inputText.size, mQuery ? YEL() : RACC, mQuery ? 0.97 : 0.45)
+        ctx.restore()
+        gtxt(ctx, hintX, railY + 18, hint.text, GMONO, hint.size, RACC, 0.62)
     } else {
         ctx.setSourceRGBA(0.01, 0.08, 0.10, 0.72)
         ctx.rectangle(x, railY, w, railH)
@@ -1459,15 +1531,25 @@ const drawMarketModal = (ctx: any, g: any) => {
         ctx.setLineWidth(1)
         ctx.stroke()
         const cursor = newsSearch ? "▌" : ""
-        const searchLabel = newsSearch ? `//SEARCH.. ${newsSearch}${cursor}` : "//SEARCH.. TYPE TO SEARCH LOADED NEWS"
+        const searchLabel = newsSearch ? mt("search_query", { query: `${newsSearch}${cursor}` }) : mt("search_news")
+        const locationLabel = mt("local_prefix", { city: trunc(String(newsCity || mt("local")).toLocaleUpperCase(localeForLang(getLang())), 18) })
+        const statusLabel = newsBusy ? mt("feeding") : mt("news_live")
+        const status = fitMarketText(ctx, statusLabel, GMONO, 9, Math.min(132, w * 0.2))
+        const statusW = textWidth(ctx, status.text, GMONO, status.size, 1)
+        const statusX = x + w - statusW - 12
+        const location = fitMarketText(ctx, locationLabel, GMONO, 8, Math.min(236, w * 0.24))
+        const locationW = textWidth(ctx, location.text, GMONO, location.size, 1)
+        const locationX = Math.max(x + 14, statusX - locationW - 14)
+        const searchX = x + 14
+        const searchW = Math.max(0, locationX - searchX - 12)
+        const fittedSearch = fitMarketFieldText(ctx, searchLabel, GTITLE, 11, searchW, Boolean(newsSearch))
         ctx.save()
-        ctx.rectangle(x + 10, railY + 1, w - 380, railH - 2)
+        ctx.rectangle(searchX - 4, railY + 1, searchW + 8, railH - 2)
         ctx.clip()
-        gtxt(ctx, x + 14, railY + 19, searchLabel, GTITLE, 11, newsSearch ? ACC : RACC, newsSearch ? 0.95 : 0.56, 1)
+        gtxt(ctx, searchX, railY + 19, fittedSearch.text, GTITLE, fittedSearch.size, newsSearch ? ACC : RACC, newsSearch ? 0.95 : 0.56, 1)
         ctx.restore()
-        const locationLabel = `LOCAL: ${trunc(String(newsCity || "LOCAL").toUpperCase(), 18)}`
-        gtxt(ctx, x + w - 258 - textWidth(ctx, locationLabel, GMONO, 8), railY + 19, locationLabel, GMONO, 8, RACC, 0.58)
-        gtxt(ctx, x + w - 98, railY + 19, newsBusy ? "FEEDING" : "NEWS LIVE", GMONO, 9, RACC, 0.7)
+        gtxt(ctx, locationX, railY + 19, location.text, GMONO, location.size, RACC, 0.58)
+        gtxt(ctx, statusX, railY + 19, status.text, GMONO, status.size, RACC, 0.7)
     }
 
     if (tab === "news") {
@@ -1499,7 +1581,7 @@ const drawMarketModal = (ctx: any, g: any) => {
 
         let fx = x + 8
         for (const category of NEWS_CATEGORIES) {
-            const label = category
+        const label = categoryLabel(category)
             const bw = Math.ceil(textWidth(ctx, label, GMONO, 8) + 18)
             drawFilterChip(label, fx, bw, `news-category:${category}`, newsCategoryFilter === category, () => {
                 newsCategoryFilter = category
@@ -1508,7 +1590,8 @@ const drawMarketModal = (ctx: any, g: any) => {
             fx += bw + 4
         }
         fx += 5
-        const dateLabel = `AGE ${newsDateFilter}`
+        const dateText = newsDateFilter === "ANY" ? mt("any_time") : mt(`last_${newsDateFilter.toLowerCase()}`)
+        const dateLabel = mt("age", { age: dateText })
         const dateW = Math.ceil(textWidth(ctx, dateLabel, GMONO, 8) + 18)
         drawFilterChip(dateLabel, fx, dateW, "news-date-filter", newsDateFilter !== "ANY", () => {
             const index = NEWS_DATE_FILTERS.indexOf(newsDateFilter)
@@ -1516,13 +1599,14 @@ const drawMarketModal = (ctx: any, g: any) => {
             updateNewsFilters()
         })
         fx += dateW + 4
-        const sourceLabel = `SRC ${trunc(newsSourceFilter, 18)}`
+        const sourceText = newsSourceFilter === "ALL" ? mt("all") : trunc(newsSourceFilter, 18)
+        const sourceLabel = mt("source", { source: sourceText })
         const sourceW = 150
         drawFilterChip(sourceLabel, fx, sourceW, "news-source-filter", newsSourceFilter !== "ALL", cycleNewsSource)
         const filteredCount = newsFilteredRows().length
         const countLabel = `${filteredCount}/${newsRows.length}`
         const countW = textWidth(ctx, countLabel, GMONO, 8)
-        const resetLabel = "RESET"
+        const resetLabel = mt("reset")
         const clearW = Math.ceil(textWidth(ctx, resetLabel, GMONO, 8) + 18)
         const clearX = x + w - countW - clearW - 34
         const filtersOn = !!newsSearch || newsCategoryFilter !== "ALL" || newsDateFilter !== "ANY" || newsSourceFilter !== "ALL"
@@ -1575,7 +1659,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.52 + pulse * 0.36)
                 ctx.setLineWidth(hv ? 1.2 : 1)
                 ctx.stroke()
-                const lbl = newsBusy ? "LOADING..." : "LOAD MORE"
+                const lbl = newsBusy ? mt("loading") : mt("load_more")
                 gtxt(ctx, x + listW / 2 - textWidth(ctx, lbl, GTITLE, 11, 1) / 2 - 5, ry + 36, lbl, GTITLE, 11, ACC, 0.78 + pulse * 0.2, 1, hv ? 0.2 + pulse * 0.18 : 0)
                 if (!newsBusy) {
                     g.push({
@@ -1637,13 +1721,13 @@ const drawMarketModal = (ctx: any, g: any) => {
             const titleLines = wrapLines(ctx, article.title, detailW - 24, TITLE, 18, 3)
             let ty = bodyY + 30
             for (const ln of titleLines) { gtxt(ctx, detailX + 12, ty, ln, TITLE, 18, ACC, 0.98, 1, 0.2); ty += 22 }
-            gtxt(ctx, detailX + 12, ty + 12, `${article.source}  •  ${article.region}  •  ${relTime(article.ts)}`, GMONO, 9, RACC, 0.72)
-            gtxt(ctx, detailX + 12, ty + 29, article.published || "", GMONO, 8, RACC, 0.55)
-            const description = article.summary || (article.summaryLoading ? "FETCHING SOURCE DESCRIPTION..." : "This feed did not include a description. Open the article for the full story.")
+            gtxt(ctx, detailX + 12, ty + 12, `${article.source}  •  ${regionLabel(article.region)}  •  ${relTime(article.ts)}`, GMONO, 9, RACC, 0.72)
+            gtxt(ctx, detailX + 12, ty + 29, publishedLabel(article), GMONO, 8, RACC, 0.55)
+            const description = article.summary || (article.summaryLoading ? mt("fetching_description") : mt("no_description"))
             const lines = wrapLines(ctx, description, detailW - 24, GTITLE, 12, 10)
             let sy = ty + 54
             for (const ln of lines) { gtxt(ctx, detailX + 12, sy, ln, GTITLE, 12, ACC, 0.9, 0, 0.05); sy += 18 }
-            const link = "OPEN ARTICLE"
+            const link = mt("open_article")
             const lw = ctx.textExtents(link).width
             const ly = bodyY + bodyH - 18
             gtxt(ctx, detailX + detailW - lw - 26, ly, link, GTITLE, 10, YEL(), 0.95, 1)
@@ -1658,8 +1742,8 @@ const drawMarketModal = (ctx: any, g: any) => {
                 on: () => openUrl(article.url),
             })
         } else {
-            const emptyTitle = newsBusy ? "FETCHING NEWS" : newsRows.length ? "NO HEADLINES MATCH" : "NO NEWS FOUND"
-            const emptyHint = newsRows.length ? "Change the filters or clear the search." : "Try loading the feeds again in a moment."
+            const emptyTitle = newsBusy ? mt("empty_fetching") : newsRows.length ? mt("empty_no_headlines") : mt("empty_no_news")
+            const emptyHint = newsRows.length ? mt("empty_change_filters") : mt("empty_try_again")
             gtxt(ctx, detailX + 12, bodyY + 32, emptyTitle, TITLE, 16, ACC, 0.84, 1, 0.1)
             gtxt(ctx, detailX + 12, bodyY + 54, emptyHint, GMONO, 9, RACC, 0.7)
         }
@@ -1695,7 +1779,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 ctx.setSourceRGBA(CYAN[0], CYAN[1], CYAN[2], 0.54 + pulse * 0.36)
                 ctx.setLineWidth(1)
                 ctx.stroke()
-                const lbl = browseBusy[tab] ? "LOADING..." : "LOAD MORE"
+                const lbl = browseBusy[tab] ? mt("loading") : mt("load_more")
                 gtxt(ctx, x + listW / 2 - textWidth(ctx, lbl, GTITLE, 11, 1) / 2 - 5, ry + 31, lbl, GTITLE, 11, ACC, 0.78 + pulse * 0.2, 1, hv ? 0.2 + pulse * 0.18 : 0)
                 if (!browseBusy[tab]) {
                     g.push({
@@ -1732,7 +1816,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             gtxt(ctx, x + 14, ry + 34, String(r.name).slice(0, 34), GMONO, 8.5, RACC, 0.58)
             if (q) {
                 const cc: any = q.chg >= 0 ? UP : DOWN
-                gtxt(ctx, x + listW - 214, ry + 21, q.unavailable?"UNAVAILABLE":priceFmt(q.price), GMONO, 11, ACC, 0.96, 1)
+                gtxt(ctx, x + listW - 214, ry + 21, q.unavailable?mt("unavailable"):priceFmt(q.price), GMONO, 11, ACC, 0.96, 1)
                 gtxt(ctx, x + listW - 126, ry + 21, chgFmt(q.chg), GMONO, 10, cc, 0.98, 1)
             }
             const btnX = x + listW - 86
@@ -1748,8 +1832,8 @@ const drawMarketModal = (ctx: any, g: any) => {
             ctx.setSourceRGBA(btnCol[0], btnCol[1], btnCol[2], locked ? 0.4 : (btnHv ? 0.98 : 0.92))
             ctx.setLineWidth(btnHv ? 1.2 : 1)
             ctx.stroke()
-            const lbl = on ? "UNPIN" : "PIN"
-            gtxt(ctx, btnX + 36 - ctx.textExtents(lbl).width / 2, btnY + 15, lbl, GTITLE, 10, btnCol, locked ? 0.45 : 0.95 + btnPulse * 0.05, 1, btnHv ? 0.16 + btnPulse * 0.16 : 0)
+            const lbl = fitMarketText(ctx, on ? mt("unpin") : mt("pin"), GTITLE, 10, 64)
+            gtxt(ctx, btnX + 36 - textWidth(ctx, lbl.text, GTITLE, lbl.size, 1) / 2, btnY + 15, lbl.text, GTITLE, lbl.size, btnCol, locked ? 0.45 : 0.95 + btnPulse * 0.05, 1, btnHv ? 0.16 + btnPulse * 0.16 : 0)
             if (!locked) {
                 g.push({
                     kind: "pin",
@@ -1791,7 +1875,7 @@ const drawMarketModal = (ctx: any, g: any) => {
             gtxt(ctx, detailX + 12, bodyY + 50, name, GTITLE, 13, RACC, 0.7)
             if (!q || !q.hist || q.hist.length < 2) ensureSeries(tab, current.id)
             if (q) {
-                gtxt(ctx, detailX + 12, bodyY + 80, `${String(current.sym).toUpperCase()} - ${q.unavailable?"UNAVAILABLE":usdFmt(q.price)} $USD`, GTITLE, 12, ACC, 0.95, 1)
+                gtxt(ctx, detailX + 12, bodyY + 80, `${String(current.sym).toUpperCase()} - ${q.unavailable?mt("unavailable"):usdFmt(q.price)} $USD`, GTITLE, 12, ACC, 0.95, 1)
                 gtxt(ctx,detailX+12,bodyY+94,providerText(tab==="crypto"?"CoinGecko prices":"Yahoo prices").slice(0,70),GMONO,7,RACC,.8)
                 const cc: any = q.chg >= 0 ? UP : DOWN
                 gtxt(ctx, detailX + detailW - 12 - ctx.textExtents(chgFmt(q.chg)).width, bodyY + 80, chgFmt(q.chg), GTITLE, 12, cc, 0.95, 1)
@@ -1799,7 +1883,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 const chartH = Math.max(128, Math.floor(bodyH * 0.38))
                 drawChart(ctx, detailX + 12, bodyY + 98, detailW - 24, chartH, hist, cc, q.histTs || [])
                 const statsY = bodyY + 98 + chartH + 16
-                gtxt(ctx, detailX + 12, statsY, `PINNED ${pins[tab].length}/${MAXPIN}`, GMONO, 9, RACC, 0.7)
+            gtxt(ctx, detailX + 12, statsY, mt("pinned", { n: pins[tab].length, max: MAXPIN }), GMONO, 9, RACC, 0.7)
                 gtxt(ctx, detailX + 12, statsY + 18, q.name || current.name || current.sym, GTITLE, 12, ACC, 0.9, 1)
                 const meta = q.meta || {}
                 const metricCol = tab === "crypto" ? CYAN : YEL()
@@ -1809,20 +1893,20 @@ const drawMarketModal = (ctx: any, g: any) => {
                 const gapX = 10
                 const grid = tab === "crypto"
                     ? [
-                        ["RANK", String(meta.market_cap_rank ?? "--")],
-                        ["MKT CAP", numFmt(meta.market_cap)],
-                        ["VOL 24H", numFmt(meta.total_volume)],
-                        ["SUPPLY", numFmt(meta.circulating_supply)],
-                        ["HIGH 24H", priceFmt(meta.high_24h)],
-                        ["LOW 24H", priceFmt(meta.low_24h)],
+                        [mt("rank"), String(meta.market_cap_rank ?? "--")],
+                        [mt("market_cap"), numFmt(meta.market_cap)],
+                        [mt("volume_24h"), numFmt(meta.total_volume)],
+                        [mt("supply"), numFmt(meta.circulating_supply)],
+                        [mt("high_24h"), priceFmt(meta.high_24h)],
+                        [mt("low_24h"), priceFmt(meta.low_24h)],
                     ]
                     : [
-                        ["EXCHANGE", String(meta.fullExchangeName || meta.exchangeName || "--")],
-                        ["OPEN", priceFmt(meta.regularMarketOpen)],
-                        ["HIGH", priceFmt(meta.regularMarketDayHigh)],
-                        ["LOW", priceFmt(meta.regularMarketDayLow)],
-                        ["VOLUME", numFmt(meta.regularMarketVolume)],
-                        ["52W", `${priceFmt(meta.fiftyTwoWeekLow)} - ${priceFmt(meta.fiftyTwoWeekHigh)}`],
+                        [mt("exchange"), String(meta.fullExchangeName || meta.exchangeName || "--")],
+                        [mt("open"), priceFmt(meta.regularMarketOpen)],
+                        [mt("high"), priceFmt(meta.regularMarketDayHigh)],
+                        [mt("low"), priceFmt(meta.regularMarketDayLow)],
+                        [mt("volume"), numFmt(meta.regularMarketVolume)],
+                        [mt("range_52w"), `${priceFmt(meta.fiftyTwoWeekLow)} - ${priceFmt(meta.fiftyTwoWeekHigh)}`],
                     ]
                 grid.forEach(([label, value], i) => {
                     const col = i % 2
@@ -1831,7 +1915,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                     const gy = metricY + row * (cellH + 7)
                     drawMetricCell(ctx, gx, gy, cellW, cellH, label, String(value), metricCol)
                 })
-                const btn = isPinned(tab, current.id) ? "UNPIN" : "PIN"
+                const btn = fitMarketText(ctx, isPinned(tab, current.id) ? mt("unpin") : mt("pin"), GTITLE, 10, 76)
                 const bw = 84
                 const bx = detailX + detailW - bw - 12
                 const by = bodyY + bodyH - 42
@@ -1846,7 +1930,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 ctx.setSourceRGBA(pinCol[0], pinCol[1], pinCol[2], locked ? 0.4 : (pinHv ? 0.98 : 0.95))
                 ctx.setLineWidth(pinHv ? 1.2 : 1)
                 ctx.stroke()
-                gtxt(ctx, bx + 42 - ctx.textExtents(btn).width / 2, by + 16, btn, GTITLE, 10, pinCol, locked ? 0.4 : 0.95 + pinPulse * 0.05, 1, pinHv ? 0.16 + pinPulse * 0.16 : 0)
+                gtxt(ctx, bx + 42 - textWidth(ctx, btn.text, GTITLE, btn.size, 1) / 2, by + 16, btn.text, GTITLE, btn.size, pinCol, locked ? 0.4 : 0.95 + pinPulse * 0.05, 1, pinHv ? 0.16 + pinPulse * 0.16 : 0)
                 if (!locked) {
                     g.push({
                         kind: "pin-detail",
@@ -1861,7 +1945,7 @@ const drawMarketModal = (ctx: any, g: any) => {
                 }
             }
         } else {
-            gtxt(ctx, detailX + 12, bodyY + 32, "NO MARKET DATA", TITLE, 16, ACC, 0.84, 1, 0.1)
+            gtxt(ctx, detailX + 12, bodyY + 32, mt("no_market_data"), TITLE, 16, ACC, 0.84, 1, 0.1)
         }
     }
 }
@@ -1870,7 +1954,7 @@ const ensureModal = () => {
     if (mkModal) return
     mkModal = createModal({
         name: "markets",
-        tabTitle: "NET:TERMINAL",
+        tabTitle: () => mt("modal_title"),
         W: 1040,
         H: 690,
         col: CYAN,
@@ -1879,7 +1963,7 @@ const ensureModal = () => {
         onOpen: () => {
             mQuery = ""
             mResults = []
-            mHint = "TYPE TO SEARCH"
+            setMHint("search_type")
             mScroll = 0
             refreshAll()
             if (tab === "news") refreshNews().catch(() => { })

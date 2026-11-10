@@ -11,7 +11,7 @@ import { CYBER_DIR, USER_LUA, SCREEN_WIDTH, SCREEN_HEIGHT, winScale, monW, monit
 import { Anchor } from "./widget.ts"
 import {
     Cairo, TITLE, MONO, ICONF, ch, CYAN, ACC, HEADER,
-    makeModalPlane, drawGlass, txt, pango, warpReveal, unwarpRevealPoint, setTxtFX,
+    makeModalPlane, drawGlass, txt, pango, measureTextWidth, warpReveal, unwarpRevealPoint, setTxtFX,
 } from "./glass.ts"
 import { openWheel, updateWheel, closeWheel, isWheelOpen } from "./appsmenu.ts"
 import { makePlane } from "./proj.ts"
@@ -21,7 +21,7 @@ import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
-import { t, isRtl, fontForLang } from "./i18n.ts"
+import { t, getLang, isRtl, fontForLang, onLangChange, localizeText } from "./i18n.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 
@@ -39,6 +39,11 @@ const rcAcc = (): [number, number, number] => HUDC ? hudSoft.acc : ACC
 let NCORES = 4
 sh("nproc").then((o) => { NCORES = parseInt(o.trim()) || 4 })
 const fmtTime = (m) => m >= 60 ? `${Math.floor(m / 60)}h ${Math.round(m % 60)}m` : `${Math.round(m)}m`
+const fitLabel = (ctx, value: string, font: string, size: number, width: number) => {
+    const chars = Array.from(value)
+    while (chars.length && measureTextWidth(ctx, `${chars.join("")}…`, font, size) > width) chars.pop()
+    return chars.length < Array.from(value).length ? `${chars.join("")}…` : value
+}
 
 
 const drawGraph = (ctx, x, y, w, h, data, maxV, col) => {
@@ -74,6 +79,7 @@ export const drawSlider = (ctx, push, x, ty, trackW, value, onChange) => {
 }
 export const btnPath = (ctx, bx, by, bw, bh) => { const c = 6; ctx.newPath(); ctx.moveTo(bx + c, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + bh - c); ctx.lineTo(bx + bw - c, by + bh); ctx.lineTo(bx, by + bh); ctx.lineTo(bx, by + c); ctx.closePath() }
 export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, col: any = CYAN, icon = "", fsMax = 11) => {
+    let displayLabel = typeof label === "string" ? localizeText(label) : String(label ?? "")
     const key = `${bx}|${by}`
     const hovered = push.hoverKey === key
     const c = hovered ? HL : (neonBtn.value ? USER.press : col)
@@ -88,25 +94,26 @@ export const drawBtn = (ctx, push, bx, by, bw, bh, label, on, active = false, co
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(c[0], c[1], c[2], strokeA); ctx.setLineWidth(hovered ? 1.3 : 0.9); ctx.stroke()
     ctx.setSourceRGBA(c[0], c[1], c[2], hovered ? 1 : 0.95)
     const fnt = fontForLang(getLang()) || TITLE
-    let fs = fsMax
-    ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs)
-    const maxW = bw - 10
-    let tw = ctx.textExtents(label).width
-    while (tw > maxW && fs > 7) { fs -= 0.5; ctx.setFontSize(fs); tw = ctx.textExtents(label).width }
     let iw = 0
     if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); iw = ctx.textExtents(icon).width + 6 }
+    let fs = fsMax
+    const maxW = Math.max(0, bw - 10 - iw)
+    let tw = measureTextWidth(ctx, displayLabel, fnt, fs, 1)
+    while (tw > maxW && fs > 7) { fs -= 0.5; tw = measureTextWidth(ctx, displayLabel, fnt, fs, 1) }
+    if (tw > maxW) {
+        const chars = Array.from(displayLabel)
+        while (chars.length && measureTextWidth(ctx, chars.join("") + "…", fnt, fs, 1) > maxW) chars.pop()
+        displayLabel = chars.length ? `${chars.join("")}…` : ""
+        tw = measureTextWidth(ctx, displayLabel, fnt, fs, 1)
+    }
     const sx = bx + bw / 2 - (tw + iw) / 2
+    const baseline = by + bh / 2 + 4
     if (isRtl(getLang())) {
-        const tw2 = ctx.textExtents(label).width
-        ctx.save()
-        ctx.translate(sx + tw2 + iw, by + bh / 2 + 4)
-        ctx.scale(-1, 1)
-        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(iw, 0); ctx.showText(icon) }
-        ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs); ctx.moveTo(0, 0); ctx.showText(label)
-        ctx.restore()
+        pango(ctx, sx, baseline, displayLabel, fnt, true, fs, c, 0.95)
+        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx + tw + 6, baseline); ctx.showText(icon) }
     } else {
-        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, by + bh / 2 + 4); ctx.showText(icon) }
-        ctx.selectFontFace(fnt, 0, 1); ctx.setFontSize(fs); ctx.moveTo(sx + iw, by + bh / 2 + 4); ctx.showText(label)
+        if (icon) { ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(12); ctx.moveTo(sx, baseline); ctx.showText(icon) }
+        pango(ctx, sx + iw, baseline, displayLabel, fnt, true, fs, c, 0.95)
     }
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
@@ -132,25 +139,6 @@ export const drawToggle = (ctx, push, bx, by, val, on, dis = false, col: any = C
     const kw = Math.round(17*sc)   // knob
       const kx = val ? bx + bw - kw - 2 : bx + 2
     ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 0.95 : 0.55) * a); ctx.rectangle(kx, by + 2.5*sc, kw, bh - 5*sc); ctx.fill()
-    const fnt = fontForLang(getLang()) || TITLE
-    ctx.selectFontFace(fnt, 0, 1)
-    ctx.setFontSize(Math.round(8*sc))
-    const lbl = val ? t("on") : t("off")
-    const tw = ctx.textExtents(lbl).width
-    const cx = val ? bx + (bw - kw - 2) / 2 : bx + kw + 2 + (bw - kw - 4) / 2
-    if (isRtl(getLang())) {
-        ctx.save()
-        ctx.translate(cx + tw, by + bh / 2 + 3*sc)
-        ctx.scale(-1, 1)
-        ctx.moveTo(0, 0)
-        ctx.showText(lbl)
-        ctx.restore()
-    } else {
-        ctx.moveTo(cx - tw / 2, by + bh / 2 + 3*sc)
-        ctx.showText(lbl)
-    }
-    ctx.setSourceRGBA(c[0], c[1], c[2], (val ? 1 : 0.72) * a)
-    ctx.moveTo(cx - tw / 2, by + bh/2 + 3*sc); ctx.showText(lbl)
     if (!dis) push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 
@@ -201,7 +189,8 @@ const drawHudFrame = (ctx, x, y, w, h, title) => {
 
 
 export const createModal = (spec) => {
-    const { name, tabTitle } = spec
+    const { name } = spec
+    const tabTitle = () => typeof spec.tabTitle === "function" ? spec.tabTitle() : spec.tabTitle
     let W = spec.W, H = spec.H
     const col = spec.col || (spec.hud ? HUDRED : CYAN), accent = spec.accent || (spec.hud ? HUDRED : ACC)
     const yaw = spec.yaw ?? 0, pitch = spec.pitch ?? 0, roll = spec.roll ?? 0
@@ -222,10 +211,10 @@ export const createModal = (spec) => {
     const renderFlat = (ctx) => {
         const X = 12, Y = 12, w = W - 24, h = H - 24
         setTxtFX(false)
-        if (spec.hud) { drawHudFrame(ctx, X, Y, w, h, tabTitle) }
+        if (spec.hud) { drawHudFrame(ctx, X, Y, w, h, tabTitle()) }
         else if (!spec.noGlass) {
             drawGlass(ctx, X, Y, w, h, col, spec.glass ?? 1)
-            txt(ctx, X + 24, Y + 27, tabTitle, TITLE, 15, accent, 0.98, 1, 0.45)
+            txt(ctx, X + 24, Y + 27, tabTitle(), TITLE, 15, accent, 0.98, 1, 0.45)
             ctx.setSourceRGBA(col[0], col[1], col[2], 0.32); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(X + 14, Y + HEADER); ctx.lineTo(X + w - 14, Y + HEADER); ctx.stroke()
         }
         hitRegions = []; push.hoverKey = hoverKey; push.pressKey = pressKey; push.dragKey = dragKey
@@ -309,6 +298,7 @@ export const createModal = (spec) => {
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
     ctrl.hitRegions = () => hitRegions
+    onLangChange(() => ctrl.requestDraw())
 
     area = DrawingArea({}); area.set_size_request(Math.round(plane.width), Math.round(plane.height))
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
@@ -380,11 +370,12 @@ export const createModal = (spec) => {
 
 export const sectionHeader = (ctx, g, x, y, label, w, fs=9) => {
     const fnt = fontForLang(getLang()) || MONO
-    ctx.selectFontFace(fnt, 0, 0); ctx.setFontSize(fs)
-    const tw = ctx.textExtents(label).width
-    const lx = isRtl(getLang()) ? x + w - lw - 10 : x
+    label = fitLabel(ctx, label, fnt, fs, Math.max(0, w - 10))
+    const tw = measureTextWidth(ctx, label, fnt, fs)
+    const lx = isRtl(getLang()) ? x + w - tw - 10 : x
     txt(ctx, lx, y, label, fnt, fs, g.col, 0.85)
     ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.28); ctx.rectangle(lx + tw + 10, y - 3, (x + w) - (lx + tw + 10), 1.2); ctx.fill()
+}
 
 const APPS_CMD = `pactl list sink-inputs 2>/dev/null | awk '/^Sink Input #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
 const SRC_OUTS_CMD = `pactl list source-outputs 2>/dev/null | awk '/^Source Output #/{if(i!="")print i"|"n"|"v"|"m; i=substr($3,2);n="App";v="";m="no"}/Volume:/&&v==""{for(k=1;k<=NF;k++)if($k ~ /%$/){g=$k;sub(/%/,"",g);v=g;break}}/[Aa]pplication.name = /{n=$0;sub(/.*= "/,"",n);sub(/".*/,"",n)}/[ 	]+Mute: /{m=$2}END{if(i!="")print i"|"n"|"v"|"m}'`
@@ -491,12 +482,13 @@ const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
         ctx.setSourceRGBA(BR, BG, BB, 0.25); ctx.setLineWidth(0.7)
         for (let yy = y + 2; yy < y + h; yy += 4) { ctx.newPath(); ctx.moveTo(x + 2, yy); ctx.lineTo(x + w - 2, yy); ctx.stroke() }
     }
-    const name = (d.desc || d.id).slice(0, 26)
     const prefix = isSusp ? "○ " : isDef ? "● " : "  "
-    txt(ctx, x + 8, y + 13, prefix + name.toUpperCase(), MONO, 9.5, g.col, isDef && !isSusp ? 0.98 : 0.55, 1)
     const pct = Math.round(Math.max(0, Math.min(1.5, d.vol || 0)) * 100)
     const pctTxt = `${pct}%`
+    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(12)
     const pctW = ctx.textExtents(pctTxt).width
+    const name = fitLabel(ctx, `${prefix}${(d.desc || d.id).toUpperCase()}`, MONO, 9.5, Math.max(24, w - pctW - 28))
+    txt(ctx, x + 8, y + 13, name, MONO, 9.5, g.col, isDef && !isSusp ? 0.98 : 0.55, 1)
     txt(ctx, x + w - 8 - pctW, y + 13, pctTxt, TITLE, 12, g.accent, isSusp ? 0.3 : 0.96, 1, 0.35)
     const trackW = w - 16
     const trackY = y + 26
@@ -524,14 +516,15 @@ const drawDeviceRow = (ctx, g, x, y, w, d, kind, defId) => {
         ctx.setSourceRGBA(BR, BG, BB, 0.18); ctx.setLineWidth(0.7)
         btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.fill()
         ctx.setSourceRGBA(BR, BG, BB, 0.55); btnPath(ctx, setBx, btnY, setBtnW, btnH); ctx.stroke()
-        ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(10)
-        const lbl = "ALREADY DEFAULT"
+        const lbl = t("cfg.audio.already_default")
+        const buttonFont = fontForLang(getLang()) || TITLE
+        ctx.selectFontFace(buttonFont, 0, 1); ctx.setFontSize(10)
         const lw = ctx.textExtents(lbl).width
         ctx.setSourceRGBA(BR, BG, BB, 0.7)
         ctx.moveTo(setBx + setBtnW / 2 - lw / 2, btnY + btnH / 2 + 3.5); ctx.showText(lbl)
         g.push({ kind: "btn", hoverable: true, key: `def-${d.id}|${btnY}`, bx0: setBx, by0: btnY, bx1: setBx + setBtnW, by1: btnY + btnH, on: () => {} })
     } else {
-        drawBtn(ctx, g.push, setBx, btnY, setBtnW, btnH, "SET DEFAULT", () => {
+        drawBtn(ctx, g.push, setBx, btnY, setBtnW, btnH, t("cfg.audio.set_default"), () => {
             sh(`pactl set-default-${kind === "sink" ? "sink" : "source"} ${d.id}`).then(() => timeout(80, () => g.refresh()))
         }, false, g.col, "", 10)
     }
@@ -603,7 +596,7 @@ const VolCtrl = () => {
     // outputs the current default devices + master contorls
     const drawGeneral = (ctx, g, x, y, w) => {
         const trackW = w - 56
-        sectionHeader(ctx, g, x, y, "// MASTER OUTPUT", w)
+        sectionHeader(ctx, g, x, y, t("cfg.audio.master_output"), w)
         const yO = y + 18
         drawSlider(ctx, g.push, x, yO, trackW, st.master, (t) => { st.master = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SINK@ ${t.toFixed(2)}`); g.refresh() })
         const r0 = g.push[g.push.length - 1]
@@ -611,7 +604,7 @@ const VolCtrl = () => {
         txt(ctx, x + trackW + 12, yO + 5, st.muted ? t("cfg.audio.mute") : `${Math.round(st.master * 100)}%`, TITLE, 14, g.accent, 0.96, 1)
 
         const yIS = yO + 38
-        sectionHeader(ctx, g, x, yIS, "// MASTER INPUT", w)
+        sectionHeader(ctx, g, x, yIS, t("cfg.audio.master_input"), w)
         const yI = yIS + 18
         drawSlider(ctx, g.push, x, yI, trackW, st.mic, (t) => { st.mic = t; sh(`wpctl set-volume @DEFAULT_AUDIO_SOURCE@ ${t.toFixed(2)}`); g.refresh() })
         const rI = g.push[g.push.length - 1]
@@ -633,36 +626,36 @@ const VolCtrl = () => {
 
         const appsN = st.apps.length, recN = st.recApps.length
         const statsY = muteY + 50
-        sectionHeader(ctx, g, x, statsY, "// ACTIVITY", w)
-        txt(ctx, x, statsY + 18, `- ${appsN} PLAYING`, MONO, 10, g.accent, 0.9, 1)
-        txt(ctx, x, statsY + 34, `- ${recN} RECORDING`, MONO, 10, g.accent, 0.9, 1)
+        sectionHeader(ctx, g, x, statsY, t("cfg.audio.activity"), w)
+        txt(ctx, x, statsY + 18, `- ${t("cfg.audio.playing").replace("<n>", String(appsN))}`, MONO, 10, g.accent, 0.9, 1)
+        txt(ctx, x, statsY + 34, `- ${t("cfg.audio.recording").replace("<n>", String(recN))}`, MONO, 10, g.accent, 0.9, 1)
 
         const defY = statsY + 62
-        sectionHeader(ctx, g, x, defY, "// DEFAULT OUTPUT DEVICE", w)
+        sectionHeader(ctx, g, x, defY, t("cfg.audio.default_output"), w)
         const defOut = st.outDevices.find((d) => d.default) || st.outDevices.find((d) => d.id === st.defSink) || st.outDevices[0]
-        const defOutLbl = defOut ? (defOut.desc || defOut.id).slice(0, 40).toUpperCase() : "NO SINK"
+        const defOutLbl = defOut ? (defOut.desc || defOut.id).slice(0, 40).toUpperCase() : t("cfg.audio.no_sink")
         drawBtn(ctx, g.push, x, defY + 18, w - 8, 24, defOutLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
 
         const defInY = defY + 68
-        sectionHeader(ctx, g, x, defInY, "// DEFAULT INPUT DEVICE", w)
+        sectionHeader(ctx, g, x, defInY, t("cfg.audio.default_input"), w)
         const defIn = st.inDevices.find((d) => d.default) || st.inDevices.find((d) => d.id === st.defSrc) || st.inDevices[0]
-        const defInLbl = defIn ? (defIn.desc || defIn.id).slice(0, 40).toUpperCase() : "NO MIC"
+        const defInLbl = defIn ? (defIn.desc || defIn.id).slice(0, 40).toUpperCase() : t("cfg.audio.no_mic")
         drawBtn(ctx, g.push, x, defInY + 18, w - 8, 24, defInLbl, () => { st.volTab = "devices"; g.refresh() }, true, g.col, "", 10)
     }
     // all sinks + sources, monitors filtered on refresh
     const drawDevices = (ctx, g, x, y, w) => {
         const trackW = w
-        sectionHeader(ctx, g, x, y, "// OUTPUTS", w)
+        sectionHeader(ctx, g, x, y, t("cfg.audio.outputs"), w)
         let cy = y + 18
-        if (!st.outDevices.length) { txt(ctx, x, cy, "no output devices", MONO, 9, g.col, 0.35); return }
+        if (!st.outDevices.length) { txt(ctx, x, cy, t("cfg.audio.no_output_devices"), MONO, 9, g.col, 0.35); return }
         for (const d of st.outDevices) {
             drawDeviceRow(ctx, g, x, cy, w, d, "sink", st.defSink)
             cy += DEV_ROW_H + 6
         }
         const yS = cy + 20
-        sectionHeader(ctx, g, x, yS, "// INPUTS", w)
+        sectionHeader(ctx, g, x, yS, t("cfg.audio.inputs"), w)
         let iy = yS + 18
-        if (!st.inDevices.length) { txt(ctx, x, iy, "no input devices", MONO, 9, g.col, 0.35); return }
+        if (!st.inDevices.length) { txt(ctx, x, iy, t("cfg.audio.no_input_devices"), MONO, 9, g.col, 0.35); return }
         for (const d of st.inDevices) {
             drawDeviceRow(ctx, g, x, iy, w, d, "source", st.defSrc)
             iy += DEV_ROW_H + 6
@@ -688,18 +681,18 @@ const VolCtrl = () => {
     }
     // apps playing (sink-inputs) + apps recording (source-outputs)
     const drawApps = (ctx, g, x, y, w) => {
-        sectionHeader(ctx, g, x, y, "// APPS PLAYING", w)
+        sectionHeader(ctx, g, x, y, t("cfg.audio.apps_playing"), w)
         let cy = y + 18
-        if (!st.apps.length) { txt(ctx, x, cy, "no apps playing audio", MONO, 9, g.col, 0.4); cy += 22 }
+        if (!st.apps.length) { txt(ctx, x, cy, t("cfg.audio.no_apps_playing"), MONO, 9, g.col, 0.4); cy += 22 }
         for (const a of st.apps) { drawAppRow(ctx, g, x, cy, w, a, setAppVol); cy += 36 }
         const yR = cy + 20
-        sectionHeader(ctx, g, x, yR, "// APPS RECORDING", w)
+        sectionHeader(ctx, g, x, yR, t("cfg.audio.apps_recording"), w)
         let iy = yR + 18
-        if (!st.recApps.length) { txt(ctx, x, iy, "no apps recording audio", MONO, 9, g.col, 0.4); return }
+        if (!st.recApps.length) { txt(ctx, x, iy, t("cfg.audio.no_apps_recording"), MONO, 9, g.col, 0.4); return }
         for (const a of st.recApps) { drawAppRow(ctx, g, x, iy, w, a, setAppVolSrc); iy += 36 }
     }
     ctrl = createModal({
-        name: "vol", tabTitle: "AUDIO", W: 480, H: 720, hud: true, onOpen: refresh, poll: refresh, pollMs: 2000,
+        name: "vol", tabTitle: () => t("cfg.modal.audio"), W: 480, H: 720, hud: true, onOpen: refresh, poll: refresh, pollMs: 2000,
         onScroll: (dir, xy) => {
             if (!xy) return
             const [x, y] = xy
@@ -735,7 +728,7 @@ const BrtCtrl = () => {
     const st = { val: 0.5 }; let ctrl
     const refresh = () => sh("echo $(brightnessctl get) $(brightnessctl max)").then((o) => { const [c, m] = o.trim().split(" ").map(Number); st.val = m ? c / m : 0; ctrl.requestDraw() })
     ctrl = createModal({
-        name: "brt", tabTitle: "DISPLAY", W: 312, H: 176, hud: true, onOpen: refresh, poll: refresh, pollMs: 2500,
+        name: "brt", tabTitle: () => t("cfg.modal.display"), W: 312, H: 176, hud: true, onOpen: refresh, poll: refresh, pollMs: 2500,
         draw: (ctx, g) => {
             const x = g.X + 18, trackW = g.w - 36 - 52, secW = g.w - 36
             const ty = g.Y + HEADER + 48
@@ -747,7 +740,7 @@ const BrtCtrl = () => {
     return ctrl
 }
 
-export const rowPath = (ctx, x, y, w, h) => { const c = 5; ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
+const rowPath = (ctx, x, y, w, h) => { const c = 5; ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
 const ROW_H = 32, ROW_GAP = 6
 const drawList = (ctx, push, x, y, w, h, items, scroll, meta, onClick, onRight) => {
     const step = ROW_H + ROW_GAP, vis = Math.max(1, Math.floor(h / step))
@@ -847,7 +840,7 @@ const WifiCtrl = () => {
         })
     }
     ctrl = createModal({
-        name: "wifi", tabTitle: "NETWORK", W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
+        name: "wifi", tabTitle: () => t("cfg.wifi.title"), W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
         onOpen: () => { st.selected = null; st.scroll = 0; refresh(); netWheel() },
         onClose: () => { closeWheel(); st.selected = null },
         poll: () => refresh(), pollMs: 5000,
@@ -884,9 +877,9 @@ const WifiCtrl = () => {
                     btnPath(ctx, px + 130 + gap, ty, forgetW, btnH)
                     ctx.setSourceRGBA(br, bg, bb, 0.25); ctx.setLineWidth(0.9); ctx.stroke()
                     ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11)
-                    const lw = ctx.textExtents("FORGET").width
-                    ctx.setSourceRGBA(g.col[0], g.col[1], g.col[2], 0.3)
-                    ctx.moveTo(px + 130 + gap + forgetW / 2 - lw / 2, ty + btnH / 2 + 4); ctx.showText("FORGET")
+                    const forgetLabel = t("cfg.wifi.forget")
+                    const lw = measureTextWidth(ctx, forgetLabel, TITLE, 11, 1)
+                    pango(ctx, px + 130 + gap + forgetW / 2 - lw / 2, ty + btnH / 2 + 4, forgetLabel, TITLE, true, 11, g.col, 0.3)
                 }
                 ty += btnH + 10
             } else if (st.on) {
@@ -929,7 +922,7 @@ const BtCtrl = () => {
     const toggle = () => { if (st.on) { sh("bluetoothctl power off").then(() => timeout(700, refresh)) } else { sh("rfkill unblock bluetooth; sleep 0.3; bluetoothctl power on").then(() => timeout(1500, scanBT)) } }
     const wheelList = () => st.devs.map((d) => ({ label: d.name, badge: d.connected ? "CONNECTED" : d.paired ? "PAIRED" : d.mac.slice(0, 8), glyph: null, data: d }))
     ctrl = createModal({
-        name: "bt", tabTitle: t("cfg.bluetooth.title"), W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
+        name: "bt", tabTitle: () => t("cfg.bluetooth.title"), W: 320, H: 380, yaw: 15, pitch: 0, roll: 0, anchorRight: true, noBuiltinClose: true, noGlass: true, keymode: Keymode.ON_DEMAND,
         onOpen: () => { st.selected = null; st.scroll = 0; refresh(); if (st.on) timeout(800, scanBT); openWheel({ title: "BLUETOOTH", subtitle: "// KIROSHI :: TRACING DEVICES", footer: "[ SCROLL / ARROWS ] NAVIGATE   [ ENTER / CLICK ] CONNECT   [ ESC ] CLOSE", searchable: true, reserveX: 600, onActivate: (d) => sh(`bluetoothctl ${d.connected ? "disconnect" : "connect"} ${d.mac}`).then(() => timeout(1800, refresh)), onFocus: (d) => { st.selected = d; ctrl.requestDraw() }, onReset: () => ctrl.close(), emptyText: "// NO DEVICES" }, wheelList()) },
         onClose: () => { closeWheel(); st.selected = null },
         poll: () => refresh(), pollMs: 5000,
@@ -984,6 +977,7 @@ const BtCtrl = () => {
 }
 
 const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
+    const shownLabel = localizeText(label)
     const key = `${bx}|${by}`, hovered = push.hoverKey === key, [hr, hg, hb] = HUDRED
     btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr * 0.16, hg * 0.16, hb * 0.18, hovered ? 0.55 : 0.4); ctx.fill()
     if (hovered) { ctx.setOperator(12); btnPath(ctx, bx, by, bw, bh); ctx.setSourceRGBA(hr, hg, hb, 0.4); ctx.setLineWidth(2.4); ctx.stroke(); ctx.setOperator(2) }
@@ -991,8 +985,9 @@ const drawPwrBtn = (ctx, push, bx, by, bw, bh, glyph, label, on) => {
     ctx.selectFontFace(ICONF, 0, 0); ctx.setFontSize(24); const gw = ctx.textExtents(glyph).width
     const PWRBRIGHT = rcAcc()
     ctx.setSourceRGBA(PWRBRIGHT[0], PWRBRIGHT[1], PWRBRIGHT[2], 0.97); ctx.moveTo(bx + bw / 2 - gw / 2, by + bh / 2 + 2); ctx.showText(glyph)
-    ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(label).width
-    ctx.setSourceRGBA(hr, hg, hb, 0.95); ctx.moveTo(bx + bw / 2 - tw / 2, by + bh - 11); ctx.showText(label)
+    const powerFont = fontForLang(getLang()) || TITLE
+    ctx.selectFontFace(powerFont, 0, 1); ctx.setFontSize(11); const tw = ctx.textExtents(shownLabel).width
+    pango(ctx, bx + bw / 2 - tw / 2, by + bh - 11, shownLabel, powerFont, true, 11, [hr, hg, hb], 0.95)
     push({ kind: "btn", hoverable: true, key, bx0: bx, by0: by, bx1: bx + bw, by1: by + bh, on })
 }
 const PwrCtrl = () => {
@@ -1003,7 +998,7 @@ const PwrCtrl = () => {
         [ch(0xf011), "SHUTDOWN", "systemctl poweroff"],
     ]
     return createModal({
-        name: "pwr", tabTitle: "POWER", W: 312, H: 252, hud: true,
+        name: "pwr", tabTitle: () => t("cfg.modal.power"), W: 312, H: 252, hud: true,
         draw: (ctx, g) => {
             const gap = 12, bw = (g.w - 36 - gap) / 2, bh = 58, x0 = g.X + 18, y0 = g.Y + 48
             items.forEach(([glyph, label, cmd], i) => {
@@ -1032,7 +1027,7 @@ const procRow = (ctx, push, x, ry, w, p, on, cpuHX, memHX, onClick, onRight, pin
 const drawProcList = (ctx, push, x, y, w, h, items, scroll, sel, pinned, onClick, onRight) => {
     const [BR, BG, BB] = rcBase(), LBL = rcLabel()
     const cpuHX = x + w - 92, memHX = x + w - 26
-    txt(ctx, x + 6, y + 8, "PROCESS", MONO, 8.5, LBL, 0.5)
+    txt(ctx, x + 6, y + 8, t("cfg.sys.process"), MONO, 8.5, LBL, 0.5)
     ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(8.5)
     txt(ctx, cpuHX - ctx.textExtents("CPU").width, y + 8, "CPU", MONO, 8.5, LBL, 0.5)
     txt(ctx, memHX - ctx.textExtents("MEM").width, y + 8, "MEM", MONO, 8.5, LBL, 0.5)
@@ -1083,7 +1078,7 @@ const BatCtrl = () => {
     }
     const setProfile = (p) => { sh(`powerprofilesctl set ${p}`).then(() => timeout(300, refresh)) }
     ctrl = createModal({
-        name: "bat", tabTitle: t("cfg.sys.tab_pwr"), W: 352, H: 470, hud: true,
+        name: "bat", tabTitle: () => t("cfg.sys.tab_pwr"), W: 352, H: 470, hud: true,
         onOpen: () => { st.hist = []; refresh() }, poll: refresh, pollMs: 4000,
         draw: (ctx, g) => {
             const x = g.X + 20, w = g.w - 40, RED = g.col, BR = rcAcc()
@@ -1267,7 +1262,7 @@ const initRow = (ctx, push, x, y, w, app, onToggle) => {
   txt(ctx, x + 32, y + rh / 2 + 5, app.name, TITLE, 13.5, SYSC, 0.95, 1)
     const bw = 176, bh = 26
   const bx = x + w - bw - 12, by = y + (rh - bh) / 2
-    drawBtn(ctx, push, bx, by, bw, bh, app.enabled ? "ENABLED ON BOOT" : "DISABLED ON BOOT", () => onToggle(app), app.enabled, c)
+    drawBtn(ctx, push, bx, by, bw, bh, app.enabled ? t("cfg.sys.enabled_on_boot") : t("cfg.sys.disabled_on_boot"), () => onToggle(app), app.enabled, c)
 }
 const holoFrame = (ctx, x, y, w, h) => {
   ctx.setSourceRGBA(0.02, 0.05, 0.06, 0.55); ctx.rectangle(x, y, w, h); ctx.fill()
@@ -1460,7 +1455,7 @@ fi`).then(() => timeout(200, fetchInitApps))
     const killSel = () => { if (st.sel) sh(`kill -9 ${st.sel} 2>/dev/null`).then(() => { st.sel = ""; st.selProc = null; timeout(400, refresh) }) }
     const layout = monitorLayoutSize(activeMonitor())
     ctrl = createModal({
-        name: "sys", tabTitle: t("cfg.sys.tab_sys"), W: layout.width, H: layout.height, sizeForMonitor: monitorLayoutSize, noGlass: true, pad: 0,
+        name: "sys", tabTitle: () => t("cfg.sys.tab_sys"), W: layout.width, H: layout.height, sizeForMonitor: monitorLayoutSize, noGlass: true, pad: 0,
         idleFrameMs: 70,
         onFrame: () => {
             const tc = st.cpu / 100, tm = st.memU / st.memT
@@ -1513,20 +1508,26 @@ fi`).then(() => timeout(200, fetchInitApps))
             hx = pair(hx, `${st.cpu}`, "CPU", SYSY) + 34
             hx = pair(hx, `${Math.round(memF * 100)}`, "MEM", SYSC) + 34
             const tabs = [[t("cfg.sys.tab.proc"), "task"], [t("cfg.sys.tab.sys"), "system"], [t("cfg.sys.tab.init"), "init"], [t("cfg.sys.tab.logs"), "logs"]]
-            ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
+            let tabSize = 13
             const tabGap = narrow ? 16 : 30
             const tabY = hy + (narrow ? 44 : 0)
-            let tw2 = tabs.reduce((a2, [t]) => a2 + ctx.textExtents(t).width + tabGap, 0)
+            let tabWidths = tabs.map(([label]) => measureTextWidth(ctx, label, TITLE, tabSize, 1))
+            let tw2 = tabWidths.reduce((sum, width) => sum + width, 0) + tabGap * (tabs.length - 1)
+            while (tw2 > W - 32 && tabSize > 9) {
+                tabSize -= 0.5
+                tabWidths = tabs.map(([label]) => measureTextWidth(ctx, label, TITLE, tabSize, 1))
+                tw2 = tabWidths.reduce((sum, width) => sum + width, 0) + tabGap * (tabs.length - 1)
+            }
             let tx3 = X + W / 2 - tw2 / 2
-            tabs.forEach(([t, id]) => {
-              const w2 = ctx.textExtents(t).width, active = st.tab === id
+            tabs.forEach(([label, id], index) => {
+              const w2 = tabWidths[index], active = st.tab === id
                 const hv = g.push.hoverKey === `tab:${id}`
               const tcol: any = active ? SYSC : (hv ? [1, 0.55, 0.5] : SYSR)
                 if (hv && !active) {
               ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], 0.06 + 0.04 * Math.sin(Date.now() / 130))
                     ctx.rectangle(tx3 - 8, tabY, w2 + 16, 28); ctx.fill()
                 }
-                txt(ctx, tx3, tabY + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
+                txt(ctx, tx3, tabY + 16, label, TITLE, tabSize, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
               if (active) { ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95); ctx.rectangle(tx3, tabY + 23, w2, 2); ctx.fill() }
                 g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: tx3 - 10, by0: tabY, bx1: tx3 + w2 + 10, by1: tabY + 28, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
               tx3 += w2 + tabGap
@@ -1535,7 +1536,7 @@ fi`).then(() => timeout(200, fetchInitApps))
             ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(15)
             txt(ctx, X + W - ctx.textExtents(rt).width - 46, hy + 18, rt, TITLE, 15, SYSY, 0.92, 1)
             ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
-            const lt = `UP ${st.uptime}   LOAD ${st.load}`
+            const lt = `${t("cfg.sys.uptime")} ${st.uptime}   ${t("cfg.sys.load")} ${st.load}`
             txt(ctx, X + W - ctx.textExtents(lt).width - 46, hy + 40, lt, MONO, 9, SYSDIM, 0.6)
 
             const gTop = Y + 190, gH = H - 400
@@ -1549,7 +1550,7 @@ fi`).then(() => timeout(200, fetchInitApps))
             let cy3 = Y + (narrow ? 190 : 150)
 
             if (st.tab === "task") {
-                groupLabel(ctx, mx, cy3, "// CORE ARRAY")
+                groupLabel(ctx, mx, cy3, `// ${t("cfg.sys.core_array")}`)
                 const ncols = Math.max(1, st.cores.length)
                 const sw3 = Math.min(120, (mw - (ncols - 1) * 14) / ncols), sgw = ncols * sw3 + (ncols - 1) * 14
                 st.cores.forEach((v, i) => {
@@ -1557,28 +1558,28 @@ fi`).then(() => timeout(200, fetchInitApps))
                 })
 
                 cy3 += 92
-                groupLabel(ctx, mx, cy3, "// MEMORY")
+                groupLabel(ctx, mx, cy3, `// ${t("cfg.sys.memory")}`)
                 const m3 = (mw / 2 - 40 - 28) / 3
-                slotSq(ctx, mx, cy3 + 10, m3, 62, "USED", `${kbToG(st.memU).toFixed(1)}G`, memF, SYSC, false)
-                slotSq(ctx, mx + m3 + 14, cy3 + 10, m3, 62, "CACHE", `${kbToG(st.memCache).toFixed(1)}G`, st.memCache / st.memT, SYSC, false)
-                slotSq(ctx, mx + (m3 + 14) * 2, cy3 + 10, m3, 62, "SWAP", st.swapT ? `${kbToG(st.swapU).toFixed(1)}G` : "—", st.swapT ? st.swapU / st.swapT : 0, SYSC, false)
+                slotSq(ctx, mx, cy3 + 10, m3, 62, t("cfg.sys.used"), `${kbToG(st.memU).toFixed(1)}G`, memF, SYSC, false)
+                slotSq(ctx, mx + m3 + 14, cy3 + 10, m3, 62, t("cfg.sys.cache"), `${kbToG(st.memCache).toFixed(1)}G`, st.memCache / st.memT, SYSC, false)
+                slotSq(ctx, mx + (m3 + 14) * 2, cy3 + 10, m3, 62, t("cfg.sys.swap"), st.swapT ? `${kbToG(st.swapU).toFixed(1)}G` : "—", st.swapT ? st.swapU / st.swapT : 0, SYSC, false)
 
                 const nx = narrow ? mx : mx + mw / 2 + 20
                 const networkY = cy3 + (narrow ? 150 : 0)
-                groupLabel(ctx, nx, networkY, "// NETWORK")
+                groupLabel(ctx, nx, networkY, `// ${t("cfg.sys.network")}`)
                 const n2 = narrow ? (mw - 14) / 2 : (mw / 2 - 20 - 14) / 2
-                slotSq(ctx, nx, networkY + 10, n2, 62, "UPLINK", `${st.up}`, -1, SYSY, false)
-                slotSq(ctx, nx + n2 + 14, networkY + 10, n2, 62, "DOWNLINK", `${st.down}`, -1, SYSC, false)
+                slotSq(ctx, nx, networkY + 10, n2, 62, t("cfg.sys.uplink"), `${st.up}`, -1, SYSY, false)
+                slotSq(ctx, nx + n2 + 14, networkY + 10, n2, 62, t("cfg.sys.downlink"), `${st.down}`, -1, SYSC, false)
                 drawGraph(ctx, nx, networkY + 78, n2, 44, st.upHist, Math.max(1, ...st.upHist), SYSY)
                 drawGraph(ctx, nx + n2 + 14, networkY + 78, n2, 44, st.downHist, Math.max(1, ...st.downHist), SYSC)
 
-                groupLabel(ctx, mx, cy3 + 92, "// STORAGE")
+                groupLabel(ctx, mx, cy3 + 92, `// ${t("cfg.sys.storage")}`)
                 st.disks.slice(0, 2).forEach((d, i) => {
                     slotSq(ctx, mx + i * (m3 + 14), cy3 + 102, m3, 44, d.mount.slice(0, 10), `${Math.round(d.frac * 100)}%`, d.frac, d.frac > 0.9 ? SYSR : SYSC, d.frac > 0.9)
                 })
 
                 const py = cy3 + (narrow ? 300 : 172)
-                groupLabel(ctx, mx, py, "// PROCESSES")
+                groupLabel(ctx, mx, py, `// ${t("cfg.sys.processes_short")}`)
                 drawBtn(ctx, g.push, mx + mw - 150, py - 16, 150, 26, st.sel ? t("cfg.sys.force_kill") : t("cfg.sys.select_proc"), killSel, !!st.sel, SYSR, st.sel ? ch(0xf011) : "")
                 const ly = py + 14, lh = (Y + H) - ly - 46
                 const pinned = st.sel ? (st.selProc || st.procs.find((p) => p.pid === st.sel)) : null
@@ -1586,7 +1587,7 @@ fi`).then(() => timeout(200, fetchInitApps))
                 drawProcList(ctx, g.push, mx, ly, mw, lh, rest, st.scroll, st.sel, pinned, select, (p) => { select(p); killSel() })
                 txt(ctx, X + 46, Y + H - 22, t("cfg.sys.scroll_procs"), MONO, 9, SYSDIM, 0.5)
             } else if (st.tab === "system") {
-            groupLabel(ctx, mx, cy3, "// SYS_INFO")
+              groupLabel(ctx, mx, cy3, `// ${t("cfg.sys.sys_info")}`)
                   const sw4 = (mw - 28) / 3, gpuOk = st.sysInfo.gpuLoad >= 0
               slotSq(ctx, mx, cy3 + 14, sw4, 62, t("cfg.sys.gpu_load"), gpuOk ? `${st.sysInfo.gpuLoad}%` : "N/A", gpuOk ? st.sysInfo.gpuLoad / 100 : -1, SYSY, gpuOk && st.sysInfo.gpuLoad > 85)
                 slotSq(ctx, mx + sw4 + 14, cy3 + 14, sw4, 62, t("cfg.sys.cores"), `${NCORES}`, -1, SYSC, false)
@@ -1603,18 +1604,18 @@ fi`).then(() => timeout(200, fetchInitApps))
                   }
 
               const fields = [
-                  ["MACHINE_NAME", st.sysInfo.host], ["ACTIVE_USER", st.sysInfo.user], ["OS", st.sysInfo.distro],
-                ["KERNEL", st.sysInfo.kernel], ["ARCH", st.sysInfo.arch], ["CORE_CPU", st.sysInfo.coresPhys],
-                    ["THREADS", `${NCORES}`], ["CPU_MODEL", st.sysInfo.cpu], ["CPU_FREQ", st.sysInfo.maxFreq],
-                ["CPU_CACHE", st.sysInfo.cache], ["GPU_MODEL", st.sysInfo.gpu], ["GPU_DRIVER", st.sysInfo.gpuDriver],
-                  ["GPU_VRAM", st.sysInfo.gpuVram], ["GPU_TEMP", st.sysInfo.gpuTemp],
-                ["MEMORY", `${kbToG(st.memU).toFixed(1)}/${kbToG(st.memT).toFixed(1)}G`],
-                    ["SWAP", st.swapT ? `${kbToG(st.swapU).toFixed(1)}/${kbToG(st.swapT).toFixed(1)}G` : "—"],
-                  ["DISK", st.disks[0] ? `${st.disks[0].used.toFixed(0)}/${st.disks[0].size.toFixed(0)}G` : "—"],
-                ["BATTERY", st.sysInfo.battery], ["WM", st.sysInfo.wm], ["SESSION", st.sysInfo.session],
-                    ["SHELL", st.sysInfo.shell], ["TERMINAL", st.sysInfo.term], ["ICON_THEME", st.sysInfo.icon],
-                  ["GTK_THEME", st.sysInfo.gtk], ["RESOLUTION", st.sysInfo.res], ["PACKAGES", st.sysInfo.pkgs],
-                ["PROCESSES", st.sysInfo.procCount], ["LOAD_AVG", st.load], ["LOCAL_IP", st.sysInfo.localIp],
+                  [t("cfg.sys.machine_name"), st.sysInfo.host], [t("cfg.sys.active_user"), st.sysInfo.user], [t("cfg.sys.os"), st.sysInfo.distro],
+                [t("cfg.sys.kernel"), st.sysInfo.kernel], [t("cfg.sys.arch"), st.sysInfo.arch], [t("cfg.sys.core_cpu"), st.sysInfo.coresPhys],
+                    [t("cfg.sys.threads"), `${NCORES}`], [t("cfg.sys.cpu_model"), st.sysInfo.cpu], [t("cfg.sys.cpu_freq"), st.sysInfo.maxFreq],
+                [t("cfg.sys.cpu_cache"), st.sysInfo.cache], [t("cfg.sys.gpu_model"), st.sysInfo.gpu], [t("cfg.sys.gpu_driver"), st.sysInfo.gpuDriver],
+                  [t("cfg.sys.gpu_vram"), st.sysInfo.gpuVram], [t("cfg.sys.gpu_temp"), st.sysInfo.gpuTemp],
+                [t("cfg.sys.memory"), `${kbToG(st.memU).toFixed(1)}/${kbToG(st.memT).toFixed(1)}G`],
+                    [t("cfg.sys.swap"), st.swapT ? `${kbToG(st.swapU).toFixed(1)}/${kbToG(st.swapT).toFixed(1)}G` : "—"],
+                  [t("cfg.sys.disk"), st.disks[0] ? `${st.disks[0].used.toFixed(0)}/${st.disks[0].size.toFixed(0)}G` : "—"],
+                [t("cfg.sys.battery"), st.sysInfo.battery], [t("cfg.sys.wm"), st.sysInfo.wm], [t("cfg.sys.session"), st.sysInfo.session],
+                    [t("cfg.sys.shell"), st.sysInfo.shell], [t("cfg.sys.terminal"), st.sysInfo.term], [t("cfg.sys.icon_theme"), st.sysInfo.icon],
+                  [t("cfg.sys.gtk_theme"), st.sysInfo.gtk], [t("cfg.sys.resolution"), st.sysInfo.res], [t("cfg.sys.packages"), st.sysInfo.pkgs],
+                [t("cfg.sys.processes_short"), st.sysInfo.procCount], [t("cfg.sys.load_avg"), st.load], [t("cfg.sys.local_ip"), st.sysInfo.localIp],
               ]
                   const cw3 = mw / 3
               fields.forEach(([k, v], i) => {
@@ -1624,9 +1625,9 @@ fi`).then(() => timeout(200, fetchInitApps))
                 txt(ctx, fx + ctx.textExtents(lbl).width, fy, String(v || "—"), TITLE, 11.5, SYSC, 0.95, 0)
               })
             } else if (st.tab === "init") {
-              groupLabel(ctx, mx, cy3, "// INIT_DAEMON")
+              groupLabel(ctx, mx, cy3, `// ${t("cfg.sys.init_daemon")}`)
                 const total = st.initApps.length, onBoot = st.initApps.filter((a) => a.enabled).length
-              const cnt = `TOTAL ${total}   ON BOOT ${onBoot}   OFF ${total - onBoot}`
+              const cnt = `${t("cfg.sys.total")} ${total}   ${t("cfg.sys.on_boot")} ${onBoot}   ${t("cfg.sys.off")} ${total - onBoot}`
                 ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9.5)
               txt(ctx, mx + mw - ctx.textExtents(cnt).width, cy3, cnt, MONO, 9.5, SYSDIM, 0.75, 0)
                 const ly = cy3 + 24, lh = (Y + H) - ly - 46, step = 46
@@ -1638,9 +1639,9 @@ fi`).then(() => timeout(200, fetchInitApps))
                     initRow(ctx, g.push, mx, ly + i * step, mw, st.initApps[idx], toggleAutostart)
                 }
                 ctx.restore()
-                txt(ctx, X + 46, Y + H - 22, "SCROLL apps · CLICK button to toggle · ESC closes", MONO, 9, SYSDIM, 0.5)
+                txt(ctx, X + 46, Y + H - 22, t("cfg.sys.scroll_init_hint"), MONO, 9, SYSDIM, 0.5)
           } else if (st.tab === "logs") {
-              groupLabel(ctx, mx, cy3, "// INFO_LOGS")
+              groupLabel(ctx, mx, cy3, `// ${t("cfg.sys.info_logs")}`)
             const fx0 = mx, fy0 = cy3 + 20, fw0 = mw
               const fh0 = (Y + H) - fy0 - 46
             holoFrame(ctx, fx0, fy0, fw0, fh0)
@@ -1653,20 +1654,20 @@ fi`).then(() => timeout(200, fetchInitApps))
                   txt(ctx, fx0 + 16, fy0 + 22 + i * lh2, line.slice(0, 180), MONO, 8.5, lcol, 0.85, 0)
             })
               ctx.restore()
-            txt(ctx, X + 46, Y + H - 22, "journalctl -n 200 · auto-refresh · ESC closes", MONO, 9, SYSDIM, 0.5)
+            txt(ctx, X + 46, Y + H - 22, t("cfg.sys.scroll_logs_hint"), MONO, 9, SYSDIM, 0.5)
             }
         },
     })
     return ctrl
 }
 const KEYBINDS = [
-    ["SUPER + TAB", "APP LAUNCHER"], ["H", "HELP MENU"], ["Z", "HUD OVERLAY"], ["V", "VOLUME"],
-    ["I", "BRIGHTNESS"], ["U", "SYSTEM UPGRADE"], ["J", "DISMISS UPDATE"], ["Q", "CYBERARCH UPDATE"], ["M", "MICROPHONE"],["G", "MARKETS"], ["O", "MUSIC PLAYER"], ["N", "NETWORKS"],
-    ["B", "BLUETOOTH"], ["W", "FORECAST"], ["P", "POWER MENU"], ["Y", "BATTERY"],
-    ["C", "CPU / RAM"], ["L", "LOCKSCREEN"], ["R", "SCREEN RECORD"], ["S", "SCREENSHOT"],
-    ["T", "TERMINAL"], ["K", "KILL MODE"], ["-", "TIME / TIMEZONE"], ["TAB", "TERMINAL THEME"],
+    ["SUPER + TAB", "cfg.keyhelp.app_launcher"], ["H", "cfg.keyhelp.help_menu"], ["Z", "cfg.keyhelp.hud_overlay"], ["V", "cfg.keyhelp.volume"],
+    ["I", "cfg.keyhelp.brightness"], ["U", "cfg.keyhelp.system_upgrade"], ["J", "cfg.keyhelp.dismiss_update"], ["Q", "cfg.keyhelp.cyberarch_update"], ["M", "cfg.keyhelp.microphone"], ["G", "cfg.keyhelp.markets"], ["O", "cfg.keyhelp.music_player"], ["N", "cfg.keyhelp.networks"],
+    ["B", "cfg.keyhelp.bluetooth"], ["W", "cfg.keyhelp.forecast"], ["P", "cfg.keyhelp.power_menu"], ["Y", "cfg.keyhelp.battery"],
+    ["C", "cfg.keyhelp.cpu_ram"], ["L", "cfg.keyhelp.lockscreen"], ["R", "cfg.keyhelp.screen_record"], ["S", "cfg.keyhelp.screenshot"],
+    ["T", "cfg.keyhelp.terminal"], ["K", "cfg.keyhelp.kill_mode"], ["-", "cfg.keyhelp.time_timezone"], ["TAB", "cfg.keyhelp.terminal_theme"],
 ]
-export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: boolean; fs?: number; col?: any } = {}) => {
+export const drawKeyCap = (ctx, x, y, label, h, opts = {}) => {
     let kc = opts.glow ? USER.press : (neonBtn.value ? USER.press : CYAN)
       if (opts.col) kc = opts.col
     const fillA = opts.glow ? 0.45 : (opts.muted ? 0.18 : 0.55)
@@ -1683,13 +1684,13 @@ export const drawKeyCap = (ctx, x, y, label, h, opts: { glow?: boolean; muted?: 
     return w
 }
 const HYPRBINDS = [
-    ["SUPER + SHIFT + F", "FULLSCREEN TOGGLE"],
-    ["SUPER + F", "FLOAT / TILE TOGGLE"],
-    ["SUPER + ← → ↑ ↓", "FOCUS WINDOW"],
-    ["SUPER + SHIFT + ← → ↑ ↓", "MOVE WINDOW"],
-    ["CTRL + SHIFT + ← → ↑ ↓", "RESIZE WINDOW"],
-    ["ALT + SHIFT + 1…0", "WINDOW → WORKSPACE"],
-    ["SUPER + D", "PEEK DESKTOP"],
+    ["SUPER + SHIFT + F", "cfg.keyhelp.fullscreen_toggle"],
+    ["SUPER + F", "cfg.keyhelp.float_tile_toggle"],
+    ["SUPER + ← → ↑ ↓", "cfg.keyhelp.focus_window"],
+    ["SUPER + SHIFT + ← → ↑ ↓", "cfg.keyhelp.move_window"],
+    ["CTRL + SHIFT + ← → ↑ ↓", "cfg.keyhelp.resize_window"],
+    ["ALT + SHIFT + 1…0", "cfg.keyhelp.window_workspace"],
+    ["SUPER + D", "cfg.keyhelp.peek_desktop"],
 ]
 const readThemeMod = () => {
     try {
@@ -1717,30 +1718,33 @@ const readThemeMod = () => {
 }
 let keysMod = readThemeMod()
 const KeysCtrl = () => createModal({
-    name: "keys", tabTitle: "KEYBINDS", W: 470, H: 660,
+    name: "keys", tabTitle: () => t("cfg.tab.keybinds"), W: 470, H: 660,
     onOpen: () => { keysMod = readThemeMod() },
     draw: (ctx, g) => {
         const kc = neonBtn.value ? USER.press : CYAN
         const x = g.X + 24, top = g.Y + HEADER + 10
-        txt(ctx, x, top + 6, `// PREFIX  ${keysMod}  +  KEY`, MONO, 10, ACC, 0.72, 1)
+        txt(ctx, x, top + 6, t("cfg.keyhelp.prefix").replace("<mods>", keysMod), MONO, 10, ACC, 0.72, 1)
         const gridTop = top + 26, colW = (g.w - 48) / 2, rowH = 30, capH = 22, half = Math.ceil(KEYBINDS.length / 2)
+        const labelFont = fontForLang(getLang()) || TITLE
         KEYBINDS.forEach(([key, action], i) => {
             const cx = x + (i < half ? 0 : 1) * colW, cy = gridTop + (i % half) * rowH
             const cw = drawKeyCap(ctx, cx, cy, key, capH)
-            txt(ctx, cx + cw + 10, cy + capH / 2 + 4, action, TITLE, 11, kc, 0.92, 1)
+            const ax = cx + cw + 10, maxW = Math.max(0, colW - cw - 18)
+            txt(ctx, ax, cy + capH / 2 + 4, fitLabel(ctx, t(action), labelFont, 11, maxW), labelFont, 11, kc, 0.92, 1)
         })
 
         const sepY = gridTop + half * rowH + 16
-        txt(ctx, x, sepY, "// HYPRLAND", MONO, 10, ACC, 0.72, 1)
+        txt(ctx, x, sepY, t("cfg.keyhelp.section_hyprland"), MONO, 10, ACC, 0.72, 1)
         ctx.setSourceRGBA(kc[0], kc[1], kc[2], 0.28); ctx.setLineWidth(1)
         ctx.newPath(); ctx.moveTo(x + 98, sepY - 4); ctx.lineTo(g.X + g.w - 24, sepY - 4); ctx.stroke()
         const hTop = sepY + 20, hRow = 22, actX = x + 210
         HYPRBINDS.forEach(([combo, action], i) => {
             const hy = hTop + i * hRow
             txt(ctx, x, hy, combo, MONO, 10, kc, 0.92, 1)
-            txt(ctx, actX, hy, action, TITLE, 11, ACC, 0.85, 1)
+            const maxW = Math.max(0, g.X + g.w - 24 - actX)
+            txt(ctx, actX, hy, fitLabel(ctx, t(action), labelFont, 11, maxW), labelFont, 11, ACC, 0.85, 1)
         })
-        txt(ctx, x, g.Y + g.h - 14, "ESC to close", MONO, 9, g.col, 0.42)
+        txt(ctx, x, g.Y + g.h - 14, t("cfg.keyhelp.esc_close"), MONO, 9, g.col, 0.42)
     },
 })
 
@@ -1761,7 +1765,7 @@ const AurCtrl = () => {
         getAurUpdates().then((r) => { st.list = r.list; st.count = r.count; st.loading = false; ctrl.requestDraw() })
     }
     ctrl = createModal({
-        name: "aur", tabTitle: "SYSTEM UPGRADE", W: 470, H: 512, hud: true,
+        name: "aur", tabTitle: () => t("cfg.aur.upgrade"), W: 470, H: 512, hud: true,
         onOpen: () => { st.scroll = 0; load() },
         onScroll: (d) => { st.scroll = Math.max(0, Math.min(Math.max(0, st.list.length - 1), st.scroll + d)); ctrl.requestDraw() },
         draw: (ctx, g) => {
@@ -1769,8 +1773,7 @@ const AurCtrl = () => {
             let cy = g.Y + HEADER + 20
             if (st.loading) { txt(ctx, x, cy + 8, "// QUERYING MIRRORS + AUR …", MONO, 11, g.col, 0.82); return }
             if (st.count <= 0) {
-                ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(26)
-                ctx.setSourceRGBA(GRN[0], GRN[1], GRN[2], 0.96); ctx.moveTo(x, cy + 26); ctx.showText("SYSTEM UP TO DATE")
+                txt(ctx, x, cy + 26, t("cfg.aur.up_to_date"), TITLE, 26, GRN, 0.96, 1)
                 txt(ctx, x, cy + 48, "// no pending package updates", MONO, 10, g.col, 0.7)
                 drawBtn(ctx, g.push, x, g.Y + g.h - 44 - 34, w, 34, "CLOSE", () => ctrl.close(), false, g.col)
                 return
@@ -1862,7 +1865,7 @@ const UpdCtrl = () => {
     }
     const recheck = () => { st.loading = true; ctrl.requestDraw(); getThemeUpdate().then(take) }
     ctrl = createModal({
-        name: "update", tabTitle: "CYBERARCH UPDATE", W: 470, H: 512, hud: true,
+        name: "update", tabTitle: () => t("cfg.cyberarch.update"), W: 470, H: 512, hud: true,
         onOpen: () => { st.scroll = 0; load() },
         onScroll: (d) => { st.scroll = Math.max(0, Math.min(st.maxScroll, st.scroll + d)); ctrl.requestDraw() },
         draw: (ctx, g) => {
@@ -1879,8 +1882,7 @@ const UpdCtrl = () => {
             cy += 42
             if (st.loading) { txt(ctx, x, cy + 8, "// CHECKING FOR A NEW RELEASE …", MONO, 11, g.col, 0.82); return }
             if (!st.avail) {
-                ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(24)
-                ctx.setSourceRGBA(GRN[0], GRN[1], GRN[2], 0.96); ctx.moveTo(x, cy + 24); ctx.showText("CYBERARCH UP TO DATE")
+                txt(ctx, x, cy + 24, t("cfg.cyberarch.up_to_date"), TITLE, 24, GRN, 0.96, 1)
                 txt(ctx, x, cy + 46, `// running v${st.local || "?"}`, MONO, 10, g.col, 0.7)
                 drawBtn(ctx, g.push, x, g.Y + g.h - 44 - btnH, w, btnH, "CHECK AGAIN", recheck, false, g.col, ch(0xf021))
                 return

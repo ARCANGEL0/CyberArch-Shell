@@ -7,7 +7,7 @@ import Pango from "gi://Pango?version=1.0"
 import PangoCairo from "gi://PangoCairo?version=1.0"
 import { USER, USER_A, isOvr, onColorChange, tintPixbuf, glassMode, imgTint, radioBg } from "./colors.ts"
 import { animOn } from "./config.ts"
-import { t } from "./i18n.ts"
+import { t, getLang, isRtl, fontForLang, localizeText } from "./i18n.ts"
 import { SCREEN_WIDTH, SCREEN_HEIGHT, winScale, monW, monH } from "../../env.ts"
 
 import { TITLE, MONO } from "./fonts.ts"
@@ -93,23 +93,39 @@ const ctl = (act) => {
  execAsync(["sh", "-c", pctl(activeName, act)]).catch(() => {}).then(() => poll())
 }
 
-const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => {
- ctx.selectFontFace(font, 0, bold); ctx.setFontSize(size)
- if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, y); ctx.showText(s); ctx.setOperator(2) }
- ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, y); ctx.showText(s)
-}
 const ptext = (ctx, x, yBase, s, family, bold, px, col, a, glow = 0) => {
  try {
+     s = localizeText(String(s))
      const layout = PangoCairo.create_layout(ctx)
      const desc = Pango.FontDescription.new()
-     desc.set_family(family); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(px * Pango.SCALE)
-     layout.set_font_description(desc); layout.set_text(s, -1)
+     desc.set_family(fontForLang(getLang()) || family); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(px * Pango.SCALE)
+     layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(s, -1)
      const base = layout.get_baseline() / Pango.SCALE
      if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, yBase - base); PangoCairo.show_layout(ctx, layout); ctx.setOperator(2) }
      ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, yBase - base); PangoCairo.show_layout(ctx, layout)
- } catch { txt(ctx, x, yBase, s, family, px, col, a, bold ? 1 : 0, glow) }
+ } catch {
+     ctx.selectFontFace(fontForLang(getLang()) || family, 0, bold ? 1 : 0); ctx.setFontSize(px)
+     if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, yBase); ctx.showText(String(s)); ctx.setOperator(2) }
+     ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, yBase); ctx.showText(String(s))
+ }
 }
-const measure = (ctx, s, font, size, bold = 0) => { ctx.save(); ctx.selectFontFace(font, 0, bold); ctx.setFontSize(size); const w = ctx.textExtents(s).width; ctx.restore(); return w }
+const txt = (ctx, x, y, s, font, size, col, a, bold = 0, glow = 0) => {
+ const display = localizeText(String(s))
+ if (fontForLang(getLang()) || isRtl(getLang())) { ptext(ctx, x, y, display, font, !!bold, size, col, a, glow); return }
+ ctx.selectFontFace(font, 0, bold); ctx.setFontSize(size)
+ if (glow > 0) { ctx.setOperator(12); ctx.setSourceRGBA(col[0], col[1], col[2], glow * a); ctx.moveTo(x + 0.6, y); ctx.showText(display); ctx.setOperator(2) }
+ ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.moveTo(x, y); ctx.showText(display)
+}
+const measure = (ctx, s, font, size, bold = 0) => {
+ const display = localizeText(String(s)), family = fontForLang(getLang()) || font
+ if (fontForLang(getLang()) || isRtl(getLang())) {
+     const layout = PangoCairo.create_layout(ctx), desc = Pango.FontDescription.new()
+     desc.set_family(family); desc.set_weight(bold ? Pango.Weight.BOLD : Pango.Weight.NORMAL); desc.set_absolute_size(size * Pango.SCALE)
+     layout.set_font_description(desc); layout.set_auto_dir(true); layout.set_text(display, -1)
+     return layout.get_pixel_size()[0]
+ }
+ ctx.save(); ctx.selectFontFace(family, 0, bold); ctx.setFontSize(size); const w = ctx.textExtents(display).width; ctx.restore(); return w
+}
 const listIcon = (ctx, x, y, col, a) => {
  ctx.setSourceRGBA(col[0], col[1], col[2], a); ctx.setLineWidth(2)
  for (let i = 0; i < 3; i++) { ctx.newPath(); ctx.moveTo(x, y + i * 4); ctx.lineTo(x + 9, y + i * 4); ctx.stroke() }
@@ -196,7 +212,10 @@ const renderPanel = (ctx) => {
  const gn = 5, gsz = 5, gm = 20, gstep = (csz - gm * 2) / (gn - 1)
  for (let r = 0; r < gn; r++) for (let c = 0; c < gn; c++) ctx.rectangle(cx + gm + c * gstep - gsz / 2, cy + gm + r * gstep - gsz / 2, gsz, gsz)
  ctx.stroke()
- const tl = [`IMAGE NAME:  ${trunc((title || t("cfg.sidepanel.night_city")).toUpperCase(), 16)}`, t("cfg.player.image_type"), "[STREAM CACHED]", "SECTOR ADDR:  00000000"]
+ const tl = [
+     t("cfg.player.image_name").replace("<title>", trunc((title || t("cfg.sidepanel.night_city")).toUpperCase(), 16)),
+     t("cfg.player.image_type"), t("cfg.player.stream_cached"), t("cfg.player.sector_addr"),
+ ]
  tl.forEach((s, i) => txt(ctx, cx + 8, cy + csz - 42 + i * 11, s, MONO, 7.5, aCC, 0.82, 1))
 
  const rx = X + 222
@@ -210,7 +229,7 @@ const renderPanel = (ctx) => {
  }
 
  txt(ctx, rx, cy + 120, t("cfg.player.volume"), TITLE, 15, aVO, 0.95, 1)
- txt(ctx, rx + 110, cy + 120, muted ? "MUTE" : `${vol}%`, TITLE, 17, aVO, 0.97, 1)
+ txt(ctx, rx + 110, cy + 120, muted ? t("cfg.player.mute") : `${vol}%`, TITLE, 17, aVO, 0.97, 1)
 
  const pbx = rx, pbw = X + PW - rx, pby = cy + 150, fr = length > 0 ? Math.min(1, position / length) : 0
  ctx.setSourceRGBA(aVO[0], aVO[1], aVO[2], 0.22); ctx.rectangle(pbx, pby, pbw, 2.5); ctx.fill()
@@ -222,7 +241,7 @@ const renderPanel = (ctx) => {
  const lY = Y + 308, rowH = 42
  hitRegions = []
  listIcon(ctx, X + 35, lY + rowH / 2 - 6, aTF, 0.55)
- ptext(ctx, X + 58, lY + rowH / 2 + 5, "TRACKLIST", TITLE, true, 17, aTF, 0.82)
+ ptext(ctx, X + 58, lY + rowH / 2 + 5, t("cfg.player.tracklist"), TITLE, true, 17, aTF, 0.82)
  const srcs = players.filter((p) => p.title || p.status === "Playing")
  const shown = Math.min(srcs.length + 1, 7)
  iconPos = null
@@ -253,15 +272,15 @@ const renderPanel = (ctx) => {
  ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 1); ctx.rectangle(sbX, lY, 3, sbH); ctx.fill()
 
  ctx.setSourceRGBA(aCC[0], aCC[1], aCC[2], 0.4); ctx.setLineWidth(1); ctx.newPath(); ctx.moveTo(X, PH - 50); ctx.lineTo(X + PW, PH - 50); ctx.stroke()
- const lg = ["// AUTHORIZED OPS ONLY", "// ACCESS LOGGED &", "// TRACED TO RADIOPORT"]
+ const lg = [t("cfg.player.ops_note"), t("cfg.player.access_logged"), t("cfg.player.traced")]
  lg.forEach((s, i) => txt(ctx, X + 6, PH - 24 + i * 8, s, MONO, 7, aCC, 0.5, 1))
   const chips = [
-  ["↑", "PREVIOUS SOURCE", null],
-  ["↓", "NEXT SOURCE", null],
-  ["SPACE", "PLAY/STOP TRACK", "play-pause"],
-  ["←", "PREVIOUS TRACK", "previous"],
-  ["→", "NEXT TRACK", "next"],
-  ["ESC", "CLOSE RADIOPORT", "close"]]
+  ["↑", t("cfg.player.chip.previous_source"), null],
+  ["↓", t("cfg.player.chip.next_source"), null],
+  ["SPACE", t("cfg.player.chip.play_stop"), "play-pause"],
+  ["←", t("cfg.player.chip.prev_track"), "previous"],
+  ["→", t("cfg.player.chip.next_track"), "next"],
+  ["ESC", t("cfg.player.chip.esc_close"), "close"]]
 
 
   const row1 = chips.slice(0, 3), row2 = chips.slice(3)

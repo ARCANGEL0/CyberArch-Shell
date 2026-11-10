@@ -54,48 +54,47 @@ export type ThemeAction = {
 }
 
 export const THEME_ACTION_LABELS: Record<string, string> = {
-    "hud.toggle": t("cfg.keys.dispatcher.toggle_hud"),
-    "hud.vol": t("cfg.keys.dispatcher.vol"),
-    "hud.brt": t("cfg.keys.dispatcher.brt"),
-    "hud.aur": t("cfg.keys.dispatcher.aur"),
-    "hud.aurdis": t("cfg.keys.dispatcher.aurdis"),
-    "hud.update": t("cfg.keys.dispatcher.update"),
-    "c": t("cfg.keys.dispatcher.update"),
-    "hud.notif": t("cfg.keys.dispatcher.notif"),
-    "hud.player": t("cfg.keys.dispatcher.player"),
-    "hud.wifi": t("cfg.keys.dispatcher.wifi"),
-    "hud.bt": t("cfg.keys.dispatcher.bt"),
-    "hud.pwr": t("cfg.keys.dispatcher.pwr"),
-    "hud.forecast": t("cfg.keys.dispatcher.forecast"),
-    "hud.clock": t("cfg.keys.dispatcher.clock"),
-    "hud.markets": t("cfg.keys.dispatcher.markets"),
-    "hud.bat": t("cfg.keys.dispatcher.bat"),
-    "hud.sys": t("cfg.keys.dispatcher.sys"),
-    "hud.keys": t("cfg.keys.dispatcher.keys"),
-    "hud.settings": t("cfg.keys.dispatcher.settings"),
-    "hud.termtheme": t("cfg.keys.dispatcher.termtheme"),
-    "hud.notifrd": t("cfg.keys.dispatcher.notifrd"),
-    "hud.notifdis": t("cfg.keys.dispatcher.notifdis"),
-    "tool.rec": t("cfg.keys.dispatcher.rec"),
-    "tool.term": t("cfg.keys.dispatcher.term"),
-    "tool.shot": t("cfg.keys.dispatcher.shot"),
-    "tool.kill": t("cfg.keys.dispatcher.kill"),
-    "tool.lock": t("cfg.keys.dispatcher.lock"),
-    "win.full": t("cfg.keys.dispatcher.win_full"),
-    "win.float": t("cfg.keys.dispatcher.win_float"),
-    "win.close": t("cfg.keys.dispatcher.win_close"),
-    "win.fleft": t("cfg.keys.dispatcher.win_fleft"),
-    "win.fright": t("cfg.keys.dispatcher.win_fright"),
-    "win.fup": t("cfg.keys.dispatcher.win_fup"),
-    "win.fdown": t("cfg.keys.dispatcher.win_fdown"),
-    "win.mleft": t("cfg.keys.dispatcher.win_mleft"),
-    "win.mright": t("cfg.keys.dispatcher.win_mright"),
-    "win.mup": t("cfg.keys.dispatcher.win_mup"),
-    "win.mdown": t("cfg.keys.dispatcher.win_mdown"),
-    "win.rleft": t("cfg.keys.dispatcher.win_rleft"),
-    "win.rright": t("cfg.keys.dispatcher.win_rright"),
-    "win.rup": t("cfg.keys.dispatcher.win_rup"),
-    "win.rdown": t("cfg.keys.dispatcher.win_rdown"),
+    "hud.toggle": "cfg.keys.dispatcher.toggle_hud",
+    "hud.vol": "cfg.keys.dispatcher.vol",
+    "hud.brt": "cfg.keys.dispatcher.brt",
+    "hud.aur": "cfg.keys.dispatcher.aur",
+    "hud.aurdis": "cfg.keys.dispatcher.aurdis",
+    "hud.update": "cfg.keys.dispatcher.update",
+    "hud.notif": "cfg.keys.dispatcher.notif",
+    "hud.player": "cfg.keys.dispatcher.player",
+    "hud.wifi": "cfg.keys.dispatcher.wifi",
+    "hud.bt": "cfg.keys.dispatcher.bt",
+    "hud.pwr": "cfg.keys.dispatcher.pwr",
+    "hud.forecast": "cfg.keys.dispatcher.forecast",
+    "hud.clock": "cfg.keys.dispatcher.clock",
+    "hud.markets": "cfg.keys.dispatcher.markets",
+    "hud.bat": "cfg.keys.dispatcher.bat",
+    "hud.sys": "cfg.keys.dispatcher.sys",
+    "hud.keys": "cfg.keys.dispatcher.keys",
+    "hud.settings": "cfg.keys.dispatcher.settings",
+    "hud.termtheme": "cfg.keys.dispatcher.termtheme",
+    "hud.notifrd": "cfg.keys.dispatcher.notifrd",
+    "hud.notifdis": "cfg.keys.dispatcher.notifdis",
+    "tool.rec": "cfg.keys.dispatcher.rec",
+    "tool.term": "cfg.keys.dispatcher.term",
+    "tool.shot": "cfg.keys.dispatcher.shot",
+    "tool.kill": "cfg.keys.dispatcher.kill",
+    "tool.lock": "cfg.keys.dispatcher.lock",
+    "win.full": "cfg.keys.dispatcher.win_full",
+    "win.float": "cfg.keys.dispatcher.win_float",
+    "win.close": "cfg.keys.dispatcher.win_close",
+    "win.fleft": "cfg.keys.dispatcher.win_fleft",
+    "win.fright": "cfg.keys.dispatcher.win_fright",
+    "win.fup": "cfg.keys.dispatcher.win_fup",
+    "win.fdown": "cfg.keys.dispatcher.win_fdown",
+    "win.mleft": "cfg.keys.dispatcher.win_mleft",
+    "win.mright": "cfg.keys.dispatcher.win_mright",
+    "win.mup": "cfg.keys.dispatcher.win_mup",
+    "win.mdown": "cfg.keys.dispatcher.win_mdown",
+    "win.rleft": "cfg.keys.dispatcher.win_rleft",
+    "win.rright": "cfg.keys.dispatcher.win_rright",
+    "win.rup": "cfg.keys.dispatcher.win_rup",
+    "win.rdown": "cfg.keys.dispatcher.win_rdown",
 }
 
 export type Conflict =
@@ -235,7 +234,10 @@ const THEME_ACTIONS: ThemeAction[] = [
     { id: "win.rdown",    label: t("cfg.keys.dispatcher.win_rdown"),    group: "win",  mod: "CTRL + SHIFT",  key: "down" },
 ]
 
-export const readThemeActions = (): ThemeAction[] => THEME_ACTIONS
+export const readThemeActions = (): ThemeAction[] => THEME_ACTIONS.map(action => ({
+    ...action,
+    label: t(THEME_ACTION_LABELS[action.id] ?? action.label),
+}))
 
 export const resolveCombo = (action: ThemeAction, rebinds: Rebind[], themeMod: string): string => {
     const rb = rebinds.find(r => r.action_id === action.id)
@@ -261,7 +263,7 @@ export const checkConflict = (combo: string, excludeId?: string): Conflict => {
     if (ur) return { kind: "user-rebind", existing: ur }
     const ua = state.adds.find(a => canon(`${a.mod} + ${a.key}`) === c)
     if (ua) return { kind: "user-add", existing: ua }
-    const td = THEME_ACTIONS.find(t => t.id !== excludeId && canon(`${t.mod === "@themeMod" ? "SUPER + SHIFT" : t.mod} + ${t.key}`) === c)
+    const td = readThemeActions().find(t => t.id !== excludeId && canon(`${t.mod === "@themeMod" ? "SUPER + SHIFT" : t.mod} + ${t.key}`) === c)
     if (td) return { kind: "theme-default", existing: td }
     return { kind: "none" }
 }

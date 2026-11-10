@@ -2,6 +2,7 @@ import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import { execAsync } from "astal"
 import { USER_DIR } from "../../env.ts"
+import { setLang } from "./i18n.ts"
 
 
 export type CfgVal = boolean | string
@@ -28,27 +29,19 @@ const CFG_PATH = `${USER_DIR}/user_config.lua`
 const CFG_KEYS = Object.keys(DEF)
 
 export const METRIC_LABEL: Record<string, string> = {
- workspace: "ACTIVE WORKSPACE",
- cpu: "CPU USAGE", cputemp: "CPU TEMPERATURE",
- ram: "RAM USAGE", ramfree: "RAM AVAILABLE", swap: "SWAP USAGE",
- disk: "STORAGE USAGE", battery: "BATTERY LEVEL",
- gpu: "GPU USAGE", vram: "VRAM USAGE",
- load: "SYSTEM LOAD", net: "NETWORK LOAD",
+ workspace: "cfg.metric.workspace",
+ cpu: "cfg.metric.cpu", cputemp: "cfg.metric.cputemp",
+ ram: "cfg.metric.ram", ramfree: "cfg.metric.ramfree", swap: "cfg.metric.swap",
+ disk: "cfg.metric.disk", battery: "cfg.metric.battery",
+ gpu: "cfg.metric.gpu", vram: "cfg.metric.vram",
+ load: "cfg.metric.load", net: "cfg.metric.net",
 }
 
 const BAR_METRICS = ["cpu", "cputemp", "ram", "ramfree", "swap", "disk", "battery", "gpu", "vram", "load", "net"]
-export const LAYOUT_OPTS: string[] = ["us", "gb", "de", "fr", "es", "it", "pt-br", "ru", "ua", "gr", "tr", "pl", "cz", "jp", "kr", "cn"]
-export const LAYOUT_LABEL: Record<string, string> = { "": "AUTO (DETECTED)" }
-LAYOUT_OPTS.forEach(l => { LAYOUT_LABEL[l] = l.toUpperCase() })
-
-export const LANG_OPTS: string[] = ["en", "ru", "fr", "es", "pt", "de", "sv", "nl", "no", "da", "fi", "hu", "ro", "bg", "el", "uk", "be", "sk", "sl", "hr", "sr", "lt", "lv", "et", "ja", "zh", "ko", "th", "vi", "id", "ms", "ar", "he", "fa", "ur", "it", "tr", "pl", "cz"]
-export const LANG_LABEL: Record<string, string> = { en: "ENGLISH", ru: "RUSSIAN", fr: "FRENCH", es: "SPANISH", pt: "PORTUGUESE", de: "GERMAN", sv: "SWEDISH", nl: "DUTCH", no: "NORWEGIAN", da: "DANISH", fi: "FINNISH", hu: "HUNGARIAN", ro: "ROMANIAN", bg: "BULGARIAN", el: "GREEK", uk: "UKRAINIAN", be: "BELARUSIAN", sk: "SLOVAK", sl: "SLOVENIAN", hr: "CROATIAN", sr: "SERBIAN", lt: "LITHUANIAN", lv: "LATVIAN", et: "ESTONIAN", ja: "JAPANESE", zh: "CHINESE", ko: "KOREAN", th: "THAI", vi: "VIETNAMESE", id: "INDONESIAN", ms: "MALAY", ar: "ARABIC", he: "HEBREW", fa: "PERSIAN", ur: "URDU", it: "ITALIAN", tr: "TURKISH", pl: "POLISH", cz: "CZECH" }
-LANG_OPTS.forEach(l => { if (!LANG_LABEL[l]) LANG_LABEL[l] = l.toUpperCase() })
 
 export const GAUGE_OPTS: Record<string, string[]> = {
  gaugeBadge: ["workspace", "cputemp", "cpu", "ram", "ramfree", "swap", "disk", "battery", "gpu", "load"],
  gaugeXp: BAR_METRICS, gaugeHealth: BAR_METRICS, gaugeRam: BAR_METRICS, gaugeStamina: BAR_METRICS,
- kbLayout: ["", ...LAYOUT_OPTS],
 }
 
 
@@ -123,7 +116,7 @@ export const setCfg = (k: string, v: CfgVal): void => {
  saveUserConfig()
  if (HYPR_KEYS.includes(k)) applyHyprAnim()
  else if (k === "kbLayout") applyHyprKbLayout(String(v))
- else if (k === "lang") notifyConfigChange()
+ else if (k === "lang") { setLang(String(v)); notifyConfigChange() }
  else notifyConfigChange()
 }
 export const toggleCfg = (k: string): void => { setCfg(k, CFG[k] !== true) }
@@ -135,7 +128,7 @@ export const resetCfg = (keys: string[]): void => {
  saveUserConfig()
  if (hypr) applyHyprAnim()
  if (kb) applyHyprKbLayout("")
- if (lang) notifyConfigChange()
+ if (lang) setLang(String(CFG.lang))
  notifyConfigChange()
 }
 
@@ -158,3 +151,4 @@ export const adoptSound = (key: string, src: string): boolean => {
 export const clearSound = (key: string): void => { setCfg(key, "") }
 
 loadUserConfig()
+setLang(String(CFG.lang))

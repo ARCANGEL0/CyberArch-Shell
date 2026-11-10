@@ -10,7 +10,8 @@ import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./co
 import { animOn } from "./config.ts"
 import { t } from "./i18n.ts"
 const NOTIF_RED: RGB = NEON.notifbadge
-import { CYBER_DIR, scaleOf } from "../../env.ts"
+import { CYBER_DIR, scaleOf, monitorSize } from "../../env.ts"
+import { hudLayout } from "./hud-layout.ts"
 
 const Cairo: any = (imports as any).cairo
 let _phoneIcon: any = null
@@ -44,12 +45,13 @@ const HORIZ_TILES = [
 ]
 
 const VSW = 44, VSH = 42, VG = 6
-const HSW = 50, HSH = 48, HG = 8
+const HSW = 50, HSH = 48, HG = 4
 const BADGE = 19, BGAP = 5
 
 const VPLANE_W = BADGE + BGAP + VSW
 const VPLANE_H = 4 * VSH + 3 * VG - 15
 const vsp = makePlane({ w: VPLANE_W, h: VPLANE_H, yaw: -30, pitch: 12, roll: 1, focal: 1050, dist: 1050, pad: 20 })
+const V_DOCK_SIZE = { width: vsp.width + 10, height: vsp.height + 20 }
 
 const HPLANE_W = 4 * HSW + 3 * HG
 const HPLANE_H = HSH + BGAP + BADGE -15
@@ -143,6 +145,41 @@ const horizSlotFrame = (x: number, y: number, w: number, h: number): [number, nu
         [x + 1, y + h - 1 - cutBL],
         [x + 1, y + 1],
     ]}
+
+const projectedFrameBounds = (layout: typeof VLAYOUT, frame: typeof vertSlotFrame, plane: typeof vsp) => {
+ let minX = Infinity, maxX = -Infinity
+ for (const s of layout) for (const [x, y] of frame(s.x, s.y, s.w, s.h)) {
+  const [px] = plane.project(x, y)
+  minX = Math.min(minX, px)
+  maxX = Math.max(maxX, px)
+ }
+ return { minX, maxX }
+}
+const V_FRAME_BOUNDS = projectedFrameBounds(VLAYOUT, vertSlotFrame, vsp)
+const H_FRAME_BOUNDS = projectedFrameBounds(HLAYOUT, horizSlotFrame, hsp)
+
+const dockJoinMargins = (mon?: any) => {
+ const layout = hudLayout().components
+ const vertical = layout.toggles, horizontal = layout.hordock
+ if (vertical.anchor !== "bottom-left" || horizontal.anchor !== "bottom-left") return { left: 0, bottom: 0 }
+
+ const vScale = scaleOf(mon, "toggles", V_DOCK_SIZE)
+ const hScale = scaleOf(mon, "hordock", hsp)
+ const vPlacementScale = scaleOf(mon, "toggles")
+ const hPlacementScale = scaleOf(mon, "hordock")
+ const vJoin = vertSlotFrame(VLAYOUT[3].x, VLAYOUT[3].y, VLAYOUT[3].w, VLAYOUT[3].h)[5]
+ const hJoin = horizSlotFrame(HLAYOUT[0].x, HLAYOUT[0].y, HLAYOUT[0].w, HLAYOUT[0].h)[9]
+ const gap = Math.max(1, Math.min(2, Math.min(monitorSize(mon).width, monitorSize(mon).height) * 0.0015))
+
+ const left = gap
+  + vertical.x * vPlacementScale - horizontal.x * hPlacementScale
+  + (V_FRAME_BOUNDS.maxX + 0.7) * vScale - (H_FRAME_BOUNDS.minX - 0.7) * hScale
+ const bottom = V_DOCK_SIZE.height * vScale - hsp.height * hScale
+  + hJoin[1] * hScale - vJoin[1] * vScale
+  + vertical.y * vPlacementScale - horizontal.y * hPlacementScale
+
+ return { left: Math.max(0, Math.round(left)), bottom: Math.max(0, Math.round(bottom)) }
+}
 const pip = (px: number, py: number, poly: [number, number][]) => {
  let inside = false
  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -173,9 +210,9 @@ const makeHover = (layout: typeof VLAYOUT, hv: any, getHovered: () => string | n
 }
 
 const VertDock = (mon?: any) => {
- const S = scaleOf(mon, 'toggles', { width: vsp.width + 10, height: vsp.height + 20 })
+ const S = scaleOf(mon, 'toggles', V_DOCK_SIZE)
  const on = {}, open = {}, hv = {}
-  const area = DrawingArea({}); area.set_size_request(Math.round((vsp.width + 10) * S), Math.round((vsp.height + 20) * S)); _dockArea = area
+  const area = DrawingArea({}); area.set_size_request(Math.round(V_DOCK_SIZE.width * S), Math.round(V_DOCK_SIZE.height * S)); _dockArea = area
  const recolorV = onColorChange(() => area.queue_draw())
  area.connect("draw", (_w, ctx) => {
  ctx.scale(S, S)
@@ -277,6 +314,9 @@ const HorizDock = (mon?: any) => {
  const hover = makeHover(HLAYOUT, hv, () => hoverBus.key, area)
  hoverers.push(hover.kick)
  const evt = EventBox({ child: area })
+ const join = dockJoinMargins(mon)
+ evt.set_margin_left(join.left)
+ evt.set_margin_bottom(join.bottom)
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
  evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (k) { if (k === "rec") sh(`${CYBER_DIR}/scripts/screenrecord`); else toggleModal(k); openRefresh() } return false })
  evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })

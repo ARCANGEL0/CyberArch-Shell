@@ -11,6 +11,8 @@ import { CYBER_DIR } from "../../env.ts"
 import { setRecording, isRecording } from "./anim.ts"
 import { showToast, hideToast } from "./toast.ts"
 import { sndOn, sndFile } from "./config.ts"
+import { getLang, isRtl, fontForLang, t } from "./i18n.ts"
+import { pango, measureTextWidth } from "./glass.ts"
 import GdkPixbuf from "gi://GdkPixbuf"
 
 const Cairo: any = (imports as any).cairo
@@ -29,6 +31,8 @@ try { alertPix = GdkPixbuf.Pixbuf.new_from_file(`${CYBER_DIR}/assets/icons/alert
 
 
 
+
+const shQuote = (value: string) => "'" + value.replace(/'/g, "'" + String.fromCharCode(92) + "''") + "'"
 
 const INTRO_MS = 460
 const DISSOLVE_MS = 240
@@ -175,6 +179,15 @@ const glitchType = (ctx, x, y, full, prog, size, alpha, bold = 1, col = f(NEON.o
  }
 }
 
+const regionText = (ctx, x, y, text, size, color, alpha, bold = false) => {
+ const family = fontForLang(getLang()) || MONO
+ if (isRtl(getLang()) || !!fontForLang(getLang())) pango(ctx, x, y, text, family, bold, size, color, alpha)
+ else {
+     ctx.selectFontFace(family, 0, bold ? 1 : 0); ctx.setFontSize(size)
+     ctx.setSourceRGBA(color[0], color[1], color[2], alpha); ctx.moveTo(x, y); ctx.showText(text)
+ }
+}
+
 
 const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
  if (a <= 0 || !recIconPix) return
@@ -225,14 +238,15 @@ const drawCard = (ctx, cp) => {
  if (contentFrac > 0) {
      const cA = contentFrac * load
      drawAlertIcon(ctx, CX, CY + (FRH - ICO) / 2, ICO, cA)
-     glitchType(ctx, FRX + 17, FRY + 21, recordMode ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", cA, 10, 0.97, 1, f(NEON.dock))
+     const prompt = t(recordMode ? "cfg.toast.select_region_record" : "cfg.toast.select_region_capture")
+     if (isRtl(getLang())) pango(ctx, FRX + 17, FRY + 21, prompt, fontForLang(getLang()) || MONO, true, 10, f(NEON.dock), 0.97)
+     else glitchType(ctx, FRX + 17, FRY + 21, prompt, cA, 10, 0.97, 1, f(NEON.dock), fontForLang(getLang()) || MONO)
      if (cA > 0.55) {
          const ma = (cA - 0.55) / 0.45, my = FRY + FRH + 8
-         const [ovr3, ovg3, ovb3] = f(NEON.overlay)
-         ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(7); ctx.setSourceRGBA(ovr3, ovg3, ovb3, 0.55 * ma)
-         ctx.moveTo(FRX + 2, my); ctx.showText(recordMode ? "NETWATCH   // FEED INTERCEPT" : "NETWATCH   // SIGNAL INTERCEPT")
-         ctx.moveTo(FRX + 2, my + 9); ctx.showText(recordMode ? "OUTPUT     // ~/VIDEOS/RECORDINGS" : "OUTPUT     // ~/PICTURES/SCREENSHOTS")
-         ctx.moveTo(FRX + 2, my + 18); ctx.showText("STATUS     // AWAITING INPUT")
+         const metadata = f(NEON.overlay), textAlpha = 0.55 * ma
+         regionText(ctx, FRX + 2, my, t(recordMode ? "cfg.region.netwatch_feed" : "cfg.region.netwatch_signal"), 7, metadata, textAlpha)
+         regionText(ctx, FRX + 2, my + 9, t(recordMode ? "cfg.region.output_record" : "cfg.region.output_capture"), 7, metadata, textAlpha)
+         regionText(ctx, FRX + 2, my + 18, t("cfg.region.status_waiting"), 7, metadata, textAlpha)
      }
  }
 
@@ -277,9 +291,9 @@ const drawAlertIcon = (ctx, x, y, sz, a) => {
 const drawInterceptBanner = (ctx, k) => {
  if (k <= 0.02) return
  if (Math.random() < 0.16) return
- const txt = "SIGNAL INTERCEPT"
+ const txt = t("cfg.region.signal_intercept")
  ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(22)
- const tw = ctx.textExtents(txt).width
+ const tw = measureTextWidth(ctx, txt, MONO, 22, 1)
  const ICON = 46, GAP = 14, DIVGAP = 14
  const totalW = ICON + GAP + 3 + DIVGAP + tw
  const x0 = (W - totalW) / 2 + rnd(-2, 2) * k, yC = H * 0.42
@@ -292,8 +306,8 @@ const drawInterceptBanner = (ctx, k) => {
  ctx.setSourceRGBA(0.659, 0.243, 0.212, 0.9); ctx.rectangle(divX, yC - 16, 2.6, 32); ctx.fill()
 
  const tx = divX + 3 + DIVGAP, ty = yC + 8
- ctx.setSourceRGBA(1, 0.72, 0.76, 0.35); ctx.moveTo(tx - 1.5, ty); ctx.showText(txt)
- ctx.setSourceRGBA(0.659, 0.243, 0.212, 1.0); ctx.moveTo(tx, ty); ctx.showText(txt)
+ pango(ctx, tx - 1.5, ty, txt, MONO, true, 22, [1, 0.72, 0.76], 0.35)
+ pango(ctx, tx, ty, txt, MONO, true, 22, [0.659, 0.243, 0.212], 1)
 }
 
 const draw = (ctx) => {
@@ -385,9 +399,9 @@ const finish = () => {
                  if (recorder !== proc) return
                  recorder = null; started.cancel()
                  if (shown && isRecording()) setRecording(false)
-                 if (failed) timeout(250, () => showToast("RECORDING FAILED"))
+                 if (failed) timeout(250, () => showToast(t("cfg.toast.recording_failed")))
              })
-         } catch (e) { recorder = null; print(e); showToast("RECORDING FAILED") }
+         } catch (e) { recorder = null; print(e); showToast(t("cfg.toast.recording_failed")) }
      })
      return
  }
@@ -395,7 +409,7 @@ const finish = () => {
      execAsync(["sh", "-c",
          `D="$HOME/Pictures/Screenshots"; mkdir -p "$D"; F="$D/$(date +%Y-%m-%d_%H-%M-%S).png"; ` +
          `grim -g "${geom}" "$F" && wl-copy < "$F" && ` +
-         `(command -v notify-send >/dev/null && notify-send -t 2500 "Screenshot" "Saved to ~/Pictures/Screenshots & copied" -i "$F" || true)`])
+         "(command -v notify-send >/dev/null && notify-send -t 2500 " + shQuote(t("cfg.popup.screenshot_title")) + " " + shQuote(t("cfg.popup.screenshot_saved_copied")) + " -i \"$F\" || true)"])
      .catch(print)
  })
 }
@@ -435,7 +449,7 @@ export const triggerRegion = (payload = "", record = false) => {
  startT = Date.now()
  rWin.visible = true
  stopLoop(); ensureLoop()
- showToast(record ? "SELECT A REGION TO RECORD" : "SELECT A REGION TO CAPTURE", { x: -1, y: 34, w: 540, h: 56, col: F25, textCol: F25, monitor: (rWin as any).gdkmonitor })
+ showToast(t(record ? "cfg.toast.select_region_record" : "cfg.toast.select_region_capture"), { x: -1, y: 34, w: 540, h: 56, col: F25, textCol: F25, monitor: (rWin as any).gdkmonitor })
 }
 
 export const RegionWindow = () => {

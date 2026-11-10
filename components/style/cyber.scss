@@ -276,5 +276,4 @@ window.ws_anim, window.banner, window.rec, window.rec_trans, window.region { bac
 .city-result:hover { background-color: rgba(255, 45, 61, 0.22); border-color: rgba(255, 45, 61, 0.7); }
 .city-foot { font-family: "Tektur", monospace; font-size: 8px; color: rgba(228, 240, 255, 0.35); margin-top: 10px; }
 
-// ── horizontal dock (bottom-right) ───────────────────────────────────────────
-.hordock-wrap { margin: 0 0 8px 66px; }
+.hordock-wrap { margin: 0; }

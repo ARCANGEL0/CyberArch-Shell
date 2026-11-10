@@ -9,7 +9,7 @@ import { interval, execAsync } from "astal"
 import { CYBER_DIR, USER_DIR, scaleOf } from "../../env.ts"
 import { makePlane, tiltText, strokePath, fillQuad, alertChip } from "./proj.ts"
 import { NEON, USER, onColorChange, tintOpaque, mapAccent } from "./colors.ts"
-import { t } from "./i18n.ts"
+import { t, getLang, formatDate, formatTime, localeForLang, geocoderLangForLang, localizeLocationName, onLangChange } from "./i18n.ts"
 import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
@@ -52,7 +52,6 @@ const iconPlane = {
  project: (u, v) => { const [x, y] = iconBase.project(u, v); return [x + CONN_DX + ICON_DX, y + CONN_DY + ICON_DY] as [number, number] },
 }
 const pad2 = (n) => String(n).padStart(2, "0")
-const WD3 = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
 const ch = (c) => String.fromCharCode(c)
 const WXI = { sun: ch(0xe30d), part: ch(0xe302), cloud: ch(0xe312), rain: ch(0xe318), snow: ch(0xe31a), storm: ch(0xe31d), fog: ch(0xe313) }
 const wxIcon = (desc) => {
@@ -71,7 +70,8 @@ let geoCity = "NEW YORK", geoCoords = "40.713°N 74.006°W", geoOK = true
 let geoLat = 40.7128, geoLon = -74.006, mapTile = null, mapVer = 0, mapRequest = 0
 let mapCachePath = ""
 let wxLat = 40.7128, wxLon = -74.006, wxName = "NEW YORK", wxFull = "NEW YORK"
-let wxTemp = "--°", wxDesc = "—", wxFeels = "--°", wxHum = "--", wxWind = "--"
+let wxCanonicalName = "NEW YORK", wxId: number | null = null, wxCountryCode = ""
+let wxTemp = "--°", wxDesc = "—", wxCode = -1, wxFeels = "--°", wxHum = "--", wxWind = "--"
 let netName = "OFFLINE"
 let network=networkState(),netBusy=false
 const refreshNet = async () => {if(netBusy)return;netBusy=true;try{network=await readNetworkSnapshot();netName=network.label;areas.forEach(a=>a?.queue_draw())}finally{netBusy=false}}
@@ -91,10 +91,19 @@ const refreshNetSpeed = () => {
  areas.forEach(a => a?.queue_draw())
 }
 const WMO = { 0: "Clear", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle", 56: "Freezing drizzle", 57: "Freezing drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains", 80: "Rain", 81: "Rain", 82: "Heavy rain", 85: "Snow", 86: "Heavy snow", 95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm" }
+const WMO_KEY = { 0: "clear", 1: "mainly_clear", 2: "partly_cloudy", 3: "overcast", 45: "fog", 48: "fog", 51: "drizzle", 53: "drizzle", 55: "drizzle", 56: "freezing_drizzle", 57: "freezing_drizzle", 61: "light_rain", 63: "rain", 65: "heavy_rain", 66: "freezing_rain", 67: "freezing_rain", 71: "light_snow", 73: "snow", 75: "heavy_snow", 77: "snow_grains", 80: "rain", 81: "rain", 82: "heavy_rain", 85: "snow", 86: "heavy_snow", 95: "thunderstorm", 96: "thunderstorm", 99: "thunderstorm" }
+const weatherLabel = (code) => WMO_KEY[code] ? t(`cfg.weather.${WMO_KEY[code]}`) : t("cfg.weather.offline")
 const forecast: { day: string; hi: string; lo: string; code: number; pop: number; hiN: number; loN: number; wind: number; uv: number; sunrise: string; sunset: string; date: string }[] = []
 let areas: any[] = []
 let paletteGen = 0
 onColorChange(() => { paletteGen++; areas.forEach(a => a?.queue_draw()) })
+onLangChange(() => {
+ paletteGen++
+ if (!wxQuery) wxHint = t("cfg.sidepanel.search_title")
+ areas.forEach(a => a?.queue_draw())
+ wxModal?.requestDraw(); fcModal?.requestDraw()
+ refreshWeather(); localizeCurrentCity()
+})
 
 
 const ro = () => (Math.random() - 0.5) * 0.055
@@ -126,7 +135,7 @@ const readWxStore = (): Uint8Array | null => {
 }
 const saveWxLocation = () => {
  try {
-  GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath }, null, 2) + "\n"))
+  GLib.file_set_contents(WX_STORE, new TextEncoder().encode(JSON.stringify({ name: wxName, full: wxFull, canonicalName: wxCanonicalName, id: wxId, countryCode: wxCountryCode, lat: wxLat, lon: wxLon, mapLat: geoLat, mapLon: geoLon, mapCache: mapCachePath }, null, 2) + "\n"))
  } catch (e) { print("[cyber] wx save:", e) }
 }
 const loadWxLocation = () => {
@@ -136,6 +145,7 @@ const loadWxLocation = () => {
  const o = JSON.parse(new TextDecoder().decode(data))
  if (typeof o.lat === "number" && typeof o.lon === "number") {
  wxLat = o.lat; wxLon = o.lon; wxName = String(o.name || wxName); wxFull = String(o.full || o.name || wxName)
+ wxCanonicalName = String(o.canonicalName || o.name || wxName); wxId = Number.isInteger(o.id) ? o.id : null; wxCountryCode = String(o.countryCode || "")
  if (typeof o.mapLat === "number" && typeof o.mapLon === "number") {
   geoLat = o.mapLat; geoLon = o.mapLon
   mapCachePath = typeof o.mapCache === "string" ? o.mapCache : mapCacheForPoint()
@@ -184,20 +194,20 @@ const refreshWeather = async () => {
  const url = `https://api.open-meteo.com/v1/forecast?latitude=${wxLat}&longitude=${wxLon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,uv_index_max,sunrise,sunset&forecast_days=7&timezone=auto`
  const j = await jsonProvider("Open-Meteo",url,{maxAge:1800,validate:(value:any)=>Number.isFinite(value?.current?.temperature_2m)&&Array.isArray(value?.daily?.time)})
  const c = j.current
- if (c) { wxTemp = `${Math.round(c.temperature_2m)}°`; wxFeels = `${Math.round(c.apparent_temperature)}°`; wxDesc = WMO[c.weather_code] || "—"; wxHum = `${Math.round(c.relative_humidity_2m)}`; wxWind = `${Math.round(c.wind_speed_10m)}` }
+ if (c) { wxTemp = `${Math.round(c.temperature_2m)}°`; wxFeels = `${Math.round(c.apparent_temperature)}°`; wxCode = c.weather_code; wxDesc = WMO[c.weather_code] || "—"; wxHum = `${Math.round(c.relative_humidity_2m)}`; wxWind = `${Math.round(c.wind_speed_10m)}` }
  const dd = j.daily; forecast.length = 0
  if (dd && dd.time) for (let i = 0; i < dd.time.length && i < 7; i++) {
  const dt = new Date(dd.time[i] + "T12:00:00")
  const hiN = Math.round(dd.temperature_2m_max[i]), loN = Math.round(dd.temperature_2m_min[i])
  forecast.push({
- day: WD3[dt.getDay()], hi: `${hiN}°`, lo: `${loN}°`, hiN, loN,
+ day: "", hi: `${hiN}°`, lo: `${loN}°`, hiN, loN,
  code: dd.weather_code?.[i] ?? 0, pop: dd.precipitation_probability_max?.[i] ?? 0,
  wind: Math.round(dd.wind_speed_10m_max?.[i] ?? 0), uv: Math.round(dd.uv_index_max?.[i] ?? 0),
  sunrise: (dd.sunrise?.[i] || "").slice(11, 16), sunset: (dd.sunset?.[i] || "").slice(11, 16),
- date: `${dt.getDate()} ${MON3[dt.getMonth()]}`,
+ date: dd.time[i],
  })
  }
- } catch (e) { wxDesc = "OFFLINE" }
+ } catch (e) { wxCode = -1; wxDesc = "OFFLINE" }
  areas.forEach(a => a?.queue_draw())
 }
 
@@ -262,21 +272,29 @@ const drawCompassScan = (ctx) => {
  strokePath(ctx, minimap, legs, MAPACC, 0.95, 1.5)
  strokePath(ctx, minimap, bar, MAPACC, 0.9, 1.3)
 }
-const MON3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-const ordDay = (d) => { const j = d % 10, k = d % 100; return d + (j === 1 && k !== 11 ? "st" : j === 2 && k !== 12 ? "nd" : j === 3 && k !== 13 ? "rd" : "th") }
-const fmtDate = (now) => `${ordDay(now.getDate())} ${MON3[now.getMonth()]}, ${now.getFullYear()}`
+const dateFromIso = (iso: string) => {
+ const [year, month, day] = iso.split("-").map(Number)
+ return new Date(year, month - 1, day, 12)
+}
+const forecastDay = (d) => d?.date
+ ? formatDate(dateFromIso(d.date), { weekday: "short" }).replace(/\./g, "").toLocaleUpperCase(localeForLang(getLang()))
+ : "--"
+const forecastDate = (d) => d?.date
+ ? formatDate(dateFromIso(d.date), { day: "numeric", month: "short" }).replace(/\./g, "").toLocaleUpperCase(localeForLang(getLang()))
+ : ""
+const fmtDate = (now) => formatDate(now, { day: "numeric", month: "short", year: "2-digit" }).replace(/\./g, "").toLocaleUpperCase(localeForLang(getLang()))
 
 const drawOverlay = (ctx, now) => {
  tiltText(ctx, minimap, MX0 + 8, MY0 + 10, t("cfg.sidepanel.coord"), MONO, 7, MAPACC, 0.34)
- tiltText(ctx, minimap, MX1, MY0 - 5, (geoCity || t("cfg.sidepanel.night_city")).slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
-  const tstr = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`
+ tiltText(ctx, minimap, MX1, MY0 - 5, localizeLocationName(geoCity || t("cfg.sidepanel.night_city"), getLang(), wxCountryCode).slice(0, 32), TITLE, 9, mapAccent.city, 0.9, { align: "r", bold: true, glow: 0.4 })
+  const tstr = formatTime(now)
  const tcx = MX0 + 4, tcy = MY0 - 7
  tiltText(ctx, minimap, tcx, tcy, tstr, TITLE, 18.1, mapAccent.clock, 0.92, { bold: true, glow: 0.82,extraRotate: 0.01  })
  const FORECOL = mapAccent.forecast || NETCOL
  tiltText(ctx, minimap, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, FORECOL, 0.95, { bold: true, glow: 0.3 })
- tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
+ tiltText(ctx, minimap, MX0 + 30, MY1 - 14, `${weatherLabel(wxCode).toLocaleUpperCase(localeForLang(getLang()))} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
  tiltText(ctx,minimap,MX0+4,MY1+5,providerText("Open-Meteo").slice(0,70),MONO,6,FORECOL,.8)
- tiltText(ctx, minimap, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, MAPACC, 0.52, { bold: true })
+ tiltText(ctx, minimap, MX0 + 2, MY1 + 16, t("cfg.sidepanel.feels_hum_wind").replace("<feels>", wxFeels).replace("<humidity>", wxHum).replace("<wind>", wxWind), MONO, 6.6, MAPACC, 0.52, { bold: true })
  tiltText(ctx, minimap, MX1, MY1 + 16, fmtDate(now), MONO, 9.5, FORECOL, 0.9, { bold: true, align: "r", glow: 0.38 })
  const fy = MY1 + 36
  fillQuad(ctx, minimap, MX0 - 2, fy - 8, MX1 + 2, fy + 70, [0, 0, 0], 0.012)
@@ -288,7 +306,7 @@ const drawOverlay = (ctx, now) => {
  for (let i = 0; i < 7; i++) {
  const cx = MX0 + i * span + span / 2, d = forecast[i], today = i === 0
  if (today) fillQuad(ctx, minimap, MX0 + i * span + 1, fy + 8, MX0 + (i + 1) * span - 1, fy + 66, FORECOL, 0.1)
- tiltText(ctx, minimap, cx, fy + 20, d ? d.day : "--", TITLE, 9, today ? FORECOL : NEON.white, today ? 0.97 : 0.6, { align: "c", bold: true, glow: today ? 0.3 : 0 })
+ tiltText(ctx, minimap, cx, fy + 20, forecastDay(d), TITLE, 9, today ? FORECOL : NEON.white, today ? 0.97 : 0.6, { align: "c", bold: true, glow: today ? 0.3 : 0 })
  tiltText(ctx, minimap, cx, fy + 37, d ? wxIcon(WMO[d.code] || "") : "", ICONF, 13, today ? FORECOL : MAPACC, 0.85, { align: "c" })
  tiltText(ctx, minimap, cx, fy + 51, d ? d.hi : "--", MONO, 10, today ? FORECOL : NEON.white, 0.9, { align: "c", bold: true })
  tiltText(ctx, minimap, cx, fy + 63, d ? d.lo : "--", MONO, 8, MAPACC, 0.5, { align: "c" })
@@ -297,17 +315,41 @@ const drawOverlay = (ctx, now) => {
 
  const ny = fy + 121, dx = 72
  const off = !network.link
- const stxt = off ? "OFFLINE!" : netName
+ const stxt = off ? t("cfg.sidepanel.offline") : netName
  tiltText(ctx, connPlane, MX0 - 16 + dx, ny, t("cfg.sidepanel.network_status"), TITLE, 14, NETCOL, 1, { bold: true, glow: 0.22, bloom: 0.45, shadow: 1 })
  alertChip(ctx, iconPlane, MX0 + 6 + dx, ny + 11, NETCHIP, 0.8)
  tiltText(ctx, connPlane, MX0 + 26 + dx, ny + 22, stxt, TITLE, 14, NETCOL, 0.95, { bold: true, glow: off ? 0.22 : 0.1, bloom: 0.45, shadow: 1 })
 }
 const drawNetSpeed = (ctx) => {
- const fy = MY1 + 65, ny = fy + 91, ux = MX0 + 276
- tiltText(ctx, connPlane, ux - 70, ny - 1, "", ICONF, 9, NETUP, 0.95, { bold: true, align: "r" })
- tiltText(ctx, connPlane, ux - 25, ny - 1, `${netUp} Mbps`, MONO, 8.5, NETUP, 0.92, { bold: true, align: "r", glow: 0.3 })
- tiltText(ctx, connPlane, ux - 50, ny + 22, "", ICONF, 9, NETDN, 0.95, { bold: true, align: "r" })
- tiltText(ctx, connPlane, ux - 8, ny + 22, `${netDown} Mbps`, MONO, 8.5, NETDN, 0.92, { bold: true, align: "r", glow: 0.3 })
+ const fy = MY1 + 65, ny = fy + 91
+ const labelU = MX0 + 26 + 72, labelY = MY1 + 36 + 121 + 22
+ const statusText = network.link ? netName : t("cfg.sidepanel.offline")
+ ctx.save()
+ ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(14)
+ const statusWidth = ctx.textExtents(statusText).width
+ ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(8.5)
+ const rateWidth = Math.max(ctx.textExtents(`${netUp} Mbps`).width, ctx.textExtents(`${netDown} Mbps`).width)
+ ctx.selectFontFace(ICONF, 0, 1); ctx.setFontSize(9)
+ const arrowWidth = ctx.textExtents("").width
+ ctx.restore()
+
+ const meterY = ny + 22, baseRight = MX1 - 4, baseArrow = baseRight - 42
+ const projectedX = (u: number, v: number) => connPlane.project(u, v)[0]
+ const labelRight = projectedX(labelU, labelY)
+  + statusWidth * connPlane.scaleAt(labelU, labelY) * Math.cos(connPlane.angleAt(labelU, labelY))
+ const arrowLeft = projectedX(baseArrow, meterY)
+  - arrowWidth * connPlane.scaleAt(baseArrow, meterY) * Math.cos(connPlane.angleAt(baseArrow, meterY))
+ const rateLeft = projectedX(baseRight, meterY)
+  - rateWidth * connPlane.scaleAt(baseRight, meterY) * Math.cos(connPlane.angleAt(baseRight, meterY))
+ const groupWidth = projectedX(baseRight, meterY) - Math.min(arrowLeft, rateLeft)
+ const baseX = projectedX(baseRight, meterY)
+ const stepX = projectedX(baseRight + 1, meterY) - baseX
+ const meterRight = baseRight + Math.max(0, (labelRight + 12 + groupWidth - baseX) / stepX)
+ const arrowRight = meterRight - 42
+ tiltText(ctx, connPlane, arrowRight, ny - 1, "", ICONF, 9, NETUP, 0.95, { bold: true, align: "r" })
+ tiltText(ctx, connPlane, meterRight, ny - 1, `${netUp} Mbps`, MONO, 8.5, NETUP, 0.92, { bold: true, align: "r", glow: 0.3 })
+ tiltText(ctx, connPlane, arrowRight, ny + 22, "", ICONF, 9, NETDN, 0.95, { bold: true, align: "r" })
+ tiltText(ctx, connPlane, meterRight, ny + 22, `${netDown} Mbps`, MONO, 8.5, NETDN, 0.92, { bold: true, align: "r", glow: 0.3 })
 }
 let cache = null, cacheKey = ""
 
@@ -364,30 +406,54 @@ export const SidePanel = (mon?: any) => {
 
 
 let wxModal: any = null
-let wxQuery = "", wxResults: any[] = [], wxHint = "TYPE A CITY ▸", wxScroll = 0
+let wxQuery = "", wxResults: any[] = [], wxHint = t("cfg.sidepanel.search_title"), wxScroll = 0
 let wxSearchTimer: number | null = null
 const aPath = (ctx, x, y, w, h, c = 5) => { ctx.newPath(); ctx.moveTo(x + c, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y + h - c); ctx.lineTo(x + w - c, y + h); ctx.lineTo(x, y + h); ctx.lineTo(x, y + c); ctx.closePath() }
 
 const wxRunSearch = async () => {
  const q = wxQuery.trim()
- if (q.length < 2) { wxResults = []; wxHint = "TYPE A CITY ▸"; wxModal?.requestDraw(); return }
- wxHint = "SEARCHING…"; wxModal?.requestDraw()
+ if (q.length < 2) { wxResults = []; wxHint = t("cfg.sidepanel.search_title"); wxModal?.requestDraw(); return }
+ wxHint = t("cfg.sidepanel.searching"); wxModal?.requestDraw()
  try {
- const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=en&format=json`
+ const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${encodeURIComponent(geocoderLangForLang(getLang()))}&format=json`
  const data = JSON.parse(await execAsync(["curl", "-sf", "--max-time", "6", url]))
- wxResults = (data.results || []).map((r) => ({ lat: r.latitude, lon: r.longitude, name: r.name, full: [r.name, r.admin1, r.country].filter(Boolean).join(", ") }))
- wxHint = wxResults.length ? `${wxResults.length} MATCHES — CLICK ONE` : "NO MATCHES"
- } catch (e) { wxHint = "SEARCH FAILED"; print("[cyber] geocode:", e) }
+ wxResults = (data.results || []).map((r) => ({ id: r.id, lat: r.latitude, lon: r.longitude, name: r.name, countryCode: r.country_code || "", full: [r.name, r.admin1, r.country].filter(Boolean).join(", ") }))
+ wxHint = wxResults.length ? t("cfg.sidepanel.matches").replace("<n>", String(wxResults.length)) : t("cfg.sidepanel.no_matches")
+ } catch (e) { wxHint = t("cfg.sidepanel.search_failed"); print("[cyber] geocode:", e) }
  wxScroll = 0; wxModal?.requestDraw()
 }
 const wxQueueSearch = () => { if (wxSearchTimer !== null) GLib.source_remove(wxSearchTimer); wxSearchTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 340, () => { wxSearchTimer = null; wxRunSearch().catch(print); return false }) }
-const wxPick = (r) => { wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || "").toUpperCase(); wxFull = r.full.toUpperCase(); mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather(); wxModal.close() }
+const wxPick = (r) => { wxLat = r.lat; wxLon = r.lon; wxName = String(r.name || "").toLocaleUpperCase(localeForLang(getLang())); wxFull = r.full.toLocaleUpperCase(localeForLang(getLang())); wxCanonicalName = String(r.name || wxName); wxId = Number.isInteger(r.id) ? r.id : null; wxCountryCode = String(r.countryCode || ""); mapCachePath = ""; setMapPoint(true); saveWxLocation(); refreshWeather(); wxModal.close() }
+let cityLocaleRequest = 0
+const localizeCurrentCity = async () => {
+ const request = ++cityLocaleRequest, name = wxCanonicalName.trim()
+ if (!name) return
+ try {
+  const language = encodeURIComponent(geocoderLangForLang(getLang()))
+  const url = wxId
+   ? `https://geocoding-api.open-meteo.com/v1/get?id=${wxId}&language=${language}&format=json`
+   : `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=10${wxCountryCode ? `&countryCode=${encodeURIComponent(wxCountryCode)}` : ""}&language=${language}&format=json`
+  const data = JSON.parse(await execAsync(["curl", "-sf", "--max-time", "6", url]))
+  if (request !== cityLocaleRequest) return
+  const results = Array.isArray(data.results) ? data.results : data.id ? [data] : []
+  const nearest = results.reduce((best, item) => {
+   const distance = Math.hypot(item.latitude - wxLat, item.longitude - wxLon)
+   return !best || distance < best.distance ? { item, distance } : best
+  }, null as any)?.item
+  if (!nearest || Math.hypot(nearest.latitude - wxLat, nearest.longitude - wxLon) > (wxId ? 0.05 : 0.25)) return
+  wxName = String(nearest.name || name).toLocaleUpperCase(localeForLang(getLang()))
+  wxFull = [nearest.name, nearest.admin1, nearest.country].filter(Boolean).join(", ").toLocaleUpperCase(localeForLang(getLang()))
+  wxId = Number.isInteger(nearest.id) ? nearest.id : wxId
+  wxCountryCode = String(nearest.country_code || wxCountryCode)
+  geoCity = wxFull; saveWxLocation(); areas.forEach(a => a?.queue_draw())
+ } catch {}
+}
 
 const ensureWxModal = () => {
  if (wxModal) return
  wxModal = createModal({
- name: "weather", tabTitle: "WEATHER UPLINK", W: 384, H: 312, hud: true,
- onOpen: () => { wxQuery = ""; wxResults = []; wxHint = "TYPE A CITY ▸"; wxScroll = 0 },
+ name: "weather", tabTitle: () => t("cfg.sidepanel.weather_uplink"), W: 384, H: 312, hud: true,
+ onOpen: () => { wxQuery = ""; wxResults = []; wxHint = t("cfg.sidepanel.search_title"); wxScroll = 0 },
  onKey: (k) => {
  if (k === Gdk.KEY_BackSpace) wxQuery = wxQuery.slice(0, -1)
  else { const u = Gdk.keyval_to_unicode(k); if (u >= 32 && u < 0x10000) wxQuery += String.fromCharCode(u); else return }
@@ -396,13 +462,14 @@ const ensureWxModal = () => {
  onScroll: (d) => { wxScroll = Math.max(0, Math.min(Math.max(0, wxResults.length - 1), wxScroll + d)); wxModal.requestDraw() },
  draw: (ctx, g) => {
  const x = g.X + 18, w = g.w - 36
- gtxt(ctx, x + w - 4 - ctx.textExtents(`NOW: ${wxName}`).width, g.Y + GHEAD + 22, `NOW: ${wxName}`, GMONO, 9, GCYAN, 0.6)
- gtxt(ctx, x, g.Y + GHEAD + 22, "SEARCH FORECAST CITY", GMONO, 10, GCYAN, 0.85, 1)
+ const nowLabel = t("cfg.sidepanel.now").replace("<city>", wxName)
+ gtxt(ctx, x + w - 4 - ctx.textExtents(nowLabel).width, g.Y + GHEAD + 22, nowLabel, GMONO, 9, GCYAN, 0.6)
+ gtxt(ctx, x, g.Y + GHEAD + 22, t("cfg.sidepanel.search_city"), GMONO, 10, GCYAN, 0.85, 1)
  const by = g.Y + GHEAD + 32, bh = 30
  aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0] * 0.12, GCYAN[1] * 0.06, GCYAN[2] * 0.06, 0.5); ctx.fill()
  aPath(ctx, x, by, w, bh, 6); ctx.setSourceRGBA(GCYAN[0], GCYAN[1], GCYAN[2], 0.85); ctx.setLineWidth(0.9); ctx.stroke()
  const cur = (Math.floor(Date.now() / 450) % 2) ? "▌" : " "
- gpango(ctx, x + 14, by + bh / 2 + 5, (wxQuery ? wxQuery + cur : "Search a city…"), GTITLE, false, 13, wxQuery ? GACC : GCYAN, wxQuery ? 0.96 : 0.4)
+ gpango(ctx, x + 14, by + bh / 2 + 5, (wxQuery ? wxQuery + cur : t("cfg.sidepanel.search_placeholder")), GTITLE, false, 13, wxQuery ? GACC : GCYAN, wxQuery ? 0.96 : 0.4)
  gtxt(ctx, x, by + bh + 18, "// " + wxHint, GMONO, 9, GCYAN, 0.6)
  const ly = by + bh + 28, lh = (g.Y + g.h) - ly - 22, rowH = 30, gap = 5, step = rowH + gap, vis = Math.max(1, Math.floor(lh / step))
  const maxS = Math.max(0, wxResults.length - vis), sc = Math.min(wxScroll, maxS)
@@ -416,7 +483,7 @@ const ensureWxModal = () => {
  g.push({ kind: "row", bx0: x, by0: ry, bx1: x + w, by1: ry + rowH, on: () => wxPick(r) })
  }
  ctx.restore()
- gtxt(ctx, x, g.Y + g.h - 10, "type ▸ click a result · ESC cancels", GMONO, 8, GCYAN, 0.42)
+ gtxt(ctx, x, g.Y + g.h - 10, t("cfg.sidepanel.city_hint"), GMONO, 8, GCYAN, 0.42)
  },
  })
 }
@@ -461,8 +528,9 @@ const fcCard = (ctx, g, d, i, x, y, w, h, sel, rv) => {
  const cw2 = (s, font, size, bold) => { ctx.selectFontFace(font, 0, bold ? 1 : 0); ctx.setFontSize(size); return ctx.textExtents(s).width }
  const fit = (s, font, size, bold, max) => { let sz = size; while (sz > 8 && cw2(s, font, sz, bold) > max) sz -= 0.5; return sz }
  gtxt(ctx, x + 5, y + 15, `0${i + 1}`, GMONO, 7, sel ? YEL : ARA, sel ? 0.75 : 0.35)
- gtxt(ctx, x + w / 2 - cw2(d ? d.day : "--", GTITLE, 12, true) / 2, y + 30, d ? d.day : "--", GTITLE, 12, sel ? YEL : ARA, sel ? 1 : 0.75, 1, sel ? 0.45 : 0)
- gtxt(ctx, x + w / 2 - cw2(d ? d.date : "", GMONO, 8.5, true) / 2, y + 43, d ? d.date : "", GMONO, 8.5, sel ? YEL : ARA, sel ? 0.95 : 0.72, 1)
+ const dayLabel = forecastDay(d), dateLabel = forecastDate(d)
+ gtxt(ctx, x + w / 2 - cw2(dayLabel, GTITLE, 12, true) / 2, y + 30, dayLabel, GTITLE, 12, sel ? YEL : ARA, sel ? 1 : 0.75, 1, sel ? 0.45 : 0)
+ gtxt(ctx, x + w / 2 - cw2(dateLabel, GMONO, 8.5, true) / 2, y + 43, dateLabel, GMONO, 8.5, sel ? YEL : ARA, sel ? 0.95 : 0.72, 1)
  if (!d) return
  gpango(ctx, x + w / 2 - 13, y + 76, wxIcon(WMO[d.code] || ""), ICONF, false, 25, sel ? YEL : ARA, sel ? 0.98 : 0.6)
  const hs = fit(d.hi, GTITLE, 17, true, w - 14), hw = cw2(d.hi, GTITLE, hs, true)
@@ -510,7 +578,7 @@ const fcCurve = (ctx, days, x, y, w, h, rv) => {
 const ensureForecastModal = () => {
  if (fcModal) return
  fcModal = createModal({
- name: "forecast", tabTitle: "ATMOSPHERIC UPLINK · 7-DAY", W: 940, H: 480,
+ name: "forecast", tabTitle: () => t("cfg.modal.forecast"), W: 940, H: 480,
  col: GCYAN, accent: GACC, yaw: -29, pitch: -5, roll: -0.4, focal: 2400, dist: 2300, glass: 0.88, anchorLeft: true, keymode: Keymode.ON_DEMAND,
  onOpen: () => { fcSel = 0; fcTick = 0; fcOpenAt = Date.now(); refreshWeather() },
  onFrame: () => { fcTick++; fcModal.requestDraw() },
@@ -523,7 +591,7 @@ const ensureForecastModal = () => {
  draw: (ctx, g) => {
  const rv = fcReveal(), d = forecast[fcSel]
  const x0 = g.X + 18, y0 = g.Y + GHEAD + 6, lw = 250
- gtxt(ctx, x0, y0 + 12, (geoCity || wxName || "NIGHT CITY").slice(0, 34).toUpperCase(), GTITLE, 11, YEL, 0.95, 1, 0.35)
+ gtxt(ctx, x0, y0 + 12, localizeLocationName(geoCity || wxName || "NIGHT CITY", getLang(), wxCountryCode).slice(0, 34).toLocaleUpperCase(localeForLang(getLang())), GTITLE, 11, YEL, 0.95, 1, 0.35)
  gtxt(ctx, x0, y0 + 27, geoCoords, GMONO, 8, ARA, 0.45)
  gtxt(ctx,x0+lw+14,y0+27,providerText("Open-Meteo").slice(0,90),GMONO,7,ARA,.8)
  g.push({ kind: "city", bx0: x0 - 6, by0: y0 - 2, bx1: x0 + lw, by1: y0 + 32, on: () => {
@@ -541,13 +609,13 @@ const ensureForecastModal = () => {
  gpango(ctx, x0 + 16, y0 + 104, wxIcon(WMO[d.code] || ""), ICONF, false, 46, YEL, 0.95)
  ghost(ctx, x0 + 88, y0 + 100, d.hi, GTITLE, 44, 0.4)
  gpango(ctx, x0 + 88, y0 + 100, d.hi, GTITLE, true, 44, YEL, 0.98)
- gtxt(ctx, x0 + 88, y0 + 122, `LOW ${d.lo}`, GMONO, 10, ARA, 0.6)
- gtxt(ctx, x0 + 16, y0 + 132, (WMO[d.code] || "—").toUpperCase(), GTITLE, 11, ARA, 0.8, 1)
- gtxt(ctx, x0 + 16, y0 + 152, `${d.day} · ${d.date}`, GMONO, 9, ARA, 0.5)
+ gtxt(ctx, x0 + 88, y0 + 122, t("cfg.sidepanel.low").replace("<value>", d.lo), GMONO, 10, ARA, 0.6)
+ gtxt(ctx, x0 + 16, y0 + 132, weatherLabel(d.code).toLocaleUpperCase(localeForLang(getLang())), GTITLE, 11, ARA, 0.8, 1)
+ gtxt(ctx, x0 + 16, y0 + 152, `${forecastDay(d)} · ${forecastDate(d)}`, GMONO, 9, ARA, 0.5)
  }
  const rows: [string, string][] = d ? [
- ["PRECIPITATION", `${d.pop}%`], ["WIND MAX", `${d.wind} km/h`], ["UV INDEX", `${d.uv}`],
- ["SUNRISE", d.sunrise || "--:--"], ["SUNSET", d.sunset || "--:--"],
+ [t("cfg.sidepanel.precipitation"), `${d.pop}%`], [t("cfg.sidepanel.wind_max"), `${d.wind} km/h`], [t("cfg.sidepanel.uv_index"), `${d.uv}`],
+ [t("cfg.sidepanel.sunrise"), d.sunrise || "--:--"], [t("cfg.sidepanel.sunset"), d.sunset || "--:--"],
  ] : []
  let ry = y0 + 186
  for (const [k, v] of rows) {
@@ -562,8 +630,8 @@ const ensureForecastModal = () => {
  ctx.setSourceRGBA(YEL[0], YEL[1], YEL[2], 0.85)
  ctx.rectangle(x0, y0 + 308, 22, 2); ctx.fill()
  gtxt(ctx, x0 + 28, y0 + 312, "// LIVE", GMONO, 8, YEL, 0.7)
- gtxt(ctx, x0, y0 + 334, `${wxTemp}  ${wxDesc.toUpperCase()}`, GTITLE, 13, YEL, 0.9, 1, 0.25)
- gtxt(ctx, x0, y0 + 350, `FEELS ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, GMONO, 8.5, ARA, 0.5)
+ gtxt(ctx, x0, y0 + 334, `${wxTemp}  ${weatherLabel(d?.code ?? wxCode).toLocaleUpperCase(localeForLang(getLang()))}`, GTITLE, 13, YEL, 0.9, 1, 0.25)
+ gtxt(ctx, x0, y0 + 350, t("cfg.sidepanel.feels_hum_wind").replace("<feels>", wxFeels).replace("<humidity>", wxHum).replace("<wind>", wxWind), GMONO, 8.5, ARA, 0.5)
 
  const rx = x0 + lw + 26, rw = (g.X + g.w) - rx - 18
  const cw = rw / 7, ch = 182

@@ -2,7 +2,7 @@ export const COMPONENTS = ['monitors', 'sidepanel', 'markets', 'hordock', 'toggl
 export const ANCHORS = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const placement = {
  monitors: ['top-left', 20, 20], sidepanel: ['top-right', 28, 26],
- markets: ['top-right', 0, 560], hordock: ['bottom-left', 0, 0],
+ markets: ['top-right', 0, 560], hordock: ['bottom-left', -12, 0],
  toggles: ['bottom-left', 0, 0], launcher: ['bottom-right', 3, 0],
 }
 export function layoutProfile(profile = 'Cinematic') {

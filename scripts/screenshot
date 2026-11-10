@@ -27,8 +27,10 @@ if [ "${1:-}" = "full" ]; then
     wl-copy < "$F" || fail "Saved to $F, but copying to the clipboard failed"
     active_snd
     request "shutter $MX $MY $MW $MH" || true
-    command -v notify-send >/dev/null 2>&1 && \
-        notify-send -t 2500 "Screenshot" "$MON saved & copied" -i "$F"
+    request "screenshot-notify $F" || {
+        command -v notify-send >/dev/null 2>&1 && \
+            notify-send -t 2500 "Screenshot" "$MON saved & copied" -i "$F"
+    }
 else
     # the drag-to-select region picker is handled over in AGS 
     request "region-shot $MX $MY $MW $MH" || fail "The shell did not open the region picker; it may need restarting"

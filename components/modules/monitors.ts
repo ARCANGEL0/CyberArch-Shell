@@ -17,6 +17,8 @@ import { cfgStr, animOn, onConfigChange, METRIC_LABEL } from "./config.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk"
 import Gio from "gi://Gio"
+import { getLang, fontForLang, localizeText } from "./i18n.ts"
+import { pango, measureTextWidth } from "./glass.ts"
 
 import { TITLE, MONO, ICONF } from "./fonts.ts"
 const stats = buildStats()
@@ -362,14 +364,12 @@ export const Monitors = (mon?: any) => {
         else tiltText(ctx, plane, W, 85, "Power connected", TITLE, 9, bcol, 0.92, { align: "r", bold: true })
 
         if (hovered && mx >= 0) {
-            const label = tooltipLabel(hovered)
+            const label = localizeText(tooltipLabel(hovered))
             if (label) {
                 const fs = 9, pad = 8, notch = 7
                 ctx.save()
-                ctx.selectFontFace(TITLE, 0, 1)
-                ctx.setFontSize(fs)
-                const te = ctx.textExtents(label)
-                const tw = te.width + pad * 2, th = te.height + pad * 2 + 2
+                const labelFont = fontForLang(getLang()) || TITLE
+                const tw = measureTextWidth(ctx, label, labelFont, fs, 1) + pad * 2, th = fs + pad * 2 + 2
                 let tx = mx + 14, ty = my - th - 6
                 if (tx + tw > plane.width) tx = mx - tw - 10
                 if (ty < 0) ty = my + 20
@@ -432,10 +432,8 @@ export const Monitors = (mon?: any) => {
                 ctx.newPath(); ctx.moveTo(tx + tw - notch, ty + th); ctx.lineTo(tx + tw, ty + th - notch); ctx.stroke()
 
 
-                const baseline = ty + pad + te.height + (te.y < 0 ? te.y : 0)
-                ctx.setSourceRGBA(lr, lg, lb, 1)
-                ctx.moveTo(tx + pad, baseline)
-                ctx.showText(label)
+                const baseline = ty + pad + fs + 1
+                pango(ctx, tx + pad, baseline, label, labelFont, true, fs, [lr, lg, lb], 1)
                 ctx.restore()
             }
         }

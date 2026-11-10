@@ -6,7 +6,8 @@ import { NEON, f, RGB, tintSurface, tintPixbuf, imgTint } from "./colors.ts"
 import { makePlane, tiltText, fillQuad } from "./proj.ts"
 import { showToast } from "./toast.ts"
 import { animOn, animMaster } from "./config.ts"
-import { t } from "./i18n.ts"
+import { t, getLang, isRtl, fontForLang, localizeText } from "./i18n.ts"
+import { txt as drawLocalizedText, measureTextWidth } from "./glass.ts"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
 import GdkPixbuf from "gi://GdkPixbuf"
@@ -71,21 +72,22 @@ const drawBreach = (ctx, W, H, p, title, sub, flash) => {
  }
  }
  for (let i = 0; i < 5; i++) { const yy = rnd(0, H), off = rnd(-40, 40) * env; ctx.setSourceRGBA(rr, rg, rb, 0.10 * env); ctx.rectangle(off, yy, W, 3); ctx.fill() }
- ctx.setFontSize(20)
- ctx.setSourceRGBA(rr, rg, rb, 0.95 * env)
- ctx.moveTo(60, 64); ctx.showText(`BREACH PROTOCOL // ${title}`)
- ctx.setFontSize(13); ctx.setSourceRGBA(rr, rg, rb, 0.6 * env)
- ctx.moveTo(60, 86); ctx.showText("BUFFER " + seq.map((s, i) => i <= cursor ? (grid[s[0]]?.[s[1]] ?? "·") : "··").join(" "))
+ const titleLine = t("cfg.anim.breach_title").replace("<title>", localizeText(title))
+ let titleSize = 20
+ while (titleSize > 10 && measureTextWidth(ctx, titleLine, MONO, titleSize, 1) > W - 80) titleSize -= 1
+ drawLocalizedText(ctx, 60, 64, titleLine, MONO, titleSize, [rr, rg, rb], 0.95 * env, 1)
+ const bufferLine = t("cfg.anim.buffer").replace("<hex>", seq.map((s, i) => i <= cursor ? (grid[s[0]]?.[s[1]] ?? "·") : "··").join(" "))
+ drawLocalizedText(ctx, 60, 86, bufferLine, MONO, 13, [rr, rg, rb], 0.6 * env, 1)
  const complete = p > 0.66
- ctx.setFontSize(46); ctx.selectFontFace(TITLE, 0, 1)
- const msg = complete ? "UPLOAD COMPLETE" : sub
- const te = ctx.textExtents(msg); const cxm = W / 2 - te.width / 2, cym = H / 2
+ const msg = complete ? t("cfg.anim.upload_complete") : localizeText(sub)
+ let msgSize = 46
+ while (msgSize > 18 && measureTextWidth(ctx, msg, TITLE, msgSize, 1) > W - 80) msgSize -= 2
+ const msgWidth = measureTextWidth(ctx, msg, TITLE, msgSize, 1), cxm = W / 2 - msgWidth / 2, cym = H / 2
  const j = rnd(-2, 2) * env
- ctx.setSourceRGBA(complete ? gr : rr, complete ? gg : rg, complete ? gb : rb, 0.55 * env)
- ctx.moveTo(cxm - 3 + j, cym); ctx.showText(msg)
- ctx.setSourceRGBA(1, 1, 1, 0.95 * env); ctx.moveTo(cxm, cym); ctx.showText(msg)
- ctx.setFontSize(15); ctx.setSourceRGBA(rr, rg, rb, 0.8 * env)
- const t2 = `// ${title}`; ctx.moveTo(W / 2 - ctx.textExtents(t2).width / 2, cym + 28); ctx.showText(t2)
+ drawLocalizedText(ctx, cxm - 3 + j, cym, msg, TITLE, msgSize, complete ? [gr, gg, gb] : [rr, rg, rb], 0.55 * env, 1)
+ drawLocalizedText(ctx, cxm, cym, msg, TITLE, msgSize, [1, 1, 1], 0.95 * env, 1)
+ const t2 = `// ${localizeText(title)}`, t2w = measureTextWidth(ctx, t2, MONO, 15, 1)
+ drawLocalizedText(ctx, W / 2 - t2w / 2, cym + 28, t2, MONO, 15, [rr, rg, rb], 0.8 * env, 1)
 }
 
 
@@ -505,9 +507,8 @@ const drawRecBot = (ctx, tick) => {
 const drawRecTop = (ctx) => {
  const a = recFade; if (a < 0.01) return
  const [rr, rg, rb] = f(NEON.overlay)
- const W = REC_TOP_W, cy = 28, label = "CYBERDECK RECORDER"
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(12)
- const tw = ctx.textExtents(label).width, cx = W / 2
+ const W = REC_TOP_W, cy = 28, label = t("cfg.anim.cyberdeck_recorder")
+ const tw = measureTextWidth(ctx, label, MONO, 12, 1), cx = W / 2
  const gap = 16, lineLen = 180
  const lx2 = cx - tw / 2 - gap, lx1 = lx2 - lineLen
  const rx1 = cx + tw / 2 + gap, rx2 = rx1 + lineLen
@@ -520,10 +521,10 @@ const drawRecTop = (ctx) => {
  tick((lx1 + lx2) / 2, 4, 0.7); tick((rx1 + rx2) / 2, 4, 0.7)
  tick(lx2 - 6, 3, 0.6); tick(rx1 + 6, 3, 0.6)
  ctx.setOperator(12)
- ctx.setSourceRGBA(rr, rg, rb, 0.35 * a); ctx.moveTo(cx - tw / 2 - 1, cy + 5); ctx.showText(label)
- ctx.setSourceRGBA(rr, rg, rb, 0.35 * a); ctx.moveTo(cx - tw / 2 + 1, cy + 4); ctx.showText(label)
+ drawLocalizedText(ctx, cx - tw / 2 - 1, cy + 5, label, MONO, 12, [rr, rg, rb], 0.35 * a, 1)
+ drawLocalizedText(ctx, cx - tw / 2 + 1, cy + 4, label, MONO, 12, [rr, rg, rb], 0.35 * a, 1)
  ctx.setOperator(2)
- ctx.setSourceRGBA(rr, rg, rb, 0.95 * a); ctx.moveTo(cx - tw / 2, cy + 4); ctx.showText(label)
+ drawLocalizedText(ctx, cx - tw / 2, cy + 4, label, MONO, 12, [rr, rg, rb], 0.95 * a, 1)
 }
 
 
@@ -634,6 +635,11 @@ const drawRecIcon = (ctx, x, y, sz, a, pulse) => {
 const recGlitchText = (ctx, x, y, full, prog, size, alpha) => {
  if (prog <= 0) return
  const [rr, rg, rb] = f(NEON.dock)
+ full = localizeText(String(full))
+ if (isRtl(getLang()) || !!fontForLang(getLang())) {
+     drawLocalizedText(ctx, x, y, full, MONO, size, [rr, rg, rb], alpha, 1)
+     return
+ }
  ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(size)
  const adv = ctx.textExtents("M").width, n = full.length, shown = prog * n
  for (let i = 0; i < n; i++) {
@@ -741,17 +747,13 @@ const drawRecBanner = (ctx, W, H, p, msg) => {
      const cA = contentFrac * load
      drawRecIcon(ctx, bx, by + (bh - ico) / 2, ico, cA, pulse)
 
-     ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(9)
-     ctx.setSourceRGBA(rr, rg, rb, 0.6 * cA)
-     ctx.moveTo(FX + 14, FY + 20); ctx.showText("// SYS.CAPTURE")
+     drawLocalizedText(ctx, FX + 14, FY + 20, t("cfg.anim.sys_capture"), MONO, 9, [rr, rg, rb], 0.6 * cA, 1)
 
      recGlitchText(ctx, FX + 14, FY + 44, msg, cA, 17, 0.95)
 
 
      if (msg.includes("STARTED")) {
-         ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(8)
-         ctx.setSourceRGBA(rr, rg, rb, 0.55 * cA)
-         ctx.moveTo(FX + 14, FY + bh - 14); ctx.showText("__/ USE [ KEY + R ] TO STOP RECORDING")
+         drawLocalizedText(ctx, FX + 14, FY + bh - 14, t("cfg.anim.use_key_r"), MONO, 8, [rr, rg, rb], 0.55 * cA, 1)
      }
 
 
@@ -826,8 +828,11 @@ const drawRecFrame = (ctx, W, H) => {
  }
  const blink = 0.55 + 0.45 * Math.sin(recHudTick * 0.6)
  ctx.setSourceRGBA(rr, rg, rb, blink * a); ctx.arc(x + 11 * S, y - 12 * S, 4 * S, 0, Math.PI * 2); ctx.fill()
- ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11 * S)
- ctx.setSourceRGBA(rr, rg, rb, 0.95 * a); ctx.moveTo(x + 22 * S, y - 8 * S); ctx.showText("REC " + `${Math.round(w)}x${Math.round(h)}`)
+ const recLabel = t("cfg.anim.rec_res").replace("<W>", String(Math.round(w))).replace("<H>", String(Math.round(h)))
+ let recLabelSize = 11 * S
+ const recMaxWidth = Math.max(16, W - x - 30 * S)
+ while (recLabelSize > 6 * S && measureTextWidth(ctx, recLabel, MONO, recLabelSize, 1) > recMaxWidth) recLabelSize -= 0.5 * S
+ drawLocalizedText(ctx, x + 22 * S, y - 8 * S, recLabel, MONO, recLabelSize, [rr, rg, rb], 0.95 * a, 1)
 }
 
 export const RecFrameWindow = () => {

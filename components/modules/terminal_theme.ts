@@ -7,6 +7,7 @@ import { CYBER_DIR, USER_DIR } from "../../env.ts"
 import { execAsync } from "astal"
 import GLib from "gi://GLib"
 import Gdk from "gi://Gdk?version=3.0"
+import { t } from "./i18n.ts"
 
 
 const RIO = `${GLib.get_home_dir()}/.config/rio`
@@ -53,7 +54,7 @@ export const TerminalThemeCtrl = () => {
     const put = (t: any) => { execAsync([`${CYBER_DIR}/scripts/rio-style`, t.name, dir()]).catch(() => ""); st.cur = t.name; ctrl.requestDraw() }
 
     ctrl = createModal({
-        name: "termtheme", tabTitle: "TERMINAL THEME", W: 434, H: 492,
+        name: "termtheme", tabTitle: () => t("cfg.modal.terminal_theme"), W: 434, H: 492,
         col: USER.sysveil as any, accent: USER.sysveil as any,
         onOpen: () => load(),
         onScroll: (d) => { st.scroll = Math.max(0, st.scroll + d * ROWH); ctrl.requestDraw() },

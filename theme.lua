@@ -8,6 +8,7 @@ end
 
 -- updt: keep XWayland on for Steam and the other X apps in the wheel.
 hl.config({ xwayland = { enabled = true } })
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
 
 hl.exec_cmd("dbus-update-activation-environment --systemd --all")
 hl.exec_cmd("sh -c 'sleep 3; hyprctl dispatch exec \"dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XAUTHORITY XCURSOR_THEME XCURSOR_SIZE\"' &")
@@ -29,9 +30,6 @@ local anim_workspace = anim_master and ucfg["animWorkspace"] == true
 -- dont stomp their hyprland input stuff, only set if user picked one
 if type(ucfg["kbLayout"]) == "string" and ucfg["kbLayout"] ~= "" then
     hl.config({ input = { kb_layout = ucfg["kbLayout"] } })
-end
-if type(ucfg["lang"]) == "string" and ucfg["lang"] ~= "" and ucfg["lang"] ~= "en" then
-    hl.config({ locale = ucfg["lang"] })
 end
 local wallpapers_path = os.getenv("HOME") .. "/Pictures/Wallpapers"
 local set_wallpaper = wallpapers_path .. "/netwatch/main.mp4"
